@@ -25,9 +25,11 @@ foreach ($size in @('1100','1600','1920')) {
         }
     }
 }
-foreach ($suffix in @('.png','-elements.json')) {
-    $overlayEvidence = Join-Path artifacts ('overlay-settings-1600' + $suffix)
-    if (-not (Test-Path -LiteralPath $overlayEvidence)) { throw "Missing overlay dialog evidence: $overlayEvidence" }
+foreach ($dialog in @('overlay-settings-1600','recording-setup-1600','streaming-setup-1600','multicorder-1600','playlist-1600','shortcuts-1600')) {
+    foreach ($suffix in @('.png','-elements.json')) {
+        $evidence = Join-Path artifacts ($dialog + $suffix)
+        if (-not (Test-Path -LiteralPath $evidence)) { throw "Missing dialog evidence: $evidence" }
+    }
 }
 Invoke-NativeSmoke @('--ui-smoke-reopen','artifacts/smoke.rustmix.json')
 if (-not (Test-Path artifacts/reopen-ok.json)) { throw 'Reopen did not validate the saved production' }

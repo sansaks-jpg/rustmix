@@ -2,7 +2,7 @@
 //! state assertions, project reopen, and GPU readback screenshots; no external output.
 use super::*;
 // Only consumed by the opt-in hosted native harness, never by normal startup.
-const DIALOG_SHOTS: [(&str, [f32; 2], u8); 10] = [
+const DIALOG_SHOTS: [(&str, [f32; 2], u8); 15] = [
     ("add-input-1100", [1100.0, 700.0], 0),
     ("input-properties-1100", [1100.0, 700.0], 1),
     ("settings-1100", [1100.0, 700.0], 2),
@@ -13,6 +13,11 @@ const DIALOG_SHOTS: [(&str, [f32; 2], u8); 10] = [
     ("input-properties-1920", [1920.0, 1080.0], 1),
     ("settings-1920", [1920.0, 1080.0], 2),
     ("overlay-settings-1600", [1600.0, 900.0], 3),
+    ("recording-setup-1600", [1600.0, 900.0], 4),
+    ("streaming-setup-1600", [1600.0, 900.0], 5),
+    ("multicorder-1600", [1600.0, 900.0], 6),
+    ("playlist-1600", [1600.0, 900.0], 7),
+    ("shortcuts-1600", [1600.0, 900.0], 8),
 ];
 #[derive(Default)]
 pub(crate) struct Smoke {
@@ -234,7 +239,7 @@ impl RustMixApp {
                 s.stage = 20;
             }
 
-            20..=49 => {
+            20..=64 => {
                 let offset = s.stage - 20;
                 let Some((name, size, kind)) = DIALOG_SHOTS.get((offset / 3) as usize) else {
                     return Err(Error::Invalid("Unknown dialog screenshot step".into()));
@@ -247,7 +252,12 @@ impl RustMixApp {
                                 0 => Action::Add,
                                 1 => Action::Properties(InputId(3)),
                                 2 => Action::Settings,
-                                _ => Action::OverlaySettings(0),
+                                3 => Action::OverlaySettings(0),
+                                4 => Action::RecordingSetup,
+                                5 => Action::StreamingSetup,
+                                6 => Action::MultiCorder,
+                                7 => Action::PlayList,
+                                _ => Action::ShortcutsWindow,
                             },
                             ctx,
                         );
@@ -258,15 +268,17 @@ impl RustMixApp {
                         s.stage += 1;
                     }
                     1 => {
-                        self.validate_dialog_geometry(
-                            ctx,
-                            match kind {
-                                0 => "dialog.add",
-                                1 => "dialog.properties",
-                                2 => "dialog.settings",
-                                _ => "dialog.overlay",
-                            },
-                        )?;
+                        if *kind <= 3 {
+                            self.validate_dialog_geometry(
+                                ctx,
+                                match kind {
+                                    0 => "dialog.add",
+                                    1 => "dialog.properties",
+                                    2 => "dialog.settings",
+                                    _ => "dialog.overlay",
+                                },
+                            )?;
+                        }
                         std::fs::write(
                             format!("artifacts/{name}-elements.json"),
                             serde_json::to_vec_pretty(
@@ -288,7 +300,7 @@ impl RustMixApp {
                     _ => {}
                 }
             }
-            50 => {
+            65 => {
                 self.assert_smoke_state()?;
                 self.saved_revision = self.engine.project().revision;
                 ctx.send_viewport_cmd(egui::ViewportCommand::Close);
@@ -917,5 +929,31 @@ mod tests {
         assert!(!app.multiview_split);
         click(&mut app, &ctx, "multiview.return", size);
         assert!(!app.multiview);
+
+        // Reference production-bar dialogs (Recording Setup, Streaming Settings, MultiCorder, PlayList, Shortcuts).
+        click(&mut app, &ctx, "output.record.settings", size);
+        assert!(app.recording_setup);
+        click(&mut app, &ctx, "dialog.recording.ok", size);
+        assert!(!app.recording_setup);
+
+        click(&mut app, &ctx, "output.stream.settings", size);
+        assert!(app.streaming_setup);
+        click(&mut app, &ctx, "dialog.streaming.close", size);
+        assert!(!app.streaming_setup);
+
+        click(&mut app, &ctx, "output.multicorder.settings", size);
+        assert!(app.multicorder_open);
+        click(&mut app, &ctx, "dialog.multicorder.close", size);
+        assert!(!app.multicorder_open);
+
+        click(&mut app, &ctx, "output.playlist.settings", size);
+        assert!(app.playlist_open);
+        click(&mut app, &ctx, "dialog.playlist.close", size);
+        assert!(!app.playlist_open);
+
+        click(&mut app, &ctx, "output.shortcuts", size);
+        assert!(app.shortcuts_open);
+        click(&mut app, &ctx, "dialog.shortcuts.close", size);
+        assert!(!app.shortcuts_open);
     }
 }
