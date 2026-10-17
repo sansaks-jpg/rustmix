@@ -22,7 +22,8 @@ jobs:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
         with:
-          cache-on-failure: true
+          shared-key: native-ui-v2-complete
+          cache-on-failure: false
       - name: Formatting
         run: cargo fmt --all -- --check
       - name: Dependency layering and asset inventory

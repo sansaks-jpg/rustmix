@@ -499,7 +499,7 @@ impl RustMixApp {
                                         for slot in 0..4 {
                                             if let Some(mut overlay)=self.engine.project().overlays.get(slot).cloned() {
                                                 let selected=overlay.enabled&&overlay.title==input.name;
-                                                if ui.add(egui::Button::new(RichText::new((slot+1).to_string()).size(10.0)).selected(selected).min_size(egui::vec2(20.0,18.0))).on_hover_text("Use this input name as the lower-third title in this overlay slot").clicked(){overlay.enabled=!selected;overlay.title=input.name.clone();overlay.subtitle=input.kind.label().into();self.actions.push(Action::Engine(Command::SetOverlay(slot,overlay)));}
+                                                if ui.add(egui::Button::new(RichText::new((slot+1).to_string()).size(10.0)).selected(selected).min_size(egui::vec2(20.0,18.0))).on_hover_text("Use this input name as the lower-third title in this overlay slot").clicked(){overlay.enabled= !selected;overlay.title=input.name.clone();overlay.subtitle=input.kind.label().into();self.actions.push(Action::Engine(Command::SetOverlay(slot,overlay)));}
                                             }
                                         }
                                         if ui.small_button("PVW").clicked(){self.actions.push(Action::Engine(Command::SelectPreview(input.id)));}
@@ -509,7 +509,7 @@ impl RustMixApp {
                                     ui.horizontal(|ui| {
                                         ui.spacing_mut().item_spacing.x=2.0;
                                         for slot in 5..=8 {ui.add_enabled(false,egui::Button::new(RichText::new(slot.to_string()).size(10.0)).min_size(egui::vec2(20.0,17.0))).on_disabled_hover_text("Four overlay slots are implemented");}
-                                        if ui.add(egui::Button::new(RichText::new("Audio").size(10.0)).selected(!input.audio.muted)).on_hover_text("Toggle simulated input audio mute").clicked(){let mut a=input.audio.clone();a.muted=!a.muted;self.actions.push(Action::Engine(Command::SetInputAudio(input.id,a)));}
+                                        if ui.add(egui::Button::new(RichText::new("Audio").size(10.0)).selected(!input.audio.muted)).on_hover_text("Toggle simulated input audio mute").clicked(){let mut a=input.audio.clone();a.muted= !a.muted;self.actions.push(Action::Engine(Command::SetInputAudio(input.id,a)));}
                                         if ui.small_button("Edit").clicked(){self.actions.push(Action::Properties(input.id));}
                                     });
 
