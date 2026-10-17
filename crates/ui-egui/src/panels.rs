@@ -1144,7 +1144,7 @@ impl RustMixApp {
                                                     let looped = self
                                                         .input_fx
                                                         .get(&input.id)
-                                                        .map_or(true, |f| f.loop_playback);
+                                                        .is_none_or(|f| f.loop_playback);
                                                     let loop_btn = vector_icon_button(
                                                         ui,
                                                         VectorIcon::Loop,
