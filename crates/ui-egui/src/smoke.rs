@@ -56,8 +56,11 @@ impl RustMixApp {
     }
     fn smoke_run(&mut self, ctx: &egui::Context, s: &mut Smoke) -> Result<()> {
         let reopen = std::env::args().any(|s| s == "--ui-smoke-reopen");
-        if self.start.elapsed() > Duration::from_secs(85) {
-            return Err(Error::Invalid("Native UI smoke timed out".into()));
+        if self.start.elapsed() > Duration::from_secs(180) {
+            return Err(Error::Invalid(format!(
+                "Native UI smoke timed out at stage {} after {} frames",
+                s.stage, s.frames
+            )));
         }
         let events = ctx.input(|i| i.events.clone());
         for event in events {

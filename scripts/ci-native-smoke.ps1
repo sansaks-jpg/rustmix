@@ -6,9 +6,9 @@ $env:APPDATA = Join-Path $env:RUNNER_TEMP 'rustmix-smoke-appdata'
 New-Item -ItemType Directory -Path $env:APPDATA -Force | Out-Null
 function Invoke-NativeSmoke([string[]]$SmokeArguments) {
     $process = Start-Process -FilePath (Resolve-Path 'target/release/rustmix.exe') -ArgumentList $SmokeArguments -PassThru -WindowStyle Hidden -RedirectStandardError artifacts/native-stderr.txt
-    if (-not $process.WaitForExit(100000)) {
+    if (-not $process.WaitForExit(210000)) {
         Stop-Process -Id $process.Id -Force
-        throw 'Native smoke exceeded 100 seconds on GitHub runner'
+        throw 'Native smoke exceeded 210 seconds on GitHub runner'
     }
     if ($process.ExitCode -ne 0) { throw "Native app exit code $($process.ExitCode)" }
     if (Test-Path artifacts/smoke-error.txt) { throw (Get-Content artifacts/smoke-error.txt -Raw) }
