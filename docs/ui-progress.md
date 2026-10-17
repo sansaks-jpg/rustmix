@@ -59,4 +59,10 @@ Continued the existing uncommitted UI-003 work after reading AGENTS.md, project 
 
 Local non-compiling checks: `cargo fmt --all -- --check` and `scripts/check-repository.ps1` passed on the staged current source. Relevant diff and API signatures in the pinned egui 0.35.0 source were reviewed. No new dependency, engine behavior, project schema or vendor asset was introduced.
 
-Three new widget regressions and nine native dialog screenshot/geometry checks were added to the existing hosted-only verification path. Rust compilation, clippy, widget/integration test execution and new native screenshot review have **not** run for UI-003/004. No local executable was built or launched. No commit/push or hosted build was initiated in this session. G11 stays open and UI-004 is an unverified source change; old accepted UI-002 results are not evidence for it.
+At the initial source-review checkpoint, three new widget regressions and nine native dialog screenshot/geometry checks were prepared; hosted execution was pending commit/push authorization. No local executable was built or launched. G11 stays open until new hosted evidence is accepted; old UI-002 results do not verify these changes.
+
+### First hosted attempt and correction
+
+After owner authorization, commit `14ec663` was pushed. [Run 39042356444](https://github.com/sansaks-jpg/rustmix/actions/runs/39042356444) passed formatting, layer/asset inventory, workspace compilation and warnings-as-errors clippy. All 11 engine tests and three widget tests passed; four dialog widget tests failed. The minimum-size test exposed unbounded horizontal growth (Add Input footer outside the viewport), which also prevented Apply/Cancel hit testing. Native launch/build packaging did not run.
+
+The correction allocates explicit bounded navigation/page rectangles independently of their content and keeps the footer in the parent layout. The existing minimum/large-size and interaction regressions remain required. This correction awaits a fresh hosted run.

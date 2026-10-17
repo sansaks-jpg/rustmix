@@ -59,6 +59,59 @@ fn kind_description(kind: InputKind) -> &'static str {
 }
 
 impl RustMixApp {
+    fn dialog_columns(
+        &mut self,
+        ui: &mut egui::Ui,
+        id: &str,
+        height: f32,
+        navigation: impl FnOnce(&mut Self, &mut egui::Ui),
+        content: impl FnOnce(&mut Self, &mut egui::Ui),
+    ) {
+        // Child layouts must not feed their content width back into the Window.
+        // Explicit rectangles also keep the footer fixed when a long page scrolls.
+        let width = ui
+            .available_width()
+            .min((ui.ctx().viewport_rect().width() - 48.0).max(250.0));
+        let (body, _) = ui.allocate_exact_size(Vec2::new(width, height), egui::Sense::hover());
+        let navigation_rect = egui::Rect::from_min_size(body.min, Vec2::new(168.0, height));
+        let page_rect = egui::Rect::from_min_max(
+            egui::pos2(navigation_rect.right() + 12.0, body.top()),
+            body.max,
+        );
+        let mut navigation_ui = ui.new_child(
+            egui::UiBuilder::new()
+                .id_salt((id, "navigation"))
+                .max_rect(navigation_rect)
+                .layout(egui::Layout::top_down(Align::Min)),
+        );
+        navigation_ui.set_clip_rect(navigation_rect.intersect(ui.clip_rect()));
+        egui::Frame::new()
+            .fill(SIDEBAR)
+            .inner_margin(8.0)
+            .show(&mut navigation_ui, |ui| {
+                egui::ScrollArea::vertical()
+                    .id_salt((id, "navigation.scroll"))
+                    .max_width(152.0)
+                    .max_height((height - 16.0).max(80.0))
+                    .auto_shrink([false, false])
+                    .show(ui, |ui| navigation(self, ui));
+            });
+        let mut page_ui = ui.new_child(
+            egui::UiBuilder::new()
+                .id_salt((id, "page"))
+                .max_rect(page_rect)
+                .layout(egui::Layout::top_down(Align::Min)),
+        );
+        page_ui.set_clip_rect(page_rect.intersect(ui.clip_rect()));
+        egui::ScrollArea::vertical()
+            .id_salt((id, "page.scroll"))
+            .max_width(page_rect.width())
+            .max_height(height)
+            .auto_shrink([false, false])
+            .show(&mut page_ui, |ui| content(self, ui));
+        self.automation.insert(format!("{id}.body"), body);
+    }
+
     fn prepare_add_preview(&mut self, ctx: &egui::Context) {
         if self
             .add_preview
@@ -114,126 +167,102 @@ impl RustMixApp {
             );
             ui.separator();
             let body_height = (ui.available_height() - 54.0).max(130.0);
-            let body = ui.horizontal_top(|ui| {
-                egui::Frame::new()
-                    .fill(SIDEBAR)
-                    .inner_margin(8.0)
-                    .show(ui, |ui| {
-                        ui.set_width(152.0);
-                        egui::ScrollArea::vertical()
-                            .id_salt("dialog.add.navigation")
-                            .max_height((body_height - 16.0).max(80.0))
-                            .auto_shrink([false, false])
-                            .show(ui, |ui| {
-                                ui.label(RichText::new("AVAILABLE").small().strong().color(DIM));
-                                for kind in InputKind::ALL {
-                                    let button =
-                                        sidebar_button(ui, self.add_kind == kind, kind.label());
-                                    self.automation
-                                        .insert(format!("dialog.add.kind.{kind:?}"), button.rect);
-                                    if button.clicked() {
-                                        self.add_kind = kind;
-                                    }
-                                }
-                                ui.add_space(12.0);
-                                ui.label(RichText::new("UNAVAILABLE").small().strong().color(DIM));
-                                for label in [
-                                    "Video / image",
-                                    "Camera / screen",
-                                    "Audio / device",
-                                    "Network / browser",
-                                ] {
-                                    ui.add_enabled(
-                                        false,
-                                        egui::Button::new(label).min_size(Vec2::new(152.0, 27.0)),
-                                    )
-                                    .on_disabled_hover_text(
-                                        "No media ingestion or device backend exists yet",
-                                    );
-                                }
-                            });
-                    });
-                ui.add_space(12.0);
-                ui.vertical(|ui| {
-                    ui.set_width(ui.available_width());
-                    egui::ScrollArea::vertical()
-                        .id_salt("dialog.add.page")
-                        .max_height(body_height)
-                        .auto_shrink([false, false])
+            self.dialog_columns(
+                ui,
+                "dialog.add",
+                body_height,
+                |app, ui| {
+                    ui.label(RichText::new("AVAILABLE").small().strong().color(DIM));
+                    for kind in InputKind::ALL {
+                        let button = sidebar_button(ui, app.add_kind == kind, kind.label());
+                        app.automation
+                            .insert(format!("dialog.add.kind.{kind:?}"), button.rect);
+                        if button.clicked() {
+                            app.add_kind = kind;
+                        }
+                    }
+                    ui.add_space(12.0);
+                    ui.label(RichText::new("UNAVAILABLE").small().strong().color(DIM));
+                    for label in [
+                        "Video / image",
+                        "Camera / screen",
+                        "Audio / device",
+                        "Network / browser",
+                    ] {
+                        ui.add_enabled(
+                            false,
+                            egui::Button::new(label).min_size(Vec2::new(152.0, 27.0)),
+                        )
+                        .on_disabled_hover_text("No media ingestion or device backend exists yet");
+                    }
+                },
+                |app, ui| {
+                    section_heading(ui, app.add_kind.label(), kind_description(app.add_kind));
+                    egui::Frame::new()
+                        .fill(Color32::from_rgb(10, 14, 18))
+                        .inner_margin(8.0)
                         .show(ui, |ui| {
-                            section_heading(
-                                ui,
-                                self.add_kind.label(),
-                                kind_description(self.add_kind),
-                            );
-                            egui::Frame::new()
-                                .fill(Color32::from_rgb(10, 14, 18))
-                                .inner_margin(8.0)
-                                .show(ui, |ui| {
-                                    if let Some((_, texture)) = self
-                                        .add_preview
-                                        .as_ref()
-                                        .filter(|(kind, _)| *kind == self.add_kind)
-                                    {
-                                        let preview = ui.add(
-                                            egui::Image::new(texture).fit_to_exact_size(Vec2::new(
-                                                ui.available_width().min(320.0),
-                                                ui.available_width().min(320.0) * 9.0 / 16.0,
-                                            )),
-                                        );
-                                        self.automation
-                                            .insert("dialog.add.preview".into(), preview.rect);
-                                    } else {
-                                        let (rect, _) = ui.allocate_exact_size(
-                                            Vec2::new(
-                                                ui.available_width().min(320.0),
-                                                ui.available_width().min(320.0) * 9.0 / 16.0,
-                                            ),
-                                            egui::Sense::hover(),
-                                        );
-                                        ui.painter().rect_filled(rect, 0.0, SURFACE);
-                                        ui.painter().text(
-                                            rect.center(),
-                                            egui::Align2::CENTER_CENTER,
-                                            self.add_kind.label(),
-                                            egui::FontId::proportional(20.0),
-                                            Color32::WHITE,
-                                        );
-                                    }
-                                });
-                            ui.label(
-                                RichText::new("Generated sample · independent of project inputs")
-                                    .small()
-                                    .color(DIM),
-                            );
-                            ui.add_space(8.0);
-                            ui.label(RichText::new("Input name").strong());
-                            let response = ui.add_sized(
-                                [ui.available_width().min(420.0), 26.0],
-                                egui::TextEdit::singleline(&mut self.add_name)
-                                    .char_limit(64)
-                                    .hint_text("Enter a descriptive source name"),
-                            );
-                            self.automation
-                                .insert("dialog.add.name".into(), response.rect);
-                            if self.add_name.trim().is_empty() || self.add_name.len() > 64 {
-                                ui.colored_label(RED, "Enter a name (1–64 bytes)");
-                            } else if let Err(error) = self.engine.enabled(&Command::AddInput {
-                                name: self.add_name.clone(),
-                                kind: self.add_kind,
-                            }) {
-                                ui.colored_label(RED, error.to_string());
+                            if let Some((_, texture)) = app
+                                .add_preview
+                                .as_ref()
+                                .filter(|(kind, _)| *kind == app.add_kind)
+                            {
+                                let preview =
+                                    ui.add(egui::Image::new(texture).fit_to_exact_size(Vec2::new(
+                                        ui.available_width().min(320.0),
+                                        ui.available_width().min(320.0) * 9.0 / 16.0,
+                                    )));
+                                app.automation
+                                    .insert("dialog.add.preview".into(), preview.rect);
+                            } else {
+                                let (rect, _) = ui.allocate_exact_size(
+                                    Vec2::new(
+                                        ui.available_width().min(320.0),
+                                        ui.available_width().min(320.0) * 9.0 / 16.0,
+                                    ),
+                                    egui::Sense::hover(),
+                                );
+                                ui.painter().rect_filled(rect, 0.0, SURFACE);
+                                ui.painter().text(
+                                    rect.center(),
+                                    egui::Align2::CENTER_CENTER,
+                                    app.add_kind.label(),
+                                    egui::FontId::proportional(20.0),
+                                    Color32::WHITE,
+                                );
                             }
-                            ui.label(
-                                RichText::new("New sources start with simulated audio muted.")
-                                    .small()
-                                    .color(DIM),
-                            );
                         });
-                });
-            });
-            self.automation
-                .insert("dialog.add.body".into(), body.response.rect);
+                    ui.label(
+                        RichText::new("Generated sample · independent of project inputs")
+                            .small()
+                            .color(DIM),
+                    );
+                    ui.add_space(8.0);
+                    ui.label(RichText::new("Input name").strong());
+                    let response = ui.add_sized(
+                        [ui.available_width().min(420.0), 26.0],
+                        egui::TextEdit::singleline(&mut app.add_name)
+                            .char_limit(64)
+                            .hint_text("Enter a descriptive source name"),
+                    );
+                    app.automation
+                        .insert("dialog.add.name".into(), response.rect);
+                    if app.add_name.trim().is_empty() || app.add_name.len() > 64 {
+                        ui.colored_label(RED, "Enter a name (1–64 bytes)");
+                    } else if let Err(error) = app.engine.enabled(&Command::AddInput {
+                        name: app.add_name.clone(),
+                        kind: app.add_kind,
+                    }) {
+                        ui.colored_label(RED, error.to_string());
+                    }
+                    ui.label(
+                        RichText::new("New sources start with simulated audio muted.")
+                            .small()
+                            .color(DIM),
+                    );
+                },
+            );
+
             ui.separator();
             let count = self.engine.project().inputs.len();
             let command = Command::AddInput {
@@ -280,39 +309,23 @@ impl RustMixApp {
         operator_window(ctx, format!("Input {:02}  /  properties", input.id.0), "input.properties", &mut open, Vec2::new(820.0, 540.0))
             .show(ctx, |ui| {
                 let body_height = (ui.available_height() - 54.0).max(130.0);
-                let body = ui.horizontal_top(|ui| {
-                    egui::Frame::new().fill(SIDEBAR).inner_margin(8.0).show(ui, |ui| {
-                        ui.set_width(152.0);
-                        egui::ScrollArea::vertical()
-                            .id_salt("dialog.properties.navigation")
-                            .max_height((body_height - 16.0).max(80.0))
-                            .auto_shrink([false, false])
-                            .show(ui, |ui| {
+                self.dialog_columns(ui, "dialog.properties", body_height, |app, ui| {
                         for (page, label) in [
                             (InputPage::General, "General"),
                             (InputPage::Audio, "Audio / buses"),
                             (InputPage::Status, "Source status"),
                         ] {
-                            let button = sidebar_button(ui, self.input_page == page, label);
-                            self.automation.insert(format!("dialog.properties.page.{page:?}"), button.rect);
+                            let button = sidebar_button(ui, app.input_page == page, label);
+                            app.automation.insert(format!("dialog.properties.page.{page:?}"), button.rect);
                             if button.clicked() {
-                                self.input_page = page;
+                                app.input_page = page;
                             }
                         }
                         ui.add_space(10.0);
                         ui.label(RichText::new("SYNTHETIC INPUT").small().color(DIM));
-                    });
-});
-                    ui.add_space(10.0);
-                    ui.vertical(|ui| {
-                        ui.set_width(ui.available_width());
-                        egui::ScrollArea::vertical()
-                            .id_salt("dialog.properties.page")
-                            .max_height(body_height)
-                            .auto_shrink([false, false])
-                            .show(ui, |ui| {
+                    }, |app, ui| {
 
-                        match self.input_page {
+                        match app.input_page {
                             InputPage::General => {
                                 section_heading(ui, "General", "Identity, source generator and health state");
                                 ui.label("Name");
@@ -320,7 +333,7 @@ impl RustMixApp {
                                     [ui.available_width().min(390.0), 25.0],
                                     egui::TextEdit::singleline(&mut input.name).char_limit(64),
                                 );
-                                self.automation.insert("dialog.properties.name".into(), name.rect);
+                                app.automation.insert("dialog.properties.name".into(), name.rect);
                                 if input.name.trim().is_empty() || input.name.len() > 64 {
                                     ui.colored_label(RED, "Enter an input name (1–64 bytes)");
                                 }
@@ -341,7 +354,7 @@ impl RustMixApp {
                                     ui.color_edit_button_srgb(&mut input.color);
                                 });
                                 ui.add_space(6.0);
-                                let on_program = self.engine.project().program == input.id;
+                                let on_program = app.engine.project().program == input.id;
                                 ui.add_enabled(
                                     !on_program || !input.online,
                                     egui::Checkbox::new(&mut input.online, "Source online"),
@@ -367,7 +380,7 @@ impl RustMixApp {
                                     "Audio routing · simulated",
                                     "Changes apply immediately. Cancel does not undo Audio adjustments.",
                                 );
-                                if let Some(source) = self.engine.project().input(input.id) {
+                                if let Some(source) = app.engine.project().input(input.id) {
                                     let mut a = source.audio.clone();
                                     ui.label("Channel gain");
                                     ui.add(
@@ -392,7 +405,7 @@ impl RustMixApp {
                                             .small().color(DIM),
                                     );
                                     if a != source.audio {
-                                        self.actions.push(Action::Engine(Command::SetInputAudio(input.id, a)));
+                                        app.actions.push(Action::Engine(Command::SetInputAudio(input.id, a)));
                                     }
                                 }
                             }
@@ -403,7 +416,7 @@ impl RustMixApp {
                                     "Read-only state of the current synthetic input",
                                 );
                                 ui.label(format!("Input ID: {}", input.id.0));
-                                let current = self.engine.project().input(input.id);
+                                let current = app.engine.project().input(input.id);
                                 ui.label(format!(
                                     "Kind: {}",
                                     current.map_or("Missing", |source| source.kind.label())
@@ -418,11 +431,11 @@ impl RustMixApp {
                                 ));
                                 ui.label(format!(
                                     "On Program: {}",
-                                    self.engine.project().program == input.id
+                                    app.engine.project().program == input.id
                                 ));
                                 ui.label(format!(
                                     "Selected for Preview: {}",
-                                    self.engine.project().preview == input.id
+                                    app.engine.project().preview == input.id
                                 ));
                                 ui.add_space(12.0);
                                 ui.label(
@@ -432,9 +445,7 @@ impl RustMixApp {
                             }
                         }
                     });
-});
-                });
-                self.automation.insert("dialog.properties.body".into(), body.response.rect);
+
                 ui.separator();
                 ui.horizontal(|ui| {
                     ui.with_layout(egui::Layout::right_to_left(Align::Center), |ui| {
@@ -489,24 +500,17 @@ impl RustMixApp {
         operator_window(ctx, "Settings  /  production workspace", "settings", &mut open, Vec2::new(820.0, 540.0))
             .show(ctx, |ui| {
                 let body_height = (ui.available_height() - 54.0).max(130.0);
-                let body = ui.horizontal_top(|ui| {
-                    egui::Frame::new().fill(SIDEBAR).inner_margin(8.0).show(ui, |ui| {
-                        ui.set_width(152.0);
-                        egui::ScrollArea::vertical()
-                            .id_salt("dialog.settings.navigation")
-                            .max_height((body_height - 16.0).max(80.0))
-                            .auto_shrink([false, false])
-                            .show(ui, |ui| {
+                self.dialog_columns(ui, "dialog.settings", body_height, |app, ui| {
                         for (page, label) in [
                             (SettingsPage::Display, "Display / format"),
                             (SettingsPage::Appearance, "Appearance"),
                             (SettingsPage::Workspace, "Workspace"),
                             (SettingsPage::Shortcuts, "Shortcuts"),
                         ] {
-                            let button = sidebar_button(ui, self.settings_page == page, label);
-                            self.automation.insert(format!("dialog.settings.page.{page:?}"), button.rect);
+                            let button = sidebar_button(ui, app.settings_page == page, label);
+                            app.automation.insert(format!("dialog.settings.page.{page:?}"), button.rect);
                             if button.clicked() {
-                                self.settings_page = page;
+                                app.settings_page = page;
                             }
                         }
                         ui.add_space(12.0);
@@ -518,18 +522,9 @@ impl RustMixApp {
                             )
                             .on_disabled_hover_text("This backend is not implemented");
                         }
-                    });
-});
-                    ui.add_space(12.0);
-                    ui.vertical(|ui| {
-                        ui.set_width(ui.available_width());
-                        egui::ScrollArea::vertical()
-                            .id_salt("dialog.settings.page")
-                            .max_height(body_height)
-                            .auto_shrink([false, false])
-                            .show(ui, |ui| {
+                    }, |app, ui| {
 
-                        match self.settings_page {
+                        match app.settings_page {
                             SettingsPage::Display => {
                                 section_heading(
                                     ui,
@@ -620,26 +615,26 @@ impl RustMixApp {
                                     "Dock, resize and restore panels for a production task",
                                 );
                                 ui.label("Current layout");
-                                ui.strong(self.engine.project().workspace.name.as_str());
+                                ui.strong(app.engine.project().workspace.name.as_str());
                                 ui.add_space(8.0);
                                 ui.horizontal(|ui| {
                                     if ui
                                         .selectable_label(
-                                            self.settings_layout == Some(false),
+                                            app.settings_layout == Some(false),
                                             "Production layout",
                                         )
                                         .clicked()
                                     {
-                                        self.settings_layout = Some(false);
+                                        app.settings_layout = Some(false);
                                     }
                                     if ui
                                         .selectable_label(
-                                            self.settings_layout == Some(true),
+                                            app.settings_layout == Some(true),
                                             "Audio focus layout",
                                         )
                                         .clicked()
                                     {
-                                        self.settings_layout = Some(true);
+                                        app.settings_layout = Some(true);
                                     }
                                 });
                                 ui.label(
@@ -648,7 +643,7 @@ impl RustMixApp {
                                 );
                                 ui.add_space(15.0);
                                 if ui.button("Recover last checkpoint…").clicked() {
-                                    self.actions.push(Action::Recover);
+                                    app.actions.push(Action::Recover);
                                     close_after = true;
                                 }
                                 ui.label(
@@ -682,9 +677,7 @@ impl RustMixApp {
                             }
                         }
                     });
-});
-                });
-                self.automation.insert("dialog.settings.body".into(), body.response.rect);
+
                 ui.separator();
                 ui.horizontal(|ui| {
                     let valid_name = !name.trim().is_empty() && name.len() <= 120;
