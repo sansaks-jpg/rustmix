@@ -1056,6 +1056,7 @@ impl RustMixApp {
         let mut open = self.settings;
         let mut apply_clicked = false;
         let mut cancel_clicked = false;
+        let mut reset_default = false;
         let height = (ctx.viewport_rect().height() - 180.0).clamp(200.0, 520.0);
         operator_window(
             ctx,
@@ -1111,7 +1112,7 @@ impl RustMixApp {
                             .clicked()
                             && action_lbl == "Default"
                         {
-                            draft = ProjectState::demo().preferences;
+                            reset_default = true;
                         }
                     }
                 },
@@ -1428,6 +1429,9 @@ impl RustMixApp {
                 });
             });
         });
+        if reset_default {
+            draft = ProjectState::demo().preferences;
+        }
         if apply_clicked {
             if !self.settings_name.trim().is_empty()
                 && self.settings_name.trim() != self.engine.project().name
