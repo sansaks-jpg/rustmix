@@ -174,7 +174,12 @@ impl RustMixApp {
                     tint,
                 );
                 if input.kind == InputKind::Countdown {
-                    let remaining = 60 - (self.now / 1000) % 60;
+                    let clock = if self.demo_paused {
+                        self.paused_at
+                    } else {
+                        self.now
+                    };
+                    let remaining = 60 - (clock / 1000) % 60;
                     ui.painter().text(
                         rect.center(),
                         Align2::CENTER_CENTER,
@@ -369,10 +374,25 @@ impl RustMixApp {
                     let progress = self.engine.transition().map_or(0.0, |t| t.progress);
                     let auto = self.engine.transition().is_some_and(|t| !t.manual);
                     let mut manual = progress;
-                    let r = ui.add_enabled(
-                        !auto,
-                        egui::Slider::new(&mut manual, 0.0..=1.0).show_value(false),
-                    );
+                    let r = ui
+                        .add_enabled_ui(!auto, |ui| {
+                            ui.spacing_mut().slider_width = center - 10.0;
+                            ui.spacing_mut().interact_size.y = 38.0;
+                            ui.visuals_mut().widgets.inactive.bg_fill = Color32::from_gray(133);
+                            ui.visuals_mut().widgets.hovered.bg_fill = Color32::from_gray(164);
+                            ui.visuals_mut().widgets.active.bg_fill = Color32::from_gray(185);
+                            ui.add(
+                                egui::Slider::new(&mut manual, 0.0..=1.0)
+                                    .show_value(false)
+                                    .handle_shape(egui::style::HandleShape::Rect {
+                                        aspect_ratio: 1.2,
+                                    }),
+                            )
+                        })
+                        .inner
+                        .on_hover_text(
+                            "Manual crossfade · drag to take Preview; return to zero to cancel",
+                        );
                     self.automation.insert("switcher.tbar".into(), r.rect);
                     if !ui.input(|i| i.pointer.primary_down()) {
                         self.tbar_latched = false;

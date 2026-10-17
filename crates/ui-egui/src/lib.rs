@@ -112,6 +112,7 @@ pub struct RustMixApp {
     pub(crate) paused_at: u64,
     pub(crate) category: Option<InputKind>,
     pub(crate) tbar_latched: bool,
+    monitor_view_height: Option<f32>,
 }
 impl RustMixApp {
     pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
@@ -199,6 +200,7 @@ impl RustMixApp {
             paused_at: 0,
             category: None,
             tbar_latched: false,
+            monitor_view_height: None,
         }
     }
     fn theme(&self, ctx: &egui::Context) {
@@ -738,12 +740,30 @@ impl RustMixApp {
         egui::Panel::top("toolbar").show(ui, |ui| self.toolbar(ui));
         egui::Panel::bottom("status").show(ui, |ui| self.status(ui));
         egui::Panel::bottom("production.controls").show(ui, |ui| self.production_toolbar(ui));
-        let monitor_height = (ctx.viewport_rect().height() * 0.53).max(370.0);
+        let viewport_height = ctx.viewport_rect().height();
+        let monitor_height = (viewport_height * 0.53).max(390.0);
+        // Preserve the operator's monitor/input proportion when resizing the window.
+        let monitor_id = egui::Id::new("monitor.bank");
+        if let Some(previous) = self.monitor_view_height
+            && (previous - viewport_height).abs() > 1.0
+            && previous > 0.0
+            && let Some(mut state) = egui::containers::panel::PanelState::load(&ctx, monitor_id)
+        {
+            let height = (state.outer_rect.height() * viewport_height / previous)
+                .clamp(390.0, (viewport_height - 200.0).max(390.0));
+            state.outer_rect.max.y = state.outer_rect.min.y + height;
+            ctx.data_mut(|d| d.insert_persisted(monitor_id, state));
+        }
+        self.monitor_view_height = Some(viewport_height);
         egui::Panel::top("monitor.bank")
             .resizable(true)
             .default_size(monitor_height)
-            .min_size(360.0)
-            .show(ui, |ui| self.switcher(ui));
+            .min_size(390.0)
+            .max_size((viewport_height - 200.0).max(390.0))
+            .show(ui, |ui| {
+                self.switcher(ui);
+                ui.take_available_space();
+            });
         let mut dock = std::mem::replace(&mut self.dock, DockState::new(vec![]));
         let style = egui_dock::Style::from_egui(ui.style());
         DockArea::new(&mut dock)

@@ -328,10 +328,18 @@ mod tests {
         assert_eq!(app.engine.project().program, InputId(3));
         frame(&mut app, &ctx, key(egui::Key::F1), [1600.0, 900.0]);
         assert!(app.engine.project().overlays[0].enabled);
+        let original_monitor_height = app.automation.get("monitor.preview").unwrap().height();
         for size in [[1920.0, 1080.0], [1600.0, 900.0], [1100.0, 700.0]] {
             frame(&mut app, &ctx, vec![], size);
             assert!(app.automation.get("switcher.cut").unwrap().is_finite());
             app.validate_monitor_geometry(size[0]).unwrap();
+            if size[0] == 1920.0 {
+                assert!(
+                    app.automation.get("monitor.preview").unwrap().height()
+                        > original_monitor_height * 1.12,
+                    "Monitor bank must grow with the enlarged viewport"
+                );
+            }
         }
         let layout = serde_json::to_string(&app.dock).unwrap();
         let restored: DockState<Panel> = serde_json::from_str(&layout).unwrap();
@@ -343,6 +351,57 @@ mod tests {
         let mut hostile: serde_json::Value = serde_json::from_str(&layout).unwrap();
         hostile["surfaces"][0]["Main"]["nodes"][0] = serde_json::json!("Empty");
         assert!(workspace::decode(&hostile.to_string()).is_err());
+    }
+
+    #[test]
+    fn held_tbar_endpoint_commits_only_once() {
+        let mut app = RustMixApp::headless();
+        let ctx = egui::Context::default();
+        app.theme(&ctx);
+        for _ in 0..3 {
+            frame(&mut app, &ctx, vec![], [1600.0, 900.0]);
+        }
+        let rect = app.automation.get("switcher.tbar").unwrap();
+        let pos = egui::pos2(rect.right() - 1.0, rect.center().y);
+        frame(
+            &mut app,
+            &ctx,
+            vec![
+                egui::Event::PointerMoved(pos),
+                egui::Event::PointerButton {
+                    pos,
+                    button: egui::PointerButton::Primary,
+                    pressed: true,
+                    modifiers: egui::Modifiers::NONE,
+                },
+            ],
+            [1600.0, 900.0],
+        );
+        assert_eq!(app.engine.project().program, InputId(2));
+        for _ in 0..4 {
+            frame(
+                &mut app,
+                &ctx,
+                vec![egui::Event::PointerMoved(pos)],
+                [1600.0, 900.0],
+            );
+        }
+        assert_eq!(app.engine.project().program, InputId(2));
+        assert_eq!(app.engine.project().preview, InputId(1));
+        frame(
+            &mut app,
+            &ctx,
+            vec![egui::Event::PointerButton {
+                pos,
+                button: egui::PointerButton::Primary,
+                pressed: false,
+                modifiers: egui::Modifiers::NONE,
+            }],
+            [1600.0, 900.0],
+        );
+        assert!(app.engine.transition().is_none());
+        assert_eq!(app.engine.project().program, InputId(2));
+        assert_eq!(app.engine.project().preview, InputId(1));
     }
 
     #[test]
