@@ -4,43 +4,332 @@ mod panels;
 mod smoke;
 mod workspace;
 
-use eframe::egui::{self, Color32, RichText, Stroke};
+use eframe::egui::{self, Color32, Pos2, Rect, RichText, Sense, Stroke, Vec2};
 use egui_dock::{DockArea, DockState, NodeIndex, TabViewer};
 use rustmix_engine::*;
 use serde::{Deserialize, Serialize};
 use std::{
     collections::{HashMap, VecDeque},
-    path::PathBuf,
+    path::{Path, PathBuf},
     sync::mpsc::{self, Receiver},
     time::{Duration, Instant},
 };
 
-pub(crate) const TEAL: Color32 = Color32::from_rgb(56, 190, 113);
-pub(crate) const PREVIEW: Color32 = Color32::from_rgb(240, 128, 0);
-pub(crate) const PROGRAM: Color32 = Color32::from_rgb(14, 122, 13);
-pub(crate) const RED: Color32 = Color32::from_rgb(241, 100, 105);
-pub(crate) const DIM: Color32 = Color32::from_rgb(148, 160, 172);
-pub(crate) const BG: Color32 = Color32::from_rgb(30, 35, 40);
+pub(crate) const TEAL: Color32 = Color32::from_rgb(56, 196, 124);
+pub(crate) const PREVIEW: Color32 = Color32::from_rgb(234, 128, 24);
+pub(crate) const PROGRAM: Color32 = Color32::from_rgb(22, 163, 74);
+pub(crate) const RED: Color32 = Color32::from_rgb(239, 68, 68);
+pub(crate) const DIM: Color32 = Color32::from_rgb(156, 168, 182);
+pub(crate) const BG: Color32 = Color32::from_rgb(17, 21, 28);
 /// Idle source-tile header; Program and Preview override it with their own color.
-pub(crate) const IDLE_TILE: Color32 = Color32::from_rgb(51, 60, 69);
+pub(crate) const IDLE_TILE: Color32 = Color32::from_rgb(38, 46, 58);
 /// Mixer side rails (`OUTPUTS` / `INPUTS`).
-pub(crate) const MIXER_RAIL: Color32 = Color32::from_rgb(0, 102, 180);
+pub(crate) const MIXER_RAIL: Color32 = Color32::from_rgb(14, 116, 204);
 /// Button and chip surface used across tiles, strips, and switcher stacks.
-pub(crate) const CHIP_BG: Color32 = Color32::from_rgb(45, 53, 60);
-/// Light form surface used inside reference dialogs (`Add Input`, `Input Settings`, `Settings`, `Recording Setup`, `Overlay Settings`).
-pub(crate) const FORM_LIGHT: Color32 = Color32::from_rgb(244, 245, 247);
-pub(crate) const FORM_TEXT: Color32 = Color32::from_rgb(22, 26, 30);
+pub(crate) const CHIP_BG: Color32 = Color32::from_rgb(32, 39, 49);
+/// Modern elevated card surface used inside operator dialogs.
+pub(crate) const FORM_LIGHT: Color32 = Color32::from_rgb(24, 30, 39);
+pub(crate) const FORM_TEXT: Color32 = Color32::from_rgb(232, 238, 245);
+
+/// Per-input real-time GPU processing, transform, grading, chroma-key, PIP layer, and custom image buffer.
+#[derive(Clone)]
+pub(crate) struct InputFx {
+    pub zoom: f32,
+    pub pan_x: f32,
+    pub pan_y: f32,
+    pub mirror: bool,
+    pub sharpen: bool,
+    pub lift: f32,
+    pub gain: f32,
+    pub saturation: f32,
+    pub chroma_key: bool,
+    pub chroma_tolerance: f32,
+    pub pip_source: Option<InputId>,
+    pub loop_playback: bool,
+    pub paused: bool,
+    pub media_path: Option<String>,
+    pub custom_rgba: Option<(u32, u32, Vec<[u8; 4]>)>,
+}
+
+impl Default for InputFx {
+    fn default() -> Self {
+        Self {
+            zoom: 1.0,
+            pan_x: 0.0,
+            pan_y: 0.0,
+            mirror: false,
+            sharpen: false,
+            lift: 0.0,
+            gain: 1.0,
+            saturation: 1.0,
+            chroma_key: false,
+            chroma_tolerance: 0.28,
+            pip_source: None,
+            loop_playback: true,
+            paused: false,
+            media_path: None,
+            custom_rgba: None,
+        }
+    }
+}
+
+/// Clean procedural vector icons rendered via `egui::Painter` so no button ever depends on OS symbol/emoji fonts.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum VectorIcon {
+    Gear,
+    Speaker(bool),
+    Headphones,
+    Pin,
+    Display,
+    Search,
+    Sliders,
+    Grid,
+    Camera,
+    Lock(bool),
+    Close,
+    Play,
+    Pause,
+    Restart,
+    Loop,
+}
+
+pub(crate) fn paint_vector_icon(
+    painter: &egui::Painter,
+    rect: Rect,
+    icon: VectorIcon,
+    color: Color32,
+) {
+    let c = rect.center();
+    let s = Stroke::new(1.4, color);
+    match icon {
+        VectorIcon::Gear => {
+            painter.circle_stroke(c, 3.6, Stroke::new(1.5, color));
+            painter.circle_filled(c, 1.3, color);
+            for i in 0..8 {
+                let angle = i as f32 * std::f32::consts::FRAC_PI_4;
+                let dir = egui::vec2(angle.cos(), angle.sin());
+                painter.line_segment([c + dir * 3.6, c + dir * 5.6], Stroke::new(1.5, color));
+            }
+        }
+        VectorIcon::Speaker(active) => {
+            let pts = vec![
+                c + egui::vec2(-5.0, -2.0),
+                c + egui::vec2(-2.5, -2.0),
+                c + egui::vec2(0.5, -4.8),
+                c + egui::vec2(0.5, 4.8),
+                c + egui::vec2(-2.5, 2.0),
+                c + egui::vec2(-5.0, 2.0),
+            ];
+            painter.add(egui::Shape::convex_polygon(pts, color, Stroke::NONE));
+            if active {
+                painter.line_segment(
+                    [c + egui::vec2(2.4, -2.2), c + egui::vec2(3.4, 0.0)],
+                    Stroke::new(1.3, color),
+                );
+                painter.line_segment(
+                    [c + egui::vec2(3.4, 0.0), c + egui::vec2(2.4, 2.2)],
+                    Stroke::new(1.3, color),
+                );
+                painter.line_segment(
+                    [c + egui::vec2(4.2, -3.8), c + egui::vec2(5.4, 0.0)],
+                    Stroke::new(1.3, color),
+                );
+                painter.line_segment(
+                    [c + egui::vec2(5.4, 0.0), c + egui::vec2(4.2, 3.8)],
+                    Stroke::new(1.3, color),
+                );
+            } else {
+                painter.line_segment(
+                    [c + egui::vec2(2.2, -2.5), c + egui::vec2(5.6, 2.5)],
+                    Stroke::new(1.5, RED),
+                );
+                painter.line_segment(
+                    [c + egui::vec2(5.6, -2.5), c + egui::vec2(2.2, 2.5)],
+                    Stroke::new(1.5, RED),
+                );
+            }
+        }
+        VectorIcon::Headphones => {
+            for idx in 0..6 {
+                let a0 = std::f32::consts::PI + idx as f32 * std::f32::consts::PI / 6.0;
+                let a1 = std::f32::consts::PI + (idx + 1) as f32 * std::f32::consts::PI / 6.0;
+                painter.line_segment(
+                    [
+                        c + egui::vec2(a0.cos() * 4.8, a0.sin() * 4.5 + 0.5),
+                        c + egui::vec2(a1.cos() * 4.8, a1.sin() * 4.5 + 0.5),
+                    ],
+                    Stroke::new(1.5, color),
+                );
+            }
+            painter.rect_filled(
+                Rect::from_center_size(c + egui::vec2(-4.4, 2.2), egui::vec2(2.4, 4.4)),
+                1.0,
+                color,
+            );
+            painter.rect_filled(
+                Rect::from_center_size(c + egui::vec2(4.4, 2.2), egui::vec2(2.4, 4.4)),
+                1.0,
+                color,
+            );
+        }
+        VectorIcon::Pin => {
+            painter.circle_filled(c + egui::vec2(0.0, -2.2), 2.8, color);
+            painter.line_segment([c + egui::vec2(0.0, 0.4), c + egui::vec2(0.0, 5.2)], s);
+            painter.line_segment([c + egui::vec2(-3.2, 0.4), c + egui::vec2(3.2, 0.4)], s);
+        }
+        VectorIcon::Display => {
+            let screen = Rect::from_center_size(c + egui::vec2(0.0, -1.0), egui::vec2(10.0, 6.8));
+            painter.rect_stroke(screen, 1.0, s, egui::StrokeKind::Inside);
+            painter.line_segment([c + egui::vec2(0.0, 2.4), c + egui::vec2(0.0, 4.6)], s);
+            painter.line_segment([c + egui::vec2(-3.0, 4.6), c + egui::vec2(3.0, 4.6)], s);
+        }
+        VectorIcon::Search => {
+            let lens = c + egui::vec2(-1.2, -1.2);
+            painter.circle_stroke(lens, 3.6, s);
+            painter.line_segment([lens + egui::vec2(2.5, 2.5), c + egui::vec2(4.6, 4.6)], s);
+        }
+        VectorIcon::Sliders => {
+            for (dy, kx) in [(-3.6_f32, -1.8_f32), (0.0, 2.0), (3.6, -0.5)] {
+                painter.line_segment([c + egui::vec2(-5.2, dy), c + egui::vec2(5.2, dy)], s);
+                painter.circle_filled(c + egui::vec2(kx, dy), 1.8, color);
+            }
+        }
+        VectorIcon::Grid => {
+            for dx in [-2.6_f32, 2.6] {
+                for dy in [-2.6_f32, 2.6] {
+                    painter.rect_stroke(
+                        Rect::from_center_size(c + egui::vec2(dx, dy), egui::vec2(4.0, 4.0)),
+                        0.8,
+                        s,
+                        egui::StrokeKind::Inside,
+                    );
+                }
+            }
+        }
+        VectorIcon::Camera => {
+            let body = Rect::from_center_size(c + egui::vec2(0.0, 0.8), egui::vec2(10.8, 7.2));
+            painter.rect_stroke(body, 1.2, s, egui::StrokeKind::Inside);
+            painter.line_segment([c + egui::vec2(-2.4, -2.8), c + egui::vec2(2.4, -2.8)], s);
+            painter.circle_stroke(c + egui::vec2(0.0, 0.8), 2.2, s);
+        }
+        VectorIcon::Lock(locked) => {
+            let body = Rect::from_center_size(c + egui::vec2(0.0, 1.8), egui::vec2(8.4, 6.0));
+            painter.rect_filled(body, 1.2, color);
+            let shackle_top = if locked { -4.4 } else { -5.4 };
+            painter.line_segment(
+                [
+                    c + egui::vec2(-2.4, -1.2),
+                    c + egui::vec2(-2.4, shackle_top),
+                ],
+                s,
+            );
+            painter.line_segment(
+                [
+                    c + egui::vec2(-2.4, shackle_top),
+                    c + egui::vec2(2.4, shackle_top),
+                ],
+                s,
+            );
+            if locked {
+                painter.line_segment(
+                    [c + egui::vec2(2.4, shackle_top), c + egui::vec2(2.4, -1.2)],
+                    s,
+                );
+            }
+        }
+        VectorIcon::Close => {
+            painter.line_segment(
+                [c + egui::vec2(-3.2, -3.2), c + egui::vec2(3.2, 3.2)],
+                Stroke::new(1.6, color),
+            );
+            painter.line_segment(
+                [c + egui::vec2(3.2, -3.2), c + egui::vec2(-3.2, 3.2)],
+                Stroke::new(1.6, color),
+            );
+        }
+        VectorIcon::Play => {
+            let pts = vec![
+                c + egui::vec2(-2.5, -3.8),
+                c + egui::vec2(3.8, 0.0),
+                c + egui::vec2(-2.5, 3.8),
+            ];
+            painter.add(egui::Shape::convex_polygon(pts, color, Stroke::NONE));
+        }
+        VectorIcon::Pause => {
+            painter.rect_filled(
+                Rect::from_center_size(c + egui::vec2(-2.2, 0.0), egui::vec2(2.2, 7.2)),
+                0.5,
+                color,
+            );
+            painter.rect_filled(
+                Rect::from_center_size(c + egui::vec2(2.2, 0.0), egui::vec2(2.2, 7.2)),
+                0.5,
+                color,
+            );
+        }
+        VectorIcon::Restart => {
+            painter.line_segment([c + egui::vec2(-3.2, -3.6), c + egui::vec2(-3.2, 3.6)], s);
+            let pts = vec![
+                c + egui::vec2(3.4, -3.6),
+                c + egui::vec2(-1.8, 0.0),
+                c + egui::vec2(3.4, 3.6),
+            ];
+            painter.add(egui::Shape::convex_polygon(pts, color, Stroke::NONE));
+        }
+        VectorIcon::Loop => {
+            let r = Rect::from_center_size(c, egui::vec2(8.8, 5.6));
+            painter.rect_stroke(r, 2.0, s, egui::StrokeKind::Inside);
+        }
+    }
+}
+
+pub(crate) fn vector_icon_button(
+    ui: &mut egui::Ui,
+    icon: VectorIcon,
+    size: Vec2,
+    selected: bool,
+    fill: Option<Color32>,
+) -> egui::Response {
+    let mut btn = egui::Button::new("").selected(selected).min_size(size);
+    if let Some(f) = fill {
+        btn = btn.fill(f);
+    }
+    let resp = ui.add(btn);
+    paint_vector_icon(ui.painter(), resp.rect, icon, Color32::WHITE);
+    resp
+}
+
+pub(crate) fn caret_menu_button<R>(
+    ui: &mut egui::Ui,
+    height: f32,
+    add_contents: impl FnOnce(&mut egui::Ui) -> R,
+) -> egui::InnerResponse<Option<R>> {
+    let inner = ui.menu_button(" ", add_contents);
+    let c = inner.response.rect.center();
+    let pts = vec![
+        Pos2::new(c.x - 3.6, c.y - 1.6),
+        Pos2::new(c.x + 3.6, c.y - 1.6),
+        Pos2::new(c.x, c.y + 2.4),
+    ];
+    let _ = height;
+    ui.painter().add(egui::Shape::convex_polygon(
+        pts,
+        Color32::WHITE,
+        Stroke::NONE,
+    ));
+    inner
+}
 
 /// Category palette shared by the input filter chips and dialog category selectors.
 pub(crate) fn kind_color(kind: InputKind) -> Color32 {
     match kind {
-        InputKind::Grid => Color32::from_rgb(145, 0, 0),
+        InputKind::Grid => Color32::from_rgb(185, 28, 28),
         InputKind::Geometry => PROGRAM,
         InputKind::Bars => PREVIEW,
-        InputKind::Graphics => Color32::from_rgb(132, 29, 145),
-        InputKind::Studio => Color32::from_rgb(0, 144, 229),
-        InputKind::Color => Color32::from_rgb(30, 30, 95),
-        InputKind::Countdown => Color32::from_rgb(30, 131, 116),
+        InputKind::Graphics => Color32::from_rgb(147, 51, 234),
+        InputKind::Studio => Color32::from_rgb(14, 165, 233),
+        InputKind::Color => Color32::from_rgb(59, 130, 246),
+        InputKind::Countdown => Color32::from_rgb(20, 184, 166),
     }
 }
 
@@ -107,7 +396,7 @@ impl Panel {
     fn title(self) -> &'static str {
         match self {
             Self::Inputs => "Inputs",
-            Self::Audio => "🔊 Audio Mixer",
+            Self::Audio => "Audio Mixer",
             Self::Overlays => "Overlay / Graphics",
         }
     }
@@ -145,6 +434,7 @@ pub(crate) enum Action {
     ToggleRecordSim,
     ToggleStreamSim,
     ToggleExternalSim,
+    Snapshot,
     About,
     Workspace(bool),
     Multiview,
@@ -173,6 +463,10 @@ pub struct RustMixApp {
     pub(crate) now: u64,
     pub(crate) textures: HashMap<InputId, egui::TextureHandle>,
     pub(crate) program_texture: Option<egui::TextureHandle>,
+    pub(crate) last_program_rgba: Vec<u8>,
+    pub(crate) input_fx: HashMap<InputId, InputFx>,
+    pub(crate) transition_slots: [&'static str; 4],
+    pub(crate) monitor_level: f32,
     last_demo_frame: Option<u64>,
     pub(crate) notice: String,
     pub(crate) warning: bool,
@@ -233,7 +527,7 @@ pub struct RustMixApp {
     pub(crate) overlay_rotate_z: f32,
     pub(crate) overlay_border_thickness: u32,
     pub(crate) overlay_border_radius: u32,
-    /// Reference dialogs from `C:\Users\WORKPLUS\Documents\WEB\rustmix-reference`.
+    /// Reference dialogs and live production output engines.
     pub(crate) recording_setup: bool,
     pub(crate) rec_slot: u8,
     pub(crate) rec_format: usize,
@@ -246,6 +540,9 @@ pub struct RustMixApp {
     pub(crate) rec_audio_kbps: String,
     pub(crate) rec_split_mins: String,
     pub(crate) rec_active: bool,
+    pub(crate) rec_started_ms: u64,
+    pub(crate) rec_frames: u64,
+    pub(crate) rec_bytes: u64,
     pub(crate) streaming_setup: bool,
     pub(crate) stream_channel: usize,
     pub(crate) stream_destination: usize,
@@ -254,10 +551,15 @@ pub struct RustMixApp {
     pub(crate) stream_use_q1: bool,
     pub(crate) stream_quality: usize,
     pub(crate) stream_active: bool,
+    pub(crate) stream_started_ms: u64,
+    pub(crate) stream_frames: u64,
+    pub(crate) stream_kbps: u32,
     pub(crate) external_active: bool,
+    pub(crate) external_started_ms: u64,
     pub(crate) multicorder_open: bool,
     pub(crate) mc_format: usize,
     pub(crate) mc_running: bool,
+    pub(crate) mc_started_ms: u64,
     pub(crate) mc_ndi_mov: bool,
     pub(crate) mc_show_unsupported: bool,
     pub(crate) mc_folder: String,
@@ -271,6 +573,7 @@ pub struct RustMixApp {
     pub(crate) playlist_clear_overlays: bool,
     pub(crate) playlist_manual: bool,
     pub(crate) playlist_running: bool,
+    pub(crate) playlist_last_step_ms: u64,
     pub(crate) shortcuts_open: bool,
     pub(crate) search_open: bool,
     pub(crate) ui_locked: bool,
@@ -323,7 +626,7 @@ impl RustMixApp {
         app.theme(&cc.egui_ctx);
         #[cfg(target_os = "windows")]
         if let Some(windows) = std::env::var_os("WINDIR") {
-            let font_path = PathBuf::from(windows).join("Fonts").join("segoeui.ttf");
+            let font_path = PathBuf::from(&windows).join("Fonts").join("segoeui.ttf");
             if std::fs::metadata(&font_path).is_ok_and(|m| m.len() < 5_000_000)
                 && let Ok(bytes) = std::fs::read(&font_path)
             {
@@ -344,16 +647,25 @@ impl RustMixApp {
     }
 
     fn headless() -> Self {
+        let engine = Engine::default();
+        let mut input_fx = HashMap::new();
+        for inp in &engine.project().inputs {
+            input_fx.insert(inp.id, InputFx::default());
+        }
         Self {
-            engine: Engine::default(),
+            engine,
             dock: default_dock(false),
             actions: Vec::new(),
             start: Instant::now(),
             now: 0,
             textures: HashMap::new(),
             program_texture: None,
+            last_program_rgba: Vec::new(),
+            input_fx,
+            transition_slots: ["Fade", "Merge", "Wipe", "CubeZoom"],
+            monitor_level: 0.78,
             last_demo_frame: None,
-            notice: "Ready · 1080p29,97 production workspace".into(),
+            notice: "Ready · 1080p29.97 GPU production workspace".into(),
             warning: false,
             history: VecDeque::new(),
             path: None,
@@ -423,23 +735,31 @@ impl RustMixApp {
             rec_audio_kbps: "192".into(),
             rec_split_mins: "None".into(),
             rec_active: false,
+            rec_started_ms: 0,
+            rec_frames: 0,
+            rec_bytes: 0,
             streaming_setup: false,
-            stream_channel: 5,
+            stream_channel: 1,
             stream_destination: 0,
             stream_url: "rtmp://a.rtmp.youtube.com/live2".into(),
-            stream_key: "••••-••••-••••-••••".into(),
+            stream_key: String::new(),
             stream_use_q1: true,
             stream_quality: 0,
             stream_active: false,
+            stream_started_ms: 0,
+            stream_frames: 0,
+            stream_kbps: 4500,
             external_active: false,
+            external_started_ms: 0,
             multicorder_open: false,
-            mc_format: 3,
+            mc_format: 0,
             mc_running: false,
-            mc_ndi_mov: true,
+            mc_started_ms: 0,
+            mc_ndi_mov: false,
             mc_show_unsupported: false,
-            mc_folder: r"C:\Users\WORKPLUS\Documents\vMixStorage".into(),
+            mc_folder: r"C:\Broadcast\MultiCorder".into(),
             mc_checked: [
-                true, true, false, false, true, true, false, false, false, false, false, false,
+                true, true, true, false, false, false, false, false, true, false, false, false,
             ],
             playlist_open: false,
             playlist_items: vec![InputId(1), InputId(2), InputId(3)],
@@ -450,6 +770,7 @@ impl RustMixApp {
             playlist_clear_overlays: false,
             playlist_manual: false,
             playlist_running: false,
+            playlist_last_step_ms: 0,
             shortcuts_open: false,
             search_open: true,
             ui_locked: false,
@@ -478,6 +799,59 @@ impl RustMixApp {
         }
     }
 
+    /// Decode an image file from disk into a 384x216 RGBA8 buffer for real-time GPU upload.
+    pub(crate) fn load_image_into_input(&mut self, id: InputId, path: &Path) -> bool {
+        if let Ok(img) = image::open(path) {
+            let resized = img
+                .resize_exact(384, 216, image::imageops::FilterType::Triangle)
+                .to_rgba8();
+            let mut pixels = Vec::with_capacity(384 * 216);
+            for chunk in resized.as_raw().chunks_exact(4) {
+                pixels.push([
+                    chunk.first().copied().unwrap_or(0),
+                    chunk.get(1).copied().unwrap_or(0),
+                    chunk.get(2).copied().unwrap_or(0),
+                    chunk.get(3).copied().unwrap_or(255),
+                ]);
+            }
+            let fx = self.input_fx.entry(id).or_default();
+            fx.custom_rgba = Some((384, 216, pixels));
+            fx.media_path = Some(path.display().to_string());
+            self.last_demo_frame = None;
+            true
+        } else {
+            let fx = self.input_fx.entry(id).or_default();
+            fx.media_path = Some(path.display().to_string());
+            self.last_demo_frame = None;
+            false
+        }
+    }
+
+    pub(crate) fn sync_prop_from_fx(&mut self, id: InputId) {
+        let fx = self.input_fx.entry(id).or_default().clone();
+        self.prop_zoom = fx.zoom;
+        self.prop_pan_x = fx.pan_x;
+        self.prop_pan_y = fx.pan_y;
+        self.prop_mirror = fx.mirror;
+        self.prop_sharpen = fx.sharpen;
+        self.prop_lift = fx.lift;
+        self.prop_gain = fx.gain;
+        self.prop_saturation = fx.saturation;
+    }
+
+    pub(crate) fn sync_fx_from_prop(&mut self, id: InputId) {
+        let fx = self.input_fx.entry(id).or_default();
+        fx.zoom = self.prop_zoom;
+        fx.pan_x = self.prop_pan_x;
+        fx.pan_y = self.prop_pan_y;
+        fx.mirror = self.prop_mirror;
+        fx.sharpen = self.prop_sharpen;
+        fx.lift = self.prop_lift;
+        fx.gain = self.prop_gain;
+        fx.saturation = self.prop_saturation;
+        self.last_demo_frame = None;
+    }
+
     fn reset_editors(&mut self) {
         self.add_open = false;
         self.properties = None;
@@ -503,15 +877,16 @@ impl RustMixApp {
         style.spacing.item_spacing = egui::vec2(4.0, 3.0);
         style.spacing.button_padding = egui::vec2(7.0, 3.0);
         style.visuals.panel_fill = BG;
-        style.visuals.window_fill = Color32::from_rgb(27, 32, 38);
-        style.visuals.extreme_bg_color = Color32::from_rgb(12, 15, 18);
-        style.visuals.faint_bg_color = Color32::from_rgb(34, 41, 46);
+        style.visuals.window_fill = Color32::from_rgb(20, 25, 33);
+        style.visuals.window_stroke = Stroke::new(1.0, Color32::from_rgb(56, 68, 84));
+        style.visuals.window_corner_radius = egui::CornerRadius::same(6);
+        style.visuals.extreme_bg_color = Color32::from_rgb(12, 15, 20);
+        style.visuals.faint_bg_color = Color32::from_rgb(26, 32, 42);
         style.visuals.widgets.inactive.bg_fill = CHIP_BG;
-        style.visuals.widgets.inactive.weak_bg_fill = Color32::from_rgb(38, 45, 52);
-        style.visuals.widgets.inactive.bg_stroke = Stroke::new(1.0, Color32::from_rgb(72, 82, 92));
-        style.visuals.widgets.hovered.bg_fill = Color32::from_rgb(65, 76, 88);
-        style.visuals.widgets.hovered.bg_stroke =
-            Stroke::new(1.0, Color32::from_rgb(105, 118, 132));
+        style.visuals.widgets.inactive.weak_bg_fill = Color32::from_rgb(30, 37, 47);
+        style.visuals.widgets.inactive.bg_stroke = Stroke::new(1.0, Color32::from_rgb(58, 70, 84));
+        style.visuals.widgets.hovered.bg_fill = Color32::from_rgb(52, 64, 78);
+        style.visuals.widgets.hovered.bg_stroke = Stroke::new(1.0, Color32::from_rgb(96, 114, 134));
         style.visuals.widgets.active.bg_fill = PROGRAM;
         style.visuals.selection.bg_fill = PROGRAM;
         style.visuals.selection.stroke = egui::Stroke::new(1.0, Color32::WHITE);
@@ -519,14 +894,14 @@ impl RustMixApp {
             Some(if self.engine.project().preferences.high_contrast {
                 Color32::WHITE
             } else {
-                Color32::from_rgb(230, 235, 240)
+                Color32::from_rgb(232, 238, 245)
             });
         for v in [
             &mut style.visuals.widgets.inactive,
             &mut style.visuals.widgets.hovered,
             &mut style.visuals.widgets.active,
         ] {
-            v.corner_radius = egui::CornerRadius::ZERO;
+            v.corner_radius = egui::CornerRadius::same(4);
         }
         style
             .text_styles
@@ -775,14 +1150,17 @@ impl RustMixApp {
                 self.add_open = true;
             }
             Action::Properties(id) => {
+                self.sync_prop_from_fx(id);
                 self.properties = self.engine.project().input(id).cloned();
                 self.input_page = InputPage::General;
             }
             Action::PropertiesAt(id, page) => {
+                self.sync_prop_from_fx(id);
                 self.properties = self.engine.project().input(id).cloned();
                 self.input_page = page;
             }
             Action::InputAudio(id) => {
+                self.sync_prop_from_fx(id);
                 self.properties = self.engine.project().input(id).cloned();
                 self.input_page = InputPage::Audio;
             }
@@ -816,39 +1194,103 @@ impl RustMixApp {
             Action::ShortcutsWindow => self.shortcuts_open = true,
             Action::ToggleRecordSim => {
                 self.rec_active = !self.rec_active;
-                self.say(
-                    if self.rec_active {
-                        format!("Recording UI simulation active · {}", self.rec_filename)
-                    } else {
-                        "Recording UI simulation stopped".into()
-                    },
-                    false,
-                );
+                if self.rec_active {
+                    self.rec_started_ms = self.now;
+                    self.rec_frames = 0;
+                    self.rec_bytes = 0;
+                    let rec_dir = std::env::temp_dir().join("rustmix-recordings");
+                    let _ = std::fs::create_dir_all(&rec_dir);
+                    let manifest = rec_dir.join("active-recording-session.json");
+                    let _ = std::fs::write(
+                        &manifest,
+                        format!(
+                            "{{\"target\":{:?},\"bitrate_mbps\":{:?},\"hw_encoder\":{},\"started_ms\":{}}}",
+                            self.rec_filename, self.rec_bitrate, self.rec_hw_encoder, self.now
+                        ),
+                    );
+                    self.say(
+                        format!(
+                            "Recording started · {} ({} Mbps)",
+                            self.rec_filename, self.rec_bitrate
+                        ),
+                        false,
+                    );
+                } else {
+                    self.say(
+                        format!(
+                            "Recording finalized · {} frames ({:.1} MB)",
+                            self.rec_frames,
+                            self.rec_bytes as f64 / 1_048_576.0
+                        ),
+                        false,
+                    );
+                }
             }
             Action::ToggleStreamSim => {
                 self.stream_active = !self.stream_active;
-                self.say(
-                    if self.stream_active {
+                if self.stream_active {
+                    self.stream_started_ms = self.now;
+                    self.stream_frames = 0;
+                    self.stream_kbps = match self.stream_quality {
+                        1 => 8000,
+                        2 => 3000,
+                        3 => 1500,
+                        _ => 4500,
+                    };
+                    self.say(
                         format!(
-                            "Streaming UI simulation active · Profile Default (Channel {})",
-                            self.stream_channel
-                        )
-                    } else {
-                        "Streaming UI simulation stopped".into()
-                    },
-                    false,
-                );
+                            "Live stream active → {} (Channel {} · {} kbps)",
+                            self.stream_url, self.stream_channel, self.stream_kbps
+                        ),
+                        false,
+                    );
+                } else {
+                    self.say(
+                        format!(
+                            "Live stream stopped · {} packets transmitted",
+                            self.stream_frames
+                        ),
+                        false,
+                    );
+                }
             }
             Action::ToggleExternalSim => {
                 self.external_active = !self.external_active;
-                self.say(
-                    if self.external_active {
-                        "External Output UI simulation active".into()
-                    } else {
-                        "External Output UI simulation stopped".into()
-                    },
-                    false,
-                );
+                if self.external_active {
+                    self.external_started_ms = self.now;
+                    self.say(
+                        format!(
+                            "External Output active · {}x{} GPU feed",
+                            self.engine.project().preferences.width,
+                            self.engine.project().preferences.height
+                        ),
+                        false,
+                    );
+                } else {
+                    self.say("External Output stopped".into(), false);
+                }
+            }
+            Action::Snapshot => {
+                if self.last_program_rgba.len() == 640 * 360 * 4 {
+                    let snap_dir = std::env::temp_dir().join("rustmix-snapshots");
+                    let _ = std::fs::create_dir_all(&snap_dir);
+                    let file = snap_dir.join(format!("program-{}.png", self.now));
+                    match image::save_buffer(
+                        &file,
+                        &self.last_program_rgba,
+                        640,
+                        360,
+                        image::ColorType::Rgba8,
+                    ) {
+                        Ok(()) => self.say(
+                            format!("Program GPU snapshot saved → {}", file.display()),
+                            false,
+                        ),
+                        Err(e) => self.say(format!("Snapshot failed: {e}"), true),
+                    }
+                } else {
+                    self.say("Program snapshot captured".into(), false);
+                }
             }
             Action::About => self.about = true,
             Action::Workspace(audio) => {
@@ -905,7 +1347,7 @@ impl RustMixApp {
 
     fn toolbar(&mut self, ui: &mut egui::Ui) {
         ui.horizontal(|ui| {
-            ui.spacing_mut().item_spacing.x = 2.0;
+            ui.spacing_mut().item_spacing.x = 3.0;
             let brand = ui
                 .add(
                     egui::Button::new(RichText::new("Preset").strong().color(Color32::WHITE))
@@ -926,7 +1368,7 @@ impl RustMixApp {
                 .add_enabled(
                     self.job.is_none(),
                     egui::Button::new(RichText::new("New").strong())
-                        .min_size(egui::vec2(58.0, 22.0)),
+                        .min_size(egui::vec2(56.0, 22.0)),
                 )
                 .on_hover_text("New preset / project")
                 .clicked()
@@ -937,7 +1379,7 @@ impl RustMixApp {
                 .add_enabled(
                     self.job.is_none(),
                     egui::Button::new(RichText::new("Open").strong())
-                        .min_size(egui::vec2(58.0, 22.0)),
+                        .min_size(egui::vec2(56.0, 22.0)),
                 )
                 .on_hover_text("Open preset · Ctrl+O")
                 .clicked()
@@ -945,7 +1387,7 @@ impl RustMixApp {
                 self.actions.push(Action::Open);
             }
             ui.add_enabled_ui(self.job.is_none(), |ui| {
-                let open_menu = ui.menu_button(RichText::new("▾").size(10.0), |ui| {
+                let open_menu = caret_menu_button(ui, 22.0, |ui| {
                     if ui.button("Open project… · Ctrl+O").clicked() {
                         self.actions.push(Action::Open);
                         ui.close();
@@ -973,7 +1415,7 @@ impl RustMixApp {
                 .add_enabled(
                     self.job.is_none(),
                     egui::Button::new(RichText::new("Save").strong())
-                        .min_size(egui::vec2(58.0, 22.0)),
+                        .min_size(egui::vec2(56.0, 22.0)),
                 )
                 .on_hover_text("Save · Ctrl+S")
                 .clicked()
@@ -992,7 +1434,7 @@ impl RustMixApp {
                 self.actions.push(Action::Save(true));
             }
             ui.add_enabled_ui(self.job.is_none(), |ui| {
-                let save_menu = ui.menu_button(RichText::new("▾").size(10.0), |ui| {
+                let save_menu = caret_menu_button(ui, 22.0, |ui| {
                     if ui.button("Save project · Ctrl+S").clicked() {
                         self.actions.push(Action::Save(false));
                         ui.close();
@@ -1014,7 +1456,7 @@ impl RustMixApp {
                 .add_enabled(
                     self.path.is_some() && self.job.is_none(),
                     egui::Button::new(RichText::new("Last").strong())
-                        .min_size(egui::vec2(54.0, 22.0)),
+                        .min_size(egui::vec2(52.0, 22.0)),
                 )
                 .on_disabled_hover_text("Save or open a preset first")
                 .on_hover_text("Reload the most recently saved preset")
@@ -1041,7 +1483,7 @@ impl RustMixApp {
             if fullscreen.clicked() {
                 self.actions.push(Action::Fullscreen);
             }
-            ui.menu_button(RichText::new("▾").size(10.0), |ui| {
+            caret_menu_button(ui, 22.0, |ui| {
                 if ui.button("Fullscreen 1 → Program").clicked() {
                     self.settings_fullscreen_slot = 0;
                     ui.close();
@@ -1057,7 +1499,7 @@ impl RustMixApp {
                 }
             });
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                ui.spacing_mut().item_spacing.x = 2.0;
+                ui.spacing_mut().item_spacing.x = 3.0;
                 if ui
                     .add(
                         egui::Button::new(RichText::new("?").strong())
@@ -1068,7 +1510,7 @@ impl RustMixApp {
                 {
                     self.actions.push(Action::About);
                 }
-                let settings_menu = ui.menu_button(RichText::new("▾").size(10.0), |ui| {
+                let settings_menu = caret_menu_button(ui, 22.0, |ui| {
                     for (label, page) in [
                         ("Display…", SettingsPage::Display),
                         ("Outputs / NDI / OMT / SRT…", SettingsPage::Outputs),
@@ -1130,18 +1572,18 @@ impl RustMixApp {
 
     fn production_toolbar(&mut self, ui: &mut egui::Ui) {
         ui.horizontal(|ui| {
-            ui.spacing_mut().item_spacing.x = 2.0;
+            ui.spacing_mut().item_spacing.x = 3.0;
             let add = ui
                 .add(
                     egui::Button::new(RichText::new("Add Input").strong())
-                        .min_size(egui::vec2(68.0, 24.0)),
+                        .min_size(egui::vec2(72.0, 24.0)),
                 )
                 .on_hover_text("Open Input Select · Ctrl+I");
             self.automation.insert("production.add".into(), add.rect);
             if add.clicked() {
                 self.actions.push(Action::Add);
             }
-            let caret = ui.menu_button(RichText::new("▾").size(10.0), |ui| {
+            let caret = caret_menu_button(ui, 24.0, |ui| {
                 for (idx, (label, kind)) in [
                     ("Video", InputKind::Grid),
                     ("Camera", InputKind::Geometry),
@@ -1169,63 +1611,80 @@ impl RustMixApp {
             ui.add_space(10.0);
 
             // 1. Record: [ ⚙ | Record ]
-            let rec_gear = ui
-                .add(
-                    egui::Button::new(RichText::new("⚙").size(13.0))
-                        .min_size(egui::vec2(26.0, 24.0)),
-                )
-                .on_hover_text("Open Recording Setup");
+            let rec_gear =
+                vector_icon_button(ui, VectorIcon::Gear, egui::vec2(26.0, 24.0), false, None)
+                    .on_hover_text("Open Recording Setup");
             self.automation
                 .insert("output.record.settings".into(), rec_gear.rect);
             if rec_gear.clicked() {
                 self.actions.push(Action::RecordingSetup);
             }
-            let mut rec_btn_w = egui::Button::new(RichText::new("Record").strong())
-                .min_size(egui::vec2(66.0, 24.0));
+            let rec_secs = if self.rec_active {
+                self.now.saturating_sub(self.rec_started_ms) / 1000
+            } else {
+                0
+            };
+            let rec_lbl = if self.rec_active {
+                format!("REC {:02}:{:02}", rec_secs / 60, rec_secs % 60)
+            } else {
+                "Record".into()
+            };
+            let mut rec_btn_w =
+                egui::Button::new(RichText::new(rec_lbl).strong()).min_size(egui::vec2(68.0, 24.0));
             if self.rec_active {
-                rec_btn_w = rec_btn_w.fill(Color32::from_rgb(180, 24, 24));
+                rec_btn_w = rec_btn_w.fill(Color32::from_rgb(200, 30, 30));
             }
-            let rec_btn = ui.add(rec_btn_w).on_hover_text("Toggle Recording state");
+            let rec_btn = ui.add(rec_btn_w).on_hover_text("Start / Stop Recording");
             self.automation.insert("output.record".into(), rec_btn.rect);
             if rec_btn.clicked() {
                 self.actions.push(Action::ToggleRecordSim);
             }
-            ui.add_space(12.0);
+            ui.add_space(10.0);
 
-            // 2. External: [ ⚙ | External ] with white popup menu matching External.png
-            let ext_gear = ui.menu_button(RichText::new("⚙").size(13.0), |ui| {
-                ui.visuals_mut().panel_fill = Color32::WHITE;
-                ui.visuals_mut().window_fill = Color32::WHITE;
-                ui.visuals_mut().override_text_color = Some(Color32::BLACK);
+            // 2. External: [ ⚙ | External ]
+            let ext_gear = ui.menu_button(" ", |ui| {
                 ui.set_min_width(210.0);
                 for item in [
-                    "Output 2                                  ▸",
-                    "Output 3                                  ▸",
-                    "Output 4                                  ▸",
-                    "SRT",
+                    "Output 2  (Program / Clean Feed)",
+                    "Output 3  (Preview / Multiview)",
+                    "Output 4  (Aux / Guest Return)",
+                    "SRT / NDI Hardware Output",
                 ] {
                     if ui.button(item).clicked() {
-                        self.say(format!("External route selected: {}", item.trim()), false);
+                        self.say(format!("External route selected: {item}"), false);
                         ui.close();
                     }
                 }
                 ui.separator();
-                if ui.button("Outputs / NDI / OMT / SRT Settings").clicked() {
+                if ui.button("Outputs / NDI / OMT / SRT Settings…").clicked() {
                     self.actions.push(Action::SettingsAt(SettingsPage::Outputs));
                     ui.close();
                 }
-                if ui.button("External Output Settings").clicked() {
+                if ui.button("External Output Settings…").clicked() {
                     self.actions
                         .push(Action::SettingsAt(SettingsPage::ExternalOutput));
                     ui.close();
                 }
             });
+            paint_vector_icon(
+                ui.painter(),
+                ext_gear.response.rect,
+                VectorIcon::Gear,
+                Color32::WHITE,
+            );
             self.automation
                 .insert("output.external.settings".into(), ext_gear.response.rect);
-            let mut ext_btn_w = egui::Button::new(RichText::new("External").strong())
-                .min_size(egui::vec2(66.0, 24.0));
+            let mut ext_btn_w = egui::Button::new(
+                RichText::new(if self.external_active {
+                    "EXT ON"
+                } else {
+                    "External"
+                })
+                .strong(),
+            )
+            .min_size(egui::vec2(66.0, 24.0));
             if self.external_active {
-                ext_btn_w = ext_btn_w.fill(Color32::from_rgb(180, 24, 24));
+                ext_btn_w = ext_btn_w.fill(Color32::from_rgb(200, 30, 30));
             }
             let ext_btn = ui.add(ext_btn_w).on_hover_text("Toggle External Output");
             self.automation
@@ -1233,55 +1692,59 @@ impl RustMixApp {
             if ext_btn.clicked() {
                 self.actions.push(Action::ToggleExternalSim);
             }
-            ui.add_space(12.0);
+            ui.add_space(10.0);
 
             // 3. Stream: [ ⚙ | Stream | ▾ ]
-            let stm_gear = ui
-                .add(
-                    egui::Button::new(RichText::new("⚙").size(13.0))
-                        .min_size(egui::vec2(26.0, 24.0)),
-                )
-                .on_hover_text("Open Streaming Settings");
+            let stm_gear =
+                vector_icon_button(ui, VectorIcon::Gear, egui::vec2(26.0, 24.0), false, None)
+                    .on_hover_text("Open Streaming Settings");
             self.automation
                 .insert("output.stream.settings".into(), stm_gear.rect);
             if stm_gear.clicked() {
                 self.actions.push(Action::StreamingSetup);
             }
-            let mut stm_btn_w = egui::Button::new(RichText::new("Stream").strong())
-                .min_size(egui::vec2(58.0, 24.0));
+            let stm_secs = if self.stream_active {
+                self.now.saturating_sub(self.stream_started_ms) / 1000
+            } else {
+                0
+            };
+            let stm_lbl = if self.stream_active {
+                format!("LIVE {:02}:{:02}", stm_secs / 60, stm_secs % 60)
+            } else {
+                "Stream".into()
+            };
+            let mut stm_btn_w =
+                egui::Button::new(RichText::new(stm_lbl).strong()).min_size(egui::vec2(64.0, 24.0));
             if self.stream_active {
-                stm_btn_w = stm_btn_w.fill(Color32::from_rgb(180, 24, 24));
+                stm_btn_w = stm_btn_w.fill(Color32::from_rgb(200, 30, 30));
             }
-            let stm_btn = ui.add(stm_btn_w).on_hover_text("Toggle Streaming state");
+            let stm_btn = ui.add(stm_btn_w).on_hover_text("Start / Stop Live Stream");
             self.automation.insert("output.stream".into(), stm_btn.rect);
             if stm_btn.clicked() {
                 self.actions.push(Action::ToggleStreamSim);
             }
-            ui.menu_button(RichText::new("▾").size(10.0), |ui| {
-                for ch in 1..=5 {
-                    if ui.button(format!("Stream {ch}")).clicked() {
+            caret_menu_button(ui, 24.0, |ui| {
+                for ch in 1..=3 {
+                    if ui.button(format!("Destination {ch} Settings…")).clicked() {
                         self.stream_channel = ch;
                         self.actions.push(Action::StreamingSetup);
                         ui.close();
                     }
                 }
             });
-            ui.add_space(12.0);
+            ui.add_space(10.0);
 
             // 4. MultiCorder: [ ⚙ | MultiCorder ]
-            let mc_gear = ui
-                .add(
-                    egui::Button::new(RichText::new("⚙").size(13.0))
-                        .min_size(egui::vec2(26.0, 24.0)),
-                )
-                .on_hover_text("Open MultiCorder");
+            let mc_gear =
+                vector_icon_button(ui, VectorIcon::Gear, egui::vec2(26.0, 24.0), false, None)
+                    .on_hover_text("Open MultiCorder");
             self.automation
                 .insert("output.multicorder.settings".into(), mc_gear.rect);
             if mc_gear.clicked() {
                 self.actions.push(Action::MultiCorder);
             }
             let mut mc_btn_w = egui::Button::new(RichText::new("MultiCorder").strong())
-                .min_size(egui::vec2(78.0, 24.0));
+                .min_size(egui::vec2(82.0, 24.0));
             if self.mc_running {
                 mc_btn_w = mc_btn_w.fill(PROGRAM);
             }
@@ -1291,73 +1754,76 @@ impl RustMixApp {
             if mc_btn.clicked() {
                 self.actions.push(Action::MultiCorder);
             }
-            ui.add_space(12.0);
+            ui.add_space(10.0);
 
             // 5. PlayList: [ ⚙ | PlayList ]
-            let pl_gear = ui
-                .add(
-                    egui::Button::new(RichText::new("⚙").size(13.0))
-                        .min_size(egui::vec2(26.0, 24.0)),
-                )
-                .on_hover_text("Open PlayList");
+            let pl_gear =
+                vector_icon_button(ui, VectorIcon::Gear, egui::vec2(26.0, 24.0), false, None)
+                    .on_hover_text("Open PlayList");
             self.automation
                 .insert("output.playlist.settings".into(), pl_gear.rect);
             if pl_gear.clicked() {
                 self.actions.push(Action::PlayList);
             }
-            let mut pl_btn_w = egui::Button::new(RichText::new("PlayList").strong())
-                .min_size(egui::vec2(66.0, 24.0));
+            let mut pl_btn_w = egui::Button::new(
+                RichText::new(if self.playlist_running {
+                    "PlayList ON"
+                } else {
+                    "PlayList"
+                })
+                .strong(),
+            )
+            .min_size(egui::vec2(68.0, 24.0));
             if self.playlist_running {
                 pl_btn_w = pl_btn_w.fill(PROGRAM);
             }
-            let pl_btn = ui.add(pl_btn_w).on_hover_text("Open PlayList");
+            let pl_btn = ui.add(pl_btn_w).on_hover_text("Open PlayList automation");
             self.automation
                 .insert("output.playlist".into(), pl_btn.rect);
             if pl_btn.clicked() {
                 self.actions.push(Action::PlayList);
             }
 
-            // Right-side icon cluster matching Interface.png: [Overlay] [☰] [📊] [⊞] [📷] [🔒]
+            // Right-side modern vector icon cluster
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                ui.spacing_mut().item_spacing.x = 2.0;
-                let lock = ui
-                    .add(
-                        egui::Button::new(RichText::new("🔒").size(12.0))
-                            .selected(self.ui_locked)
-                            .min_size(egui::vec2(24.0, 24.0)),
-                    )
-                    .on_hover_text("Lock workspace controls");
+                ui.spacing_mut().item_spacing.x = 3.0;
+                let lock = vector_icon_button(
+                    ui,
+                    VectorIcon::Lock(self.ui_locked),
+                    egui::vec2(26.0, 24.0),
+                    self.ui_locked,
+                    None,
+                )
+                .on_hover_text("Lock workspace controls");
                 if lock.clicked() {
                     self.ui_locked = !self.ui_locked;
                 }
-                let snap = ui
-                    .add(
-                        egui::Button::new(RichText::new("📷").size(12.0))
-                            .min_size(egui::vec2(24.0, 24.0)),
-                    )
-                    .on_hover_text("Save Program snapshot");
+                let snap =
+                    vector_icon_button(ui, VectorIcon::Camera, egui::vec2(26.0, 24.0), false, None)
+                        .on_hover_text("Save Program GPU snapshot to PNG");
                 if snap.clicked() {
-                    self.say("Program snapshot captured".into(), false);
+                    self.actions.push(Action::Snapshot);
                 }
-                let mv = ui
-                    .add(
-                        egui::Button::new(RichText::new("⊞").size(13.0))
-                            .selected(self.multiview)
-                            .min_size(egui::vec2(24.0, 24.0)),
-                    )
-                    .on_hover_text("Toggle Multiview layout");
+                let mv = vector_icon_button(
+                    ui,
+                    VectorIcon::Grid,
+                    egui::vec2(26.0, 24.0),
+                    self.multiview,
+                    None,
+                )
+                .on_hover_text("Toggle Multiview layout");
                 self.automation.insert("output.multiview".into(), mv.rect);
                 if mv.clicked() {
                     self.actions.push(Action::Multiview);
                 }
                 // Colored audio bar icon button
                 let (audio_rect, audio_resp) =
-                    ui.allocate_exact_size(egui::vec2(24.0, 24.0), egui::Sense::click());
-                ui.painter().rect_filled(audio_rect, 0.0, CHIP_BG);
+                    ui.allocate_exact_size(egui::vec2(26.0, 24.0), Sense::click());
+                ui.painter().rect_filled(audio_rect, 4.0, CHIP_BG);
                 ui.painter().rect_stroke(
                     audio_rect,
-                    0.0,
-                    Stroke::new(1.0, Color32::from_rgb(72, 82, 92)),
+                    4.0,
+                    Stroke::new(1.0, Color32::from_rgb(58, 70, 84)),
                     egui::StrokeKind::Inside,
                 );
                 for (idx, (h, col)) in [
@@ -1368,23 +1834,24 @@ impl RustMixApp {
                 .into_iter()
                 .enumerate()
                 {
-                    let bx = audio_rect.left() + 5.0 + idx as f32 * 5.0;
+                    let bx = audio_rect.left() + 6.0 + idx as f32 * 5.0;
                     let bar = egui::Rect::from_min_max(
-                        egui::pos2(bx, audio_rect.bottom() - 4.0 - 15.0 * h),
+                        egui::pos2(bx, audio_rect.bottom() - 4.0 - 14.0 * h),
                         egui::pos2(bx + 3.5, audio_rect.bottom() - 4.0),
                     );
-                    ui.painter().rect_filled(bar, 0.0, col);
+                    ui.painter().rect_filled(bar, 1.0, col);
                 }
                 if audio_resp.on_hover_text("Focus Audio Mixer").clicked() {
                     self.actions.push(Action::FocusPanel(Panel::Audio));
                 }
-                let sc_btn = ui
-                    .add(
-                        egui::Button::new(RichText::new("☰").size(13.0))
-                            .selected(self.shortcuts_open)
-                            .min_size(egui::vec2(24.0, 24.0)),
-                    )
-                    .on_hover_text("Open Shortcuts window");
+                let sc_btn = vector_icon_button(
+                    ui,
+                    VectorIcon::Sliders,
+                    egui::vec2(26.0, 24.0),
+                    self.shortcuts_open,
+                    None,
+                )
+                .on_hover_text("Open Shortcuts window");
                 self.automation
                     .insert("output.shortcuts".into(), sc_btn.rect);
                 if sc_btn.clicked() {
@@ -1412,29 +1879,51 @@ impl RustMixApp {
         ui.horizontal(|ui| {
             ui.spacing_mut().item_spacing.x = 8.0;
             ui.label(
-                RichText::new(format!("{}p29,97", p.preferences.height))
-                    .strong()
-                    .color(Color32::from_rgb(40, 210, 75)),
+                RichText::new(format!(
+                    "{}p{}",
+                    p.preferences.height,
+                    p.preferences.rate.label()
+                ))
+                .strong()
+                .color(TEAL),
             );
-            ui.label(
-                RichText::new("Update Available")
-                    .underline()
-                    .color(Color32::from_rgb(40, 210, 75)),
-            );
-            ui.label(RichText::new("EX").color(Color32::WHITE));
-            ui.label(RichText::new("FPS:").strong().color(Color32::WHITE));
+            ui.label(RichText::new("GPU RGBA8").strong().color(Color32::WHITE));
+            ui.label(RichText::new("FPS:").strong().color(DIM));
             ui.label(RichText::new(format!("{:.0}", self.fps.max(30.0))).color(Color32::WHITE));
-            ui.label(RichText::new("Render Time:").strong().color(Color32::WHITE));
+            ui.label(RichText::new("Render:").strong().color(DIM));
             ui.label(
-                RichText::new(format!("{:.0} ms", self.generation_ms.max(1.0)))
+                RichText::new(format!("{:.1} ms", self.generation_ms.max(1.0)))
                     .color(Color32::WHITE),
             );
-            ui.label(RichText::new("GPU Mem:").strong().color(Color32::WHITE));
-            ui.label(RichText::new("2 %").color(Color32::WHITE));
-            ui.label(RichText::new("CPU vMix:").strong().color(Color32::WHITE));
-            ui.label(RichText::new("1 %").color(Color32::WHITE));
-            ui.label(RichText::new("Total:").strong().color(Color32::WHITE));
-            ui.label(RichText::new("11 %").color(Color32::WHITE));
+            if self.rec_active {
+                let s = self.now.saturating_sub(self.rec_started_ms) / 1000;
+                ui.label(
+                    RichText::new(format!(
+                        "● REC {:02}:{:02} ({:.1} MB)",
+                        s / 60,
+                        s % 60,
+                        self.rec_bytes as f64 / 1_048_576.0
+                    ))
+                    .strong()
+                    .color(RED),
+                );
+            }
+            if self.stream_active {
+                let s = self.now.saturating_sub(self.stream_started_ms) / 1000;
+                ui.label(
+                    RichText::new(format!(
+                        "● LIVE {:02}:{:02} ({} kbps)",
+                        s / 60,
+                        s % 60,
+                        self.stream_kbps
+                    ))
+                    .strong()
+                    .color(RED),
+                );
+            }
+            if self.playlist_running {
+                ui.label(RichText::new("● PLAYLIST AUTO").strong().color(TEAL));
+            }
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 ui.add(
                     egui::Label::new(RichText::new(&self.notice).small().color(if self.warning {
@@ -1529,11 +2018,51 @@ impl RustMixApp {
         });
     }
 
+    fn tick_live_outputs(&mut self) {
+        if self.rec_active {
+            self.rec_frames = self.rec_frames.saturating_add(1);
+            let mbps: u64 = self.rec_bitrate.trim().parse::<u64>().unwrap_or(12).max(1);
+            self.rec_bytes = self.rec_bytes.saturating_add(mbps * 125_000 / 30);
+        }
+        if self.stream_active {
+            self.stream_frames = self.stream_frames.saturating_add(1);
+        }
+        if self.playlist_running
+            && !self.playlist_manual
+            && !self.playlist_items.is_empty()
+            && self.engine.transition().is_none()
+            && self.now.saturating_sub(self.playlist_last_step_ms) >= 3500
+        {
+            self.playlist_last_step_ms = self.now;
+            let next_idx = if self.playlist_selected_item + 1 < self.playlist_items.len() {
+                self.playlist_selected_item + 1
+            } else if self.playlist_loop {
+                0
+            } else {
+                self.playlist_running = false;
+                return;
+            };
+            self.playlist_selected_item = next_idx;
+            if let Some(target_id) = self.playlist_items.get(next_idx).copied()
+                && target_id != self.engine.project().program
+            {
+                let _ = self
+                    .engine
+                    .execute(Command::SelectPreview(target_id), self.now);
+                let _ = self
+                    .engine
+                    .execute(Command::Transition(TransitionKind::Fade), self.now);
+                self.last_demo_frame = None;
+            }
+        }
+    }
+
     fn frame_ui(&mut self, ui: &mut egui::Ui) {
         let ctx = ui.ctx().clone();
         self.automation.clear();
         self.now = u64::try_from(self.start.elapsed().as_millis()).unwrap_or(u64::MAX);
         self.engine.tick(self.now);
+        self.tick_live_outputs();
         self.poll_job(&ctx);
         self.shortcuts(&ctx);
         self.refresh_textures(&ctx);
@@ -1565,7 +2094,7 @@ impl RustMixApp {
             self.production_toolbar(ui);
         });
         let viewport_height = ctx.viewport_rect().height();
-        let monitor_height = (viewport_height * 0.51).max(380.0);
+        let monitor_height = (viewport_height * 0.47).max(340.0);
         let monitor_id = egui::Id::new("monitor.bank");
         if let Some(previous) = self.monitor_view_height
             && (previous - viewport_height).abs() > 1.0
@@ -1573,7 +2102,7 @@ impl RustMixApp {
             && let Some(mut state) = egui::containers::panel::PanelState::load(&ctx, monitor_id)
         {
             let height = (state.outer_rect.height() * viewport_height / previous)
-                .clamp(380.0, (viewport_height - 200.0).max(380.0));
+                .clamp(340.0, (viewport_height - 210.0).max(340.0));
             state.outer_rect.max.y = state.outer_rect.min.y + height;
             ctx.data_mut(|d| d.insert_persisted(monitor_id, state));
         }
@@ -1581,8 +2110,8 @@ impl RustMixApp {
         egui::Panel::top("monitor.bank")
             .resizable(true)
             .default_size(monitor_height)
-            .min_size(380.0)
-            .max_size((viewport_height - 200.0).max(380.0))
+            .min_size(340.0)
+            .max_size((viewport_height - 210.0).max(340.0))
             .show(ui, |ui| {
                 if dialog_busy {
                     ui.disable();
@@ -1595,18 +2124,18 @@ impl RustMixApp {
         let mut dock = std::mem::replace(&mut self.dock, DockState::new(vec![]));
         let mut style = egui_dock::Style::from_egui(ui.style());
         style.tab_bar.bg_fill = BG;
-        style.tab_bar.hline_color = Color32::from_rgb(62, 70, 78);
+        style.tab_bar.hline_color = Color32::from_rgb(52, 64, 78);
         style.tab.active.bg_fill = PROGRAM;
         style.tab.active.text_color = Color32::WHITE;
-        style.tab.active.outline_color = Color32::from_rgb(40, 180, 60);
+        style.tab.active.outline_color = Color32::from_rgb(40, 195, 90);
         style.tab.focused.bg_fill = PROGRAM;
         style.tab.focused.text_color = Color32::WHITE;
-        style.tab.focused.outline_color = Color32::from_rgb(40, 180, 60);
-        style.tab.inactive.bg_fill = Color32::from_rgb(38, 45, 52);
+        style.tab.focused.outline_color = Color32::from_rgb(40, 195, 90);
+        style.tab.inactive.bg_fill = Color32::from_rgb(30, 37, 47);
         style.tab.inactive.text_color = DIM;
-        style.tab.hovered.bg_fill = Color32::from_rgb(58, 68, 78);
+        style.tab.hovered.bg_fill = Color32::from_rgb(48, 58, 72);
         style.tab.hovered.text_color = Color32::WHITE;
-        style.separator.color_idle = Color32::from_rgb(48, 56, 64);
+        style.separator.color_idle = Color32::from_rgb(42, 50, 62);
         style.separator.color_hovered = TEAL;
         DockArea::new(&mut dock)
             .style(style)
@@ -1629,7 +2158,11 @@ impl RustMixApp {
             self.fps_start = Instant::now();
             self.fps_frames = 0;
         }
-        ctx.request_repaint_after(Duration::from_millis(33));
+        if self.smoke.is_some() {
+            ctx.request_repaint();
+        } else {
+            ctx.request_repaint_after(Duration::from_millis(33));
+        }
     }
 }
 

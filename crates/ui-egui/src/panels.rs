@@ -1,86 +1,204 @@
 use super::*;
 use eframe::egui::{self, Align2, FontId, Rect, Sense, Stroke, Vec2};
 
-/// Vertical blue group label (`OUTPUTS` / `INPUTS`) matching `Interface.png`.
+/// Vertical blue group label (`OUTPUTS` / `INPUTS`) with modern rounded corners.
 fn mixer_rail(ui: &mut egui::Ui, height: f32, label: &str) {
     let (rect, _) = ui.allocate_exact_size(egui::vec2(20.0, height), Sense::hover());
-    ui.painter().rect_filled(rect, 0.0, MIXER_RAIL);
+    ui.painter().rect_filled(rect, 3.0, MIXER_RAIL);
     ui.painter().rect_stroke(
         rect,
-        0.0,
-        Stroke::new(1.0, Color32::from_rgb(10, 65, 120)),
+        3.0,
+        Stroke::new(1.0, Color32::from_rgb(38, 142, 230)),
         egui::StrokeKind::Inside,
     );
     let galley =
         ui.painter()
-            .layout_no_wrap(label.to_owned(), FontId::proportional(11.0), Color32::WHITE);
+            .layout_no_wrap(label.to_owned(), FontId::proportional(10.5), Color32::WHITE);
     ui.painter().add(
         egui::epaint::TextShape::new(rect.center(), galley, Color32::WHITE)
             .with_angle_and_anchor(-std::f32::consts::FRAC_PI_2, Align2::CENTER_CENTER),
     );
 }
 
+/// Apply per-input real-time GPU effects (Zoom, Pan, Mirror, Lift, Gain, Saturation, Chroma Key, Custom Image).
+fn process_source_pixels(
+    base: &[[u8; 4]],
+    w: u32,
+    h: u32,
+    fx: &InputFx,
+    pip_pixels: Option<&[[u8; 4]]>,
+) -> Vec<[u8; 4]> {
+    let src = if let Some((cw, ch, custom)) = &fx.custom_rgba
+        && *cw == w
+        && *ch == h
+        && custom.len() == (w * h) as usize
+    {
+        custom.as_slice()
+    } else {
+        base
+    };
+    let identity = (fx.zoom - 1.0).abs() < 0.005
+        && fx.pan_x.abs() < 0.005
+        && fx.pan_y.abs() < 0.005
+        && !fx.mirror
+        && fx.lift.abs() < 0.005
+        && (fx.gain - 1.0).abs() < 0.005
+        && (fx.saturation - 1.0).abs() < 0.005
+        && !fx.chroma_key
+        && pip_pixels.is_none();
+    if identity {
+        return src.to_vec();
+    }
+    let zoom = fx.zoom.clamp(0.25, 4.0);
+    let mut out = Vec::with_capacity((w * h) as usize);
+    for y in 0..h {
+        let ny = ((y as f32 / h.max(1) as f32) - 0.5 - fx.pan_y * 0.45) / zoom + 0.5;
+        for x in 0..w {
+            let mut ux = (x as f32 / w.max(1) as f32) - 0.5 - fx.pan_x * 0.45;
+            if fx.mirror {
+                ux = -ux;
+            }
+            let nx = ux / zoom + 0.5;
+            let mut px = if (0.0..1.0).contains(&nx) && (0.0..1.0).contains(&ny) {
+                let sx = ((nx * w as f32) as u32).min(w.saturating_sub(1));
+                let sy = ((ny * h as f32) as u32).min(h.saturating_sub(1));
+                src.get((sy * w + sx) as usize)
+                    .copied()
+                    .unwrap_or([0, 0, 0, 255])
+            } else {
+                [10, 14, 18, 255]
+            };
+
+            // Colour Key (green/teal dominance key to dark slate backdrop)
+            if fx.chroma_key {
+                let [pr, pg, pb, _] = px;
+                let r = pr as f32 / 255.0;
+                let g = pg as f32 / 255.0;
+                let b = pb as f32 / 255.0;
+                if g > (r.max(b) + (0.45 - fx.chroma_tolerance.clamp(0.05, 0.42))) {
+                    px = [18, 24, 34, 255];
+                }
+            }
+
+            // Colour Adjust (Lift, Gain, Saturation)
+            if fx.lift.abs() >= 0.005
+                || (fx.gain - 1.0).abs() >= 0.005
+                || (fx.saturation - 1.0).abs() >= 0.005
+            {
+                let [pr, pg, pb, pa] = px;
+                let mut r = (pr as f32 / 255.0 + fx.lift) * fx.gain;
+                let mut g = (pg as f32 / 255.0 + fx.lift) * fx.gain;
+                let mut b = (pb as f32 / 255.0 + fx.lift) * fx.gain;
+                let luma = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+                r = luma + (r - luma) * fx.saturation;
+                g = luma + (g - luma) * fx.saturation;
+                b = luma + (b - luma) * fx.saturation;
+                px = [
+                    (r.clamp(0.0, 1.0) * 255.0) as u8,
+                    (g.clamp(0.0, 1.0) * 255.0) as u8,
+                    (b.clamp(0.0, 1.0) * 255.0) as u8,
+                    pa,
+                ];
+            }
+
+            // Optional Picture-in-Picture layer in top-right quadrant
+            if let Some(pip) = pip_pixels {
+                let u = x as f32 / w.max(1) as f32;
+                let v = y as f32 / h.max(1) as f32;
+                if (0.62..=0.95).contains(&u) && (0.08..=0.41).contains(&v) {
+                    let pu = (u - 0.62) / 0.33;
+                    let pv = (v - 0.08) / 0.33;
+                    if !(0.015..=0.985).contains(&pu) || !(0.025..=0.975).contains(&pv) {
+                        px = [38, 175, 255, 255];
+                    } else {
+                        let px_x = ((pu * w as f32) as u32).min(w.saturating_sub(1));
+                        let px_y = ((pv * h as f32) as u32).min(h.saturating_sub(1));
+                        if let Some(p_col) = pip.get((px_y * w + px_x) as usize) {
+                            px = *p_col;
+                        }
+                    }
+                }
+            }
+            out.push(px);
+        }
+    }
+    out
+}
+
 impl RustMixApp {
     pub(crate) fn refresh_textures(&mut self, ctx: &egui::Context) {
+        // Avoid flooding the software WARP command queue with 8 texture uploads per frame
+        // while static dialog screenshots are being read back in CI smoke mode.
+        if self.smoke.as_ref().is_some_and(|s| s.is_dialog_stage())
+            && !self.textures.is_empty()
+            && self.program_texture.is_some()
+        {
+            return;
+        }
         let frame = self.engine.project().preferences.rate.frame_at(self.now);
         if self.last_demo_frame == Some(frame) {
             return;
         }
         let start = Instant::now();
-        let p = self.engine.project();
+        let p = self.engine.project().clone();
         self.textures.retain(|id, _| p.input(*id).is_some());
+        let effective_ms = if self.demo_paused {
+            self.paused_at
+        } else {
+            self.now
+        };
+
+        let mut raw_sources: HashMap<InputId, Vec<[u8; 4]>> = HashMap::new();
         for input in &p.inputs {
-            match render::source(
-                input,
-                384,
-                216,
-                if self.demo_paused {
-                    self.paused_at
+            let fx = self.input_fx.get(&input.id).cloned().unwrap_or_default();
+            let input_ms = if fx.paused {
+                self.paused_at
+            } else {
+                effective_ms
+            };
+            if let Ok(pixels) = render::source(input, 384, 216, input_ms) {
+                raw_sources.insert(input.id, pixels);
+            }
+        }
+
+        for input in &p.inputs {
+            let fx = self.input_fx.get(&input.id).cloned().unwrap_or_default();
+            if let Some(base) = raw_sources.get(&input.id) {
+                let pip_buf = fx.pip_source.and_then(|pid| raw_sources.get(&pid));
+                let processed =
+                    process_source_pixels(base, 384, 216, &fx, pip_buf.map(Vec::as_slice));
+                let image = egui::ColorImage::from_rgba_unmultiplied(
+                    [384, 216],
+                    &processed.into_iter().flatten().collect::<Vec<_>>(),
+                );
+                if let Some(texture) = self.textures.get_mut(&input.id) {
+                    texture.set(image, egui::TextureOptions::LINEAR);
                 } else {
-                    self.now
-                },
-            ) {
-                Ok(pixels) => {
-                    let image = egui::ColorImage::from_rgba_unmultiplied(
-                        [384, 216],
-                        &pixels.into_iter().flatten().collect::<Vec<_>>(),
+                    self.textures.insert(
+                        input.id,
+                        ctx.load_texture(
+                            format!("source.{}", input.id.0),
+                            image,
+                            egui::TextureOptions::LINEAR,
+                        ),
                     );
-                    if let Some(texture) = self.textures.get_mut(&input.id) {
-                        texture.set(image, egui::TextureOptions::LINEAR);
-                    } else {
-                        self.textures.insert(
-                            input.id,
-                            ctx.load_texture(
-                                format!("source.{}", input.id.0),
-                                image,
-                                egui::TextureOptions::LINEAR,
-                            ),
-                        );
-                    }
-                }
-                Err(e) => {
-                    self.notice = e.to_string();
-                    self.warning = true;
                 }
             }
         }
         match render::program(
-            p,
+            &p,
             self.engine.transition(),
             self.engine.black_level(),
             640,
             360,
-            if self.demo_paused {
-                self.paused_at
-            } else {
-                self.now
-            },
+            effective_ms,
         ) {
             Ok(pixels) => {
-                let image = egui::ColorImage::from_rgba_unmultiplied(
-                    [640, 360],
-                    &pixels.into_iter().flatten().collect::<Vec<_>>(),
-                );
+                let pgm_fx = self.input_fx.get(&p.program).cloned().unwrap_or_default();
+                let processed = process_source_pixels(&pixels, 640, 360, &pgm_fx, None);
+                let flat: Vec<u8> = processed.into_iter().flatten().collect();
+                self.last_program_rgba = flat.clone();
+                let image = egui::ColorImage::from_rgba_unmultiplied([640, 360], &flat);
                 if let Some(texture) = &mut self.program_texture {
                     texture.set(image, egui::TextureOptions::LINEAR);
                 } else {
@@ -103,21 +221,28 @@ impl RustMixApp {
     fn monitor(&mut self, ui: &mut egui::Ui, program: bool) {
         let p = self.engine.project();
         let id = if program { p.program } else { p.preview };
-        let Some(input) = p.input(id) else {
+        let Some(input) = p.input(id).cloned() else {
             ui.colored_label(RED, "Source missing");
             return;
         };
         let color = if program { PROGRAM } else { PREVIEW };
         egui::Frame::new()
             .fill(color)
-            .inner_margin(egui::Margin::symmetric(6, 3))
+            .corner_radius(egui::CornerRadius {
+                nw: 4,
+                ne: 4,
+                sw: 0,
+                se: 0,
+            })
+            .inner_margin(egui::Margin::symmetric(8, 3))
             .show(ui, |ui| {
                 ui.set_min_width((ui.available_width() - 1.0).max(20.0));
                 ui.horizontal(|ui| {
+                    let badge = if program { "PGM" } else { "PVW" };
                     ui.add_sized(
-                        [(ui.available_width() - 90.0).max(40.0), 18.0],
+                        [(ui.available_width() - 96.0).max(40.0), 18.0],
                         egui::Label::new(
-                            RichText::new(format!("{}   {}", id.0, input.name))
+                            RichText::new(format!("{badge}  {} · {}", id.0, input.name))
                                 .strong()
                                 .color(Color32::WHITE),
                         )
@@ -125,16 +250,14 @@ impl RustMixApp {
                     );
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         ui.spacing_mut().item_spacing.x = 4.0;
-                        let gear = ui
-                            .add(
-                                egui::Button::new(
-                                    RichText::new("⚙").size(13.0).color(Color32::WHITE),
-                                )
-                                .fill(Color32::TRANSPARENT)
-                                .stroke(Stroke::NONE)
-                                .min_size(egui::vec2(20.0, 18.0)),
-                            )
-                            .on_hover_text("Input Settings");
+                        let gear = vector_icon_button(
+                            ui,
+                            VectorIcon::Gear,
+                            egui::vec2(20.0, 18.0),
+                            false,
+                            Some(Color32::from_black_alpha(45)),
+                        )
+                        .on_hover_text("Input Settings");
                         self.automation.insert(
                             format!(
                                 "monitor.{}.properties",
@@ -146,17 +269,19 @@ impl RustMixApp {
                             self.actions.push(Action::Properties(id));
                         }
                         if !program {
-                            // Position / PIP box icon on Preview bar matching Interface.png
+                            // Position / PIP box icon on Preview bar
                             let (pos_rect, pos_resp) =
-                                ui.allocate_exact_size(egui::vec2(16.0, 14.0), Sense::click());
+                                ui.allocate_exact_size(egui::vec2(18.0, 16.0), Sense::click());
+                            ui.painter()
+                                .rect_filled(pos_rect, 2.0, Color32::from_black_alpha(45));
                             ui.painter().rect_stroke(
-                                pos_rect,
+                                pos_rect.shrink(2.0),
                                 1.0,
                                 Stroke::new(1.2, Color32::WHITE),
                                 egui::StrokeKind::Inside,
                             );
                             ui.painter().rect_stroke(
-                                pos_rect.shrink(3.0),
+                                pos_rect.shrink(4.5),
                                 0.0,
                                 Stroke::new(1.0, Color32::WHITE),
                                 egui::StrokeKind::Inside,
@@ -167,15 +292,15 @@ impl RustMixApp {
                                 self.actions
                                     .push(Action::PropertiesAt(id, InputPage::Position));
                             }
-                            // RGB color bars icon on Preview bar matching Interface.png
+                            // RGB color bars icon on Preview bar
                             let (rgb_rect, rgb_resp) =
-                                ui.allocate_exact_size(egui::vec2(16.0, 14.0), Sense::click());
-                            ui.painter().rect_filled(rgb_rect, 1.0, Color32::WHITE);
+                                ui.allocate_exact_size(egui::vec2(18.0, 16.0), Sense::click());
+                            ui.painter().rect_filled(rgb_rect, 2.0, Color32::WHITE);
                             let third = (rgb_rect.width() - 2.0) / 3.0;
                             for (idx, col) in [
-                                Color32::from_rgb(220, 35, 35),
-                                Color32::from_rgb(35, 190, 55),
-                                Color32::from_rgb(35, 95, 225),
+                                Color32::from_rgb(230, 45, 45),
+                                Color32::from_rgb(40, 195, 65),
+                                Color32::from_rgb(45, 110, 235),
                             ]
                             .into_iter()
                             .enumerate()
@@ -200,15 +325,15 @@ impl RustMixApp {
                 });
             });
         let available = ui.available_size();
-        let width = available
-            .x
-            .max(16.0)
-            .min((available.y - 6.0).max(9.0) * 16.0 / 9.0);
+        let transport_h = 24.0;
+        let canvas_avail_h = (available.y - transport_h - 4.0).max(40.0);
+        let width = available.x.max(16.0).min(canvas_avail_h * 16.0 / 9.0);
         let (letterbox, _) = ui.allocate_exact_size(
-            Vec2::new(available.x.max(width), width * 9.0 / 16.0),
+            Vec2::new(available.x.max(width), canvas_avail_h),
             Sense::hover(),
         );
-        ui.painter().rect_filled(letterbox, 0.0, Color32::BLACK);
+        ui.painter()
+            .rect_filled(letterbox, 0.0, Color32::from_rgb(8, 10, 14));
         let rect = Rect::from_center_size(letterbox.center(), Vec2::new(width, width * 9.0 / 16.0));
         self.automation.insert(
             format!("monitor.{}", if program { "program" } else { "preview" }),
@@ -286,6 +411,78 @@ impl RustMixApp {
                 }
             }
         }
+
+        // Modern live transport & timecode bar under Preview/Program monitor
+        egui::Frame::new()
+            .fill(Color32::from_rgb(22, 28, 36))
+            .corner_radius(egui::CornerRadius {
+                nw: 0,
+                ne: 0,
+                sw: 4,
+                se: 4,
+            })
+            .inner_margin(egui::Margin::symmetric(6, 2))
+            .show(ui, |ui| {
+                ui.set_min_width((available.x - 12.0).max(40.0));
+                ui.horizontal(|ui| {
+                    ui.spacing_mut().item_spacing.x = 4.0;
+                    let is_paused =
+                        self.input_fx.get(&id).is_some_and(|fx| fx.paused) || self.demo_paused;
+                    let play_btn = vector_icon_button(
+                        ui,
+                        if is_paused {
+                            VectorIcon::Play
+                        } else {
+                            VectorIcon::Pause
+                        },
+                        egui::vec2(20.0, 18.0),
+                        !is_paused,
+                        None,
+                    )
+                    .on_hover_text("Play / Pause source playback");
+                    if play_btn.clicked() {
+                        let fx = self.input_fx.entry(id).or_default();
+                        fx.paused = !fx.paused;
+                        self.paused_at = self.now;
+                        self.last_demo_frame = None;
+                    }
+                    let restart_btn = vector_icon_button(
+                        ui,
+                        VectorIcon::Restart,
+                        egui::vec2(20.0, 18.0),
+                        false,
+                        None,
+                    )
+                    .on_hover_text("Restart playback from 00:00:00");
+                    if restart_btn.clicked() {
+                        self.paused_at = 0;
+                        self.last_demo_frame = None;
+                    }
+                    let sec = (self.now / 1000) % 60;
+                    let frm = (self.now / 33) % 30;
+                    let prog_frac = ((self.now % 60_000) as f32 / 60_000.0).clamp(0.0, 1.0);
+                    let bar_w = (ui.available_width() - 140.0).max(36.0);
+                    let (bar_rect, _) =
+                        ui.allocate_exact_size(egui::vec2(bar_w, 6.0), Sense::hover());
+                    ui.painter()
+                        .rect_filled(bar_rect, 3.0, Color32::from_rgb(12, 16, 22));
+                    let fill_rect = Rect::from_min_size(
+                        bar_rect.min,
+                        egui::vec2(bar_rect.width() * prog_frac, bar_rect.height()),
+                    );
+                    ui.painter().rect_filled(fill_rect, 3.0, color);
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        ui.label(
+                            RichText::new(format!(
+                                "00:00:{sec:02}:{frm:02} · {}",
+                                input.kind.label()
+                            ))
+                            .size(10.5)
+                            .color(DIM),
+                        );
+                    });
+                });
+            });
     }
 
     pub(crate) fn switcher(&mut self, ui: &mut egui::Ui) {
@@ -356,16 +553,16 @@ impl RustMixApp {
     fn switcher_content(&mut self, ui: &mut egui::Ui) {
         let available = ui.available_size();
         ui.set_min_height(available.y);
-        let center = 108.0;
-        let side = ((available.x - center - 72.0) / 2.0).max(200.0);
+        let center = 110.0;
+        let side = ((available.x - center - 64.0) / 2.0).max(200.0);
         ui.horizontal_top(|ui| {
-            ui.add_space(12.0);
+            ui.add_space(10.0);
             ui.allocate_ui_with_layout(
                 egui::vec2(side, available.y),
                 egui::Layout::top_down(egui::Align::Min),
                 |ui| self.monitor(ui, false),
             );
-            ui.add_space(16.0);
+            ui.add_space(14.0);
             ui.allocate_ui_with_layout(
                 egui::vec2(center, available.y),
                 egui::Layout::top_down(egui::Align::Min),
@@ -375,236 +572,187 @@ impl RustMixApp {
                     self.command_button(ui, "switcher.quickPlay", "Quick Play", Command::Cut, None);
                     self.command_button(ui, "switcher.cut", "Cut", Command::Cut, None);
 
-                    // Fade + caret
-                    ui.horizontal(|ui| {
-                        ui.spacing_mut().item_spacing.x = 1.0;
-                        let enabled = self
-                            .engine
-                            .enabled(&Command::Transition(TransitionKind::Fade));
-                        let btn = ui.add_enabled(
-                            enabled.is_ok(),
-                            egui::Button::new(RichText::new("Fade").strong().size(11.5))
-                                .min_size(egui::vec2(center - 19.0, 26.0)),
-                        );
-                        self.automation.insert("switcher.fade".into(), btn.rect);
-                        if btn.clicked() {
-                            self.actions
-                                .push(Action::Engine(Command::Transition(TransitionKind::Fade)));
-                        }
-                        ui.menu_button(RichText::new("▾").size(9.0), |ui| {
-                            for ms in [250, 500, 1000, 1500, 2000] {
-                                if ui.button(format!("Fade · {ms} ms")).clicked() {
-                                    self.actions.push(Action::Engine(Command::SetDuration(ms)));
-                                    ui.close();
-                                }
+                    // 4 Configurable Transition Slots: Fade, Merge, Wipe, CubeZoom
+                    for slot_idx in 0..4 {
+                        let slot_name = self
+                            .transition_slots
+                            .get(slot_idx)
+                            .copied()
+                            .unwrap_or("Fade");
+                        let kind = if matches!(slot_name, "Wipe" | "Slide" | "CubeZoom") {
+                            TransitionKind::Wipe
+                        } else {
+                            TransitionKind::Fade
+                        };
+                        ui.horizontal(|ui| {
+                            ui.spacing_mut().item_spacing.x = 2.0;
+                            let enabled = self.engine.enabled(&Command::Transition(kind));
+                            let btn = ui.add_enabled(
+                                enabled.is_ok(),
+                                egui::Button::new(RichText::new(slot_name).strong().size(11.5))
+                                    .min_size(egui::vec2(center - 22.0, 25.0)),
+                            );
+                            if slot_idx == 0 {
+                                self.automation.insert("switcher.fade".into(), btn.rect);
+                            } else if slot_idx == 2 {
+                                self.automation.insert("switcher.wipe".into(), btn.rect);
                             }
-                        });
-                    });
-
-                    // Merge + caret
-                    ui.horizontal(|ui| {
-                        ui.spacing_mut().item_spacing.x = 1.0;
-                        let btn = ui.add(
-                            egui::Button::new(RichText::new("Merge").strong().size(11.5))
-                                .min_size(egui::vec2(center - 19.0, 26.0)),
-                        );
-                        if btn.clicked() {
-                            self.actions
-                                .push(Action::Engine(Command::Transition(TransitionKind::Fade)));
-                        }
-                        ui.menu_button(RichText::new("▾").size(9.0), |ui| {
-                            for kind in [
-                                "Fade",
-                                "Zoom",
-                                "Wipe",
-                                "Slide",
-                                "Fly",
-                                "CrossZoom",
-                                "Merge",
-                                "CubeZoom",
-                            ] {
-                                if ui.button(kind).clicked() {
-                                    ui.close();
-                                }
+                            if btn.clicked() {
+                                self.actions.push(Action::Engine(Command::Transition(kind)));
                             }
-                        });
-                    });
-
-                    // Wipe + caret
-                    ui.horizontal(|ui| {
-                        ui.spacing_mut().item_spacing.x = 1.0;
-                        let enabled = self
-                            .engine
-                            .enabled(&Command::Transition(TransitionKind::Wipe));
-                        let btn = ui.add_enabled(
-                            enabled.is_ok(),
-                            egui::Button::new(RichText::new("Wipe").strong().size(11.5))
-                                .min_size(egui::vec2(center - 19.0, 26.0)),
-                        );
-                        self.automation.insert("switcher.wipe".into(), btn.rect);
-                        if btn.clicked() {
-                            self.actions
-                                .push(Action::Engine(Command::Transition(TransitionKind::Wipe)));
-                        }
-                        ui.menu_button(RichText::new("▾").size(9.0), |ui| {
-                            for ms in [250, 500, 1000, 1500, 2000] {
-                                if ui.button(format!("Wipe · {ms} ms")).clicked() {
-                                    self.actions.push(Action::Engine(Command::SetDuration(ms)));
-                                    ui.close();
+                            caret_menu_button(ui, 25.0, |ui| {
+                                for candidate in [
+                                    "Fade",
+                                    "Merge",
+                                    "Wipe",
+                                    "CubeZoom",
+                                    "Zoom",
+                                    "Slide",
+                                    "Fly",
+                                    "CrossZoom",
+                                ] {
+                                    if ui
+                                        .selectable_label(slot_name == candidate, candidate)
+                                        .clicked()
+                                    {
+                                        if let Some(slot_ref) =
+                                            self.transition_slots.get_mut(slot_idx)
+                                        {
+                                            *slot_ref = candidate;
+                                        }
+                                        ui.close();
+                                    }
                                 }
-                            }
-                        });
-                    });
-
-                    // Second Merge + caret (matching Interface.png slot 4)
-                    ui.horizontal(|ui| {
-                        ui.spacing_mut().item_spacing.x = 1.0;
-                        let btn = ui.add(
-                            egui::Button::new(RichText::new("Merge").strong().size(11.5))
-                                .min_size(egui::vec2(center - 19.0, 26.0)),
-                        );
-                        if btn.clicked() {
-                            self.actions
-                                .push(Action::Engine(Command::Transition(TransitionKind::Wipe)));
-                        }
-                        ui.menu_button(RichText::new("▾").size(9.0), |ui| {
-                            for ms in [250, 500, 1000, 1500, 2000, 3000] {
-                                if ui.button(format!("{ms} ms")).clicked() {
-                                    self.actions.push(Action::Engine(Command::SetDuration(ms)));
-                                    ui.close();
+                                ui.separator();
+                                for ms in [250, 500, 1000, 1500, 2000] {
+                                    if ui.button(format!("{slot_name} · {ms} ms")).clicked() {
+                                        self.actions.push(Action::Engine(Command::SetDuration(ms)));
+                                        ui.close();
+                                    }
                                 }
-                            }
+                            });
                         });
-                    });
+                    }
 
-                    // FTB
+                    let black = self.engine.black_level() > 0.01;
                     self.command_button(
                         ui,
                         "switcher.ftb",
                         "FTB",
                         Command::FadeBlack,
-                        if self.engine.black_level() > 0.5 {
-                            Some(Color32::from_rgb(175, 28, 28))
-                        } else {
-                            None
-                        },
+                        black.then_some(RED),
                     );
 
-                    ui.add_space(3.0);
-                    // 1..4 and 5..8 overlay buttons matching Interface.png
-                    for row in 0..2 {
-                        ui.horizontal(|ui| {
-                            ui.spacing_mut().item_spacing.x = 2.0;
-                            for col in 0..4 {
-                                let slot = row * 4 + col;
-                                if let Some(o) = self.engine.project().overlays.get(slot).cloned() {
-                                    let mut next = o.clone();
-                                    let r = ui.add(
-                                        egui::Button::new(
-                                            RichText::new((slot + 1).to_string())
-                                                .strong()
-                                                .size(11.0),
-                                        )
-                                        .selected(o.enabled)
-                                        .min_size(egui::vec2(25.0, 20.0)),
-                                    );
-                                    self.automation
-                                        .insert(format!("overlay.{}.toggle", slot + 1), r.rect);
-                                    if r.clicked() {
-                                        next.enabled = !next.enabled;
-                                        self.actions
-                                            .push(Action::Engine(Command::SetOverlay(slot, next)));
-                                    }
-                                } else {
-                                    let r = ui.add(
-                                        egui::Button::new(
-                                            RichText::new((slot + 1).to_string())
-                                                .strong()
-                                                .size(11.0),
-                                        )
-                                        .min_size(egui::vec2(25.0, 20.0)),
-                                    );
-                                    if r.clicked() {
-                                        self.actions.push(Action::OverlaySettings(0));
-                                    }
-                                }
-                            }
-                        });
-                    }
-
-                    ui.add_space(4.0);
-                    // Cylindrical vertical T-Bar with blue indicator & horizontal bar matching Interface.png
-                    let progress = self.engine.transition().map_or(0.0, |t| t.progress);
-                    let auto = self.engine.transition().is_some_and(|t| !t.manual);
-                    let mut handle = 1.0 - progress;
-                    let tbar_length = (ui.available_height() - 8.0).clamp(52.0, 120.0);
+                    // 4x2 Overlay number buttons (1..4, 5..8)
+                    let cell_w = ((center - 6.0) / 4.0).floor();
                     ui.horizontal(|ui| {
-                        let response = ui
-                            .add_enabled_ui(!auto, |ui| {
-                                ui.spacing_mut().slider_width = tbar_length;
-                                ui.spacing_mut().interact_size.y = 22.0;
-                                ui.add(
-                                    egui::Slider::new(&mut handle, 0.0..=1.0)
-                                        .show_value(false)
-                                        .vertical(),
+                        ui.spacing_mut().item_spacing.x = 2.0;
+                        ui.spacing_mut().button_padding = egui::vec2(2.0, 1.0);
+                        for slot in 0..4 {
+                            let active = self
+                                .engine
+                                .project()
+                                .overlays
+                                .get(slot)
+                                .is_some_and(|o| o.enabled);
+                            let btn = ui.add(
+                                egui::Button::new(
+                                    RichText::new(format!("{}", slot + 1)).size(10.5).strong(),
                                 )
-                            })
-                            .inner
-                            .on_hover_text(
-                                "Manual T-Bar · drag down to transition Preview to Program",
+                                .selected(active)
+                                .min_size(egui::vec2(cell_w, 20.0)),
                             );
-                        // Overpaint the cylindrical gray barrel + blue center line + horizontal arm matching Interface.png
-                        let barrel = Rect::from_center_size(
-                            response.rect.center(),
-                            egui::vec2(20.0, response.rect.height()),
-                        );
-                        ui.painter()
-                            .rect_filled(barrel, 4.0, Color32::from_rgb(108, 112, 116));
-                        ui.painter().rect_stroke(
-                            barrel,
-                            4.0,
-                            Stroke::new(1.0, Color32::from_rgb(40, 44, 48)),
-                            egui::StrokeKind::Inside,
-                        );
-                        let indicator_y = egui::lerp(
-                            (barrel.top() + 6.0)..=(barrel.bottom() - 6.0),
-                            1.0 - handle,
-                        );
-                        let blue_band = Rect::from_center_size(
-                            egui::pos2(barrel.center().x, indicator_y),
-                            egui::vec2(22.0, 7.0),
-                        );
-                        ui.painter()
-                            .rect_filled(blue_band, 1.0, Color32::from_rgb(0, 128, 255));
-                        let arm = Rect::from_min_size(
-                            egui::pos2(barrel.right(), indicator_y - 1.5),
-                            egui::vec2(72.0, 3.0),
-                        );
-                        ui.painter().rect_filled(arm, 0.0, Color32::BLACK);
-                        ui.painter().rect_stroke(
-                            arm,
-                            0.0,
-                            Stroke::new(1.0, Color32::from_gray(210)),
-                            egui::StrokeKind::Inside,
-                        );
-                        self.automation
-                            .insert("switcher.tbar".into(), response.rect);
-                        self.automation.insert("switcher.cancel".into(), arm);
-                        if response.changed() && !self.tbar_latched {
-                            let value = 1.0 - handle;
-                            self.actions
-                                .push(Action::Engine(Command::SetManualProgress(value)));
-                            if value >= 1.0 {
-                                self.tbar_latched = true;
+                            if btn.clicked()
+                                && let Some(mut o) =
+                                    self.engine.project().overlays.get(slot).cloned()
+                            {
+                                o.enabled = !o.enabled;
+                                self.actions
+                                    .push(Action::Engine(Command::SetOverlay(slot, o)));
                             }
-                        }
-                        if !ui.input(|i| i.pointer.primary_down()) {
-                            self.tbar_latched = false;
                         }
                     });
+                    ui.horizontal(|ui| {
+                        ui.spacing_mut().item_spacing.x = 2.0;
+                        ui.spacing_mut().button_padding = egui::vec2(2.0, 1.0);
+                        for slot in 5..=8 {
+                            let _ = ui.add(
+                                egui::Button::new(
+                                    RichText::new(format!("{slot}")).size(10.5).color(DIM),
+                                )
+                                .min_size(egui::vec2(cell_w, 20.0)),
+                            );
+                        }
+                    });
+
+                    // Vertical T-Bar fader with modern blue handle
+                    ui.add_space(2.0);
+                    let mut progress = self
+                        .engine
+                        .transition()
+                        .map_or(if self.tbar_latched { 1.0 } else { 0.0 }, |t| t.progress);
+                    let can_tbar = self.engine.project().program != self.engine.project().preview
+                        && self.engine.transition().is_none_or(|t| t.manual);
+                    let tbar_h = (ui.available_height() - 6.0).clamp(52.0, 130.0);
+                    let (tbar_rect, tbar) = ui.allocate_exact_size(
+                        egui::vec2(center, tbar_h),
+                        if can_tbar {
+                            Sense::click_and_drag()
+                        } else {
+                            Sense::hover()
+                        },
+                    );
+                    let cyl_rect = Rect::from_min_size(
+                        egui::pos2(tbar_rect.left() + 6.0, tbar_rect.top() + 4.0),
+                        egui::vec2(14.0, (tbar_rect.height() - 8.0).max(20.0)),
+                    );
+                    ui.painter()
+                        .rect_filled(cyl_rect, 4.0, Color32::from_rgb(76, 86, 98));
+                    ui.painter().rect_stroke(
+                        cyl_rect,
+                        4.0,
+                        Stroke::new(1.0, Color32::from_rgb(38, 44, 52)),
+                        egui::StrokeKind::Inside,
+                    );
+                    let handle_y = egui::lerp(
+                        (cyl_rect.top() + 3.0)..=(cyl_rect.bottom() - 3.0),
+                        progress.clamp(0.0, 1.0),
+                    );
+                    ui.painter().hline(
+                        (cyl_rect.right() + 1.0)..=(tbar_rect.left() + 68.0),
+                        handle_y,
+                        Stroke::new(2.0, Color32::from_rgb(190, 205, 220)),
+                    );
+                    let knob = Rect::from_center_size(
+                        egui::pos2(cyl_rect.center().x, handle_y),
+                        egui::vec2(20.0, 8.0),
+                    );
+                    ui.painter()
+                        .rect_filled(knob, 3.0, Color32::from_rgb(20, 130, 240));
+                    self.automation.insert("switcher.tbar".into(), tbar_rect);
+                    let tbar =
+                        tbar.on_hover_text("Manual T-Bar · drag vertically to blend PVW → PGM");
+                    if can_tbar && (tbar.dragged() || tbar.clicked()) {
+                        if let Some(pos) = tbar.interact_pointer_pos() {
+                            progress = ((pos.y - cyl_rect.top()) / cyl_rect.height().max(1.0))
+                                .clamp(0.0, 1.0);
+                        }
+                        if progress < 1.0 {
+                            self.tbar_latched = false;
+                        }
+                        if !(progress >= 1.0 && self.tbar_latched) {
+                            if progress >= 1.0 {
+                                self.tbar_latched = true;
+                            }
+                            self.actions
+                                .push(Action::Engine(Command::SetManualProgress(progress)));
+                        }
+                    } else if self.tbar_latched && !tbar.is_pointer_button_down_on() {
+                        self.tbar_latched = false;
+                    }
                 },
             );
-            ui.add_space(16.0);
+            ui.add_space(14.0);
             ui.allocate_ui_with_layout(
                 egui::vec2(side, available.y),
                 egui::Layout::top_down(egui::Align::Min),
@@ -615,146 +763,169 @@ impl RustMixApp {
 
     pub(crate) fn inputs(&mut self, ui: &mut egui::Ui) {
         ui.horizontal(|ui| {
-            ui.spacing_mut().item_spacing.x = 1.0;
-            let selected_all = self.category.is_none();
-            let all = ui
-                .add(
-                    egui::Button::new(" ")
-                        .fill(if selected_all {
-                            Color32::from_rgb(76, 86, 96)
+            ui.spacing_mut().item_spacing.x = 2.0;
+            let all_selected = self.category.is_none();
+            let all_btn = ui.add(
+                egui::Button::new("")
+                    .fill(if all_selected {
+                        Color32::from_rgb(76, 88, 102)
+                    } else {
+                        Color32::from_rgb(42, 50, 60)
+                    })
+                    .stroke(Stroke::new(
+                        1.0,
+                        if all_selected {
+                            Color32::WHITE
                         } else {
-                            Color32::from_rgb(42, 48, 54)
-                        })
-                        .stroke(Stroke::new(1.0, Color32::from_rgb(90, 100, 110)))
-                        .min_size(egui::vec2(22.0, 18.0)),
-                )
-                .on_hover_text("All inputs");
+                            Color32::from_rgb(26, 32, 40)
+                        },
+                    ))
+                    .min_size(egui::vec2(20.0, 20.0)),
+            );
             self.automation
-                .insert("inputs.category.all".into(), all.rect);
-            if all.clicked() {
+                .insert("inputs.category.all".into(), all_btn.rect);
+            if all_btn.on_hover_text("Show all categories").clicked() {
                 self.category = None;
             }
-            for (kind, color) in InputKind::ALL.into_iter().map(|k| (k, kind_color(k))) {
+            for kind in InputKind::ALL {
                 let selected = self.category == Some(kind);
-                let response = ui
-                    .add(
-                        egui::Button::new(" ")
-                            .fill(color)
-                            .stroke(if selected {
-                                Stroke::new(1.5, Color32::WHITE)
+                let fill = kind_color(kind);
+                let chip = ui.add(
+                    egui::Button::new("")
+                        .fill(fill)
+                        .stroke(Stroke::new(
+                            if selected { 1.5 } else { 1.0 },
+                            if selected {
+                                Color32::WHITE
                             } else {
-                                Stroke::new(1.0, Color32::from_rgb(20, 24, 28))
-                            })
-                            .min_size(egui::vec2(22.0, 18.0)),
-                    )
-                    .on_hover_text(kind.label());
+                                Color32::from_rgb(20, 24, 28)
+                            },
+                        ))
+                        .min_size(egui::vec2(20.0, 20.0)),
+                );
                 self.automation
-                    .insert(format!("inputs.category.{kind:?}"), response.rect);
-                if response.clicked() {
+                    .insert(format!("inputs.category.{kind:?}"), chip.rect);
+                if chip.on_hover_text(kind.label()).clicked() {
                     self.category = if selected { None } else { Some(kind) };
                 }
             }
-            let mag = ui
-                .add(
-                    egui::Button::new(RichText::new("🔍").size(11.0))
-                        .min_size(egui::vec2(22.0, 18.0)),
-                )
-                .on_hover_text("Search inputs");
-            if mag.clicked() {
+            let search_btn = vector_icon_button(
+                ui,
+                VectorIcon::Search,
+                egui::vec2(22.0, 20.0),
+                self.search_open,
+                None,
+            )
+            .on_hover_text("Search inputs");
+            if search_btn.clicked() {
                 self.search_open = !self.search_open;
             }
             if self.search_open || !self.input_filter.is_empty() {
-                ui.add_space(4.0);
-                let search = ui.add(
+                let filter = ui.add_sized(
+                    [150.0, 20.0],
                     egui::TextEdit::singleline(&mut self.input_filter)
-                        .hint_text("Search")
-                        .desired_width(120.0)
-                        .char_limit(64),
+                        .char_limit(48)
+                        .hint_text("Search"),
                 );
-                self.automation
-                    .insert("inputs.filter.search".into(), search.rect);
-            }
-            if self.category.is_some() || !self.input_filter.is_empty() {
-                let clear = ui.small_button("×");
-                self.automation
-                    .insert("inputs.filter.clear".into(), clear.rect);
-                if clear.clicked() {
-                    self.category = None;
+                self.automation.insert("inputs.filter".into(), filter.rect);
+                if !self.input_filter.is_empty() && ui.small_button("Clear").clicked() {
                     self.input_filter.clear();
                 }
             }
         });
+        ui.add_space(2.0);
         self.source_tiles(ui, false);
     }
 
-    fn source_tiles(&mut self, ui: &mut egui::Ui, large: bool) {
-        let project = self.engine.project();
-        let inputs = project.inputs.clone();
-        let program = project.program;
-        let preview = project.preview;
-        let target = if large { 290.0 } else { 222.0 };
-        let columns = ((ui.available_width() + 6.0) / (target + 6.0))
-            .floor()
-            .max(1.0) as usize;
-        let tile_width = ((ui.available_width() - columns.saturating_sub(1) as f32 * 6.0)
-            / columns as f32)
-            .max(185.0);
-        let filter = self.input_filter.trim().to_lowercase();
-        let filtered: Vec<_> = inputs
-            .into_iter()
-            .filter(|input| {
-                input.name.to_lowercase().contains(&filter)
-                    && self.category.is_none_or(|kind| kind == input.kind)
+    pub(crate) fn source_tiles(&mut self, ui: &mut egui::Ui, multiview_grid: bool) {
+        let p = self.engine.project().clone();
+        let needle = self.input_filter.trim().to_lowercase();
+        let filtered: Vec<_> = p
+            .inputs
+            .iter()
+            .filter(|i| {
+                self.category.is_none_or(|k| i.kind == k)
+                    && (needle.is_empty()
+                        || i.name.to_lowercase().contains(&needle)
+                        || i.kind.label().to_lowercase().contains(&needle)
+                        || i.id.0.to_string() == needle)
             })
+            .cloned()
             .collect();
         egui::ScrollArea::vertical()
-            .id_salt(if large {
-                "multiview.scroll"
+            .id_salt(if multiview_grid {
+                "multiview.tiles"
             } else {
-                "inputs.scroll"
+                "inputs.tiles"
             })
             .show(ui, |ui| {
-                if filtered.is_empty() {
-                    ui.add_space(16.0);
-                    ui.strong("No matching inputs");
-                }
+                let width = ui.available_width().max(260.0);
+                let columns = if multiview_grid {
+                    ((width / 230.0).floor() as usize).clamp(2, 6)
+                } else {
+                    ((width / 225.0).floor() as usize).clamp(1, 6)
+                };
+                let tile_w =
+                    ((width - (columns.saturating_sub(1) as f32) * 6.0) / columns as f32).max(175.0);
+                let inner_w = (tile_w - 4.0).max(165.0);
                 for row in filtered.chunks(columns) {
                     ui.horizontal_top(|ui| {
                         ui.spacing_mut().item_spacing.x = 6.0;
                         for input in row {
-                            ui.push_id(("input", input.id.0), |ui| {
+                            let is_pgm = p.program == input.id;
+                            let is_pvw = p.preview == input.id;
+                            let border = if is_pgm {
+                                PROGRAM
+                            } else if is_pvw {
+                                PREVIEW
+                            } else {
+                                Color32::from_rgb(56, 66, 78)
+                            };
+                            let header_fill = if is_pgm {
+                                PROGRAM
+                            } else if is_pvw {
+                                PREVIEW
+                            } else {
+                                IDLE_TILE
+                            };
+                            ui.push_id(input.id.0, |ui| {
                                 ui.allocate_ui_with_layout(
-                                    egui::vec2(tile_width, tile_width * 9.0 / 16.0 + 70.0),
+                                    egui::vec2(tile_w, 10.0),
                                     egui::Layout::top_down(egui::Align::Min),
                                     |ui| {
-                                        ui.spacing_mut().item_spacing.y = 0.0;
-                                        let header_color = if input.id == program {
-                                            PROGRAM
-                                        } else if input.id == preview {
-                                            PREVIEW
-                                        } else {
-                                            IDLE_TILE
-                                        };
                                         egui::Frame::new()
-                                            .fill(Color32::from_rgb(18, 22, 26))
-                                            .stroke(Stroke::new(1.0, Color32::from_rgb(65, 74, 82)))
+                                            .fill(Color32::from_rgb(20, 25, 32))
+                                            .corner_radius(4.0)
+                                            .stroke(Stroke::new(1.5, border))
                                             .inner_margin(1.0)
                                             .show(ui, |ui| {
-                                                let inner_w = (tile_width - 4.0).max(160.0);
                                                 ui.set_width(inner_w);
-                                                // Tile header bar matching Interface.png: "1   Blank" + "X"
+                                                ui.spacing_mut().item_spacing =
+                                                    egui::vec2(0.0, 1.0);
+                                                // Tile header bar
                                                 egui::Frame::new()
-                                                    .fill(header_color)
-                                                    .inner_margin(egui::Margin::symmetric(5, 2))
+                                                    .fill(header_fill)
+                                                    .corner_radius(egui::CornerRadius {
+                                                        nw: 3,
+                                                        ne: 3,
+                                                        sw: 0,
+                                                        se: 0,
+                                                    })
+                                                    .inner_margin(egui::Margin::symmetric(6, 2))
                                                     .show(ui, |ui| {
+                                                        ui.set_width((inner_w - 12.0).max(40.0));
                                                         ui.horizontal(|ui| {
                                                             ui.add_sized(
-                                                                [(inner_w - 34.0).max(24.0), 16.0],
+                                                                [
+                                                                    (inner_w - 38.0).max(30.0),
+                                                                    16.0,
+                                                                ],
                                                                 egui::Label::new(
                                                                     RichText::new(format!(
-                                                                        "{}    {}",
+                                                                        "{}   {}",
                                                                         input.id.0, input.name
                                                                     ))
+                                                                    .size(11.0)
                                                                     .strong()
                                                                     .color(Color32::WHITE),
                                                                 )
@@ -765,20 +936,30 @@ impl RustMixApp {
                                                                     egui::Align::Center,
                                                                 ),
                                                                 |ui| {
-                                                                    let remove = ui.add(
-                                                                        egui::Button::new(
-                                                                            RichText::new("X")
-                                                                                .strong()
-                                                                                .size(11.0)
-                                                                                .color(
-                                                                                    Color32::WHITE,
-                                                                                ),
+                                                                    let remove_ok = self
+                                                                        .engine
+                                                                        .enabled(
+                                                                            &Command::RemoveInput(
+                                                                                input.id,
+                                                                            ),
                                                                         )
-                                                                        .fill(Color32::TRANSPARENT)
-                                                                        .stroke(Stroke::NONE)
-                                                                        .min_size(egui::vec2(
-                                                                            18.0, 16.0,
-                                                                        )),
+                                                                        .is_ok();
+                                                                    let remove = ui.add_enabled(
+                                                                        remove_ok,
+                                                                        egui::Button::new("")
+                                                                            .fill(
+                                                                                Color32::TRANSPARENT,
+                                                                            )
+                                                                            .stroke(Stroke::NONE)
+                                                                            .min_size(egui::vec2(
+                                                                                18.0, 16.0,
+                                                                            )),
+                                                                    );
+                                                                    paint_vector_icon(
+                                                                        ui.painter(),
+                                                                        remove.rect,
+                                                                        VectorIcon::Close,
+                                                                        Color32::WHITE,
                                                                     );
                                                                     self.automation.insert(
                                                                         format!(
@@ -868,9 +1049,9 @@ impl RustMixApp {
                                                         ui.close();
                                                     }
                                                 });
-                                                // Compact 2-row control strip matching Interface.png:
-                                                // Row 1: [1][2][3][4][GO][Cut][ ]
-                                                // Row 2: [5][6][7][8][Audio][🖥][⚙]
+                                                // Modern 2-row control strip:
+                                                // Row 1: [1][2][3][4][GO][Cut][Loop]
+                                                // Row 2: [5][6][7][8][Audio][Display][Gear]
                                                 let cell_w = (inner_w / 7.0).floor().max(20.0);
                                                 let rem_w = (inner_w - cell_w * 6.0).max(cell_w);
                                                 ui.horizontal(|ui| {
@@ -921,7 +1102,9 @@ impl RustMixApp {
                                                     let go = ui
                                                         .add(
                                                             egui::Button::new(
-                                                                RichText::new("GO").size(10.5),
+                                                                RichText::new("GO")
+                                                                    .size(10.5)
+                                                                    .strong(),
                                                             )
                                                             .min_size(egui::vec2(cell_w, 20.0)),
                                                         )
@@ -942,7 +1125,9 @@ impl RustMixApp {
                                                     let cut = ui.add_enabled(
                                                         check.is_ok(),
                                                         egui::Button::new(
-                                                            RichText::new("Cut").size(10.5),
+                                                            RichText::new("Cut")
+                                                                .size(10.5)
+                                                                .strong(),
                                                         )
                                                         .min_size(egui::vec2(cell_w, 20.0)),
                                                     );
@@ -950,75 +1135,104 @@ impl RustMixApp {
                                                         format!("input.{}.cut", input.id.0),
                                                         cut.rect,
                                                     );
-                                                    if cut.clicked() {
+                                                    if cut
+                                                        .on_hover_text("Direct Cut to Program")
+                                                        .clicked()
+                                                    {
                                                         self.actions.push(Action::Engine(take));
                                                     }
-                                                    ui.add(
-                                                        egui::Button::new(
-                                                            RichText::new(" ").size(10.5),
-                                                        )
-                                                        .min_size(egui::vec2(rem_w, 20.0)),
-                                                    );
+                                                    let looped = self
+                                                        .input_fx
+                                                        .get(&input.id)
+                                                        .map_or(true, |f| f.loop_playback);
+                                                    let loop_btn = vector_icon_button(
+                                                        ui,
+                                                        VectorIcon::Loop,
+                                                        egui::vec2(rem_w, 20.0),
+                                                        looped,
+                                                        None,
+                                                    )
+                                                    .on_hover_text("Toggle Loop playback");
+                                                    if loop_btn.clicked() {
+                                                        let fx = self
+                                                            .input_fx
+                                                            .entry(input.id)
+                                                            .or_default();
+                                                        fx.loop_playback = !fx.loop_playback;
+                                                    }
                                                 });
                                                 ui.horizontal(|ui| {
                                                     ui.spacing_mut().item_spacing.x = 0.0;
                                                     ui.spacing_mut().button_padding =
                                                         egui::vec2(2.0, 1.0);
                                                     for slot in 5..=8 {
-                                                        ui.add(
+                                                        let _ = ui.add(
                                                             egui::Button::new(
-                                                                RichText::new(slot.to_string())
-                                                                    .size(10.5),
+                                                                RichText::new(format!("{slot}"))
+                                                                    .size(10.5)
+                                                                    .color(DIM),
                                                             )
                                                             .min_size(egui::vec2(cell_w, 20.0)),
                                                         );
                                                     }
-                                                    let muted = input.audio.muted;
-                                                    let audio_btn = egui::Button::new(
+                                                    let audio_w = cell_w * 1.5;
+                                                    let icon_w =
+                                                        ((inner_w - cell_w * 4.0 - audio_w) * 0.5)
+                                                            .floor()
+                                                            .max(18.0);
+                                                    let gear_w = (inner_w
+                                                        - cell_w * 4.0
+                                                        - audio_w
+                                                        - icon_w)
+                                                        .max(18.0);
+                                                    let mut audio_btn = egui::Button::new(
                                                         RichText::new("Audio").size(10.5).color(
-                                                            if muted {
-                                                                DIM
-                                                            } else {
+                                                            if !input.audio.muted {
                                                                 Color32::WHITE
+                                                            } else {
+                                                                DIM
                                                             },
                                                         ),
                                                     )
-                                                    .fill(if muted { CHIP_BG } else { PROGRAM })
-                                                    .min_size(egui::vec2(cell_w * 2.0, 20.0));
-                                                    let audio = ui.add(audio_btn);
+                                                    .min_size(egui::vec2(audio_w, 20.0));
+                                                    if !input.audio.muted {
+                                                        audio_btn = audio_btn.fill(PROGRAM);
+                                                    }
+                                                    let audio_resp = ui
+                                                        .add(audio_btn)
+                                                        .on_hover_text("Toggle Input Audio");
                                                     self.automation.insert(
                                                         format!("input.{}.audio", input.id.0),
-                                                        audio.rect,
+                                                        audio_resp.rect,
                                                     );
-                                                    if audio.clicked() {
-                                                        let mut channel = input.audio.clone();
-                                                        channel.muted = !channel.muted;
+                                                    if audio_resp.clicked() {
+                                                        let mut a = input.audio.clone();
+                                                        a.muted = !a.muted;
                                                         self.actions.push(Action::Engine(
-                                                            Command::SetInputAudio(
-                                                                input.id, channel,
-                                                            ),
+                                                            Command::SetInputAudio(input.id, a),
                                                         ));
                                                     }
-                                                    let mv_w = (rem_w * 0.5).max(18.0);
-                                                    let gear_w = (rem_w - mv_w).max(18.0);
-                                                    let mv = ui.add(
-                                                        egui::Button::new(
-                                                            RichText::new("🖥").size(10.5),
-                                                        )
-                                                        .min_size(egui::vec2(mv_w, 20.0)),
-                                                    );
-                                                    if mv.clicked() {
-                                                        self.actions.push(Action::PropertiesAt(
-                                                            input.id,
-                                                            InputPage::Layers,
+                                                    let disp_resp = vector_icon_button(
+                                                        ui,
+                                                        VectorIcon::Display,
+                                                        egui::vec2(icon_w, 20.0),
+                                                        false,
+                                                        None,
+                                                    )
+                                                    .on_hover_text("Cue on Preview monitor");
+                                                    if disp_resp.clicked() {
+                                                        self.actions.push(Action::Engine(
+                                                            Command::SelectPreview(input.id),
                                                         ));
                                                     }
-                                                    let edit = ui.add(
-                                                        egui::Button::new(
-                                                            RichText::new("⚙").size(11.0),
-                                                        )
-                                                        .min_size(egui::vec2(gear_w, 20.0)),
-                                                    );
+                                                    let edit = vector_icon_button(
+                                                        ui,
+                                                        VectorIcon::Gear,
+                                                        egui::vec2(gear_w, 20.0),
+                                                        false,
+                                                        None,
+                                                    )
+                                                    .on_hover_text("Open Input Settings");
                                                     self.automation.insert(
                                                         format!("input.{}.properties", input.id.0),
                                                         edit.rect,
@@ -1048,12 +1262,23 @@ impl RustMixApp {
             .show(ui, |ui| {
                 ui.horizontal_top(|ui| {
                     ui.spacing_mut().item_spacing.x = 3.0;
-                    // Pin icon at top-left of Audio Mixer matching Interface.png
-                    let _ = ui.add(
-                        egui::Button::new(RichText::new("📌").size(11.0))
-                            .min_size(egui::vec2(20.0, 20.0)),
+                    // Pin button stacked directly above the OUTPUTS rail
+                    ui.allocate_ui_with_layout(
+                        egui::vec2(20.0, height),
+                        egui::Layout::top_down(egui::Align::Min),
+                        |ui| {
+                            ui.spacing_mut().item_spacing.y = 2.0;
+                            let _ = vector_icon_button(
+                                ui,
+                                VectorIcon::Pin,
+                                egui::vec2(20.0, 20.0),
+                                true,
+                                None,
+                            )
+                            .on_hover_text("Pin Audio Mixer");
+                            mixer_rail(ui, (height - 22.0).max(80.0), "OUTPUTS");
+                        },
                     );
-                    mixer_rail(ui, height, "OUTPUTS");
                     if let Some(a) = p.buses.first() {
                         let peaks = audio::bus_peaks(&p, 0, self.now);
                         let changed = self.strip(
@@ -1106,15 +1331,21 @@ impl RustMixApp {
         let header_fill = if !a.muted { PROGRAM } else { CHIP_BG };
         ui.push_id(id, |ui| {
             egui::Frame::new()
-                .fill(Color32::from_rgb(18, 22, 26))
-                .stroke(Stroke::new(1.0, Color32::from_rgb(52, 60, 68)))
+                .fill(Color32::from_rgb(20, 25, 32))
+                .corner_radius(4.0)
+                .stroke(Stroke::new(1.0, Color32::from_rgb(52, 62, 74)))
                 .inner_margin(2.0)
                 .show(ui, |ui| {
                     ui.set_width(76.0);
                     ui.set_min_height(height - 4.0);
-                    // Green header bar ("Master" or input name) matching Interface.png
                     egui::Frame::new()
                         .fill(header_fill)
+                        .corner_radius(egui::CornerRadius {
+                            nw: 3,
+                            ne: 3,
+                            sw: 0,
+                            se: 0,
+                        })
                         .inner_margin(egui::Margin::symmetric(4, 2))
                         .show(ui, |ui| {
                             ui.set_width(68.0);
@@ -1131,16 +1362,18 @@ impl RustMixApp {
                     let fader_h = (height - 58.0).max(68.0);
                     ui.horizontal_top(|ui| {
                         ui.spacing_mut().item_spacing.x = 3.0;
-                        // Left button column inside strip matching Interface.png: [⚙], [i / S], [🔊]
+                        // Left button column inside strip: [Gear], [i / S], [Speaker]
                         ui.vertical(|ui| {
                             ui.spacing_mut().item_spacing.y = 4.0;
-                            ui.add_space(10.0);
-                            let gear = ui
-                                .add(
-                                    egui::Button::new(RichText::new("⚙").size(12.0))
-                                        .min_size(egui::vec2(22.0, 22.0)),
-                                )
-                                .on_hover_text("Audio Settings");
+                            ui.add_space(8.0);
+                            let gear = vector_icon_button(
+                                ui,
+                                VectorIcon::Gear,
+                                egui::vec2(22.0, 22.0),
+                                false,
+                                None,
+                            )
+                            .on_hover_text("Audio Settings");
                             if let Some(source_id) = input_id {
                                 self.automation.insert(
                                     format!("audio.input.{}.settings", source_id.0),
@@ -1153,12 +1386,18 @@ impl RustMixApp {
                             } else if gear.clicked() {
                                 self.actions.push(Action::SettingsAt(SettingsPage::Audio));
                             }
-                            ui.add_space(14.0);
+                            ui.add_space(12.0);
                             if is_master {
-                                let _ = ui.add(
-                                    egui::Button::new(RichText::new("i").strong().size(11.0))
-                                        .min_size(egui::vec2(22.0, 20.0)),
-                                );
+                                let info = ui
+                                    .add(
+                                        egui::Button::new(RichText::new("i").strong().size(11.0))
+                                            .min_size(egui::vec2(22.0, 20.0)),
+                                    )
+                                    .on_hover_text("Master Audio Outputs");
+                                if info.clicked() {
+                                    self.actions
+                                        .push(Action::SettingsAt(SettingsPage::AudioOutputs));
+                                }
                             } else {
                                 let solo = ui.add(
                                     egui::Button::new(RichText::new("S").strong().size(11.0))
@@ -1169,16 +1408,19 @@ impl RustMixApp {
                                     a.solo = !a.solo;
                                 }
                             }
-                            let spk = ui.add(
-                                egui::Button::new(RichText::new("🔊").size(11.0))
-                                    .fill(if a.muted { CHIP_BG } else { PROGRAM })
-                                    .min_size(egui::vec2(22.0, 22.0)),
-                            );
+                            let spk = vector_icon_button(
+                                ui,
+                                VectorIcon::Speaker(!a.muted),
+                                egui::vec2(22.0, 22.0),
+                                !a.muted,
+                                Some(if a.muted { CHIP_BG } else { PROGRAM }),
+                            )
+                            .on_hover_text("Mute / Unmute channel");
                             if spk.clicked() {
                                 a.muted = !a.muted;
                             }
                         });
-                        // Right column inside strip: vertical fader with white scale ticks + stereo level meter
+                        // Right column inside strip: vertical fader with scale ticks + stereo level meter
                         let fader = ui
                             .add_sized(
                                 [24.0, fader_h],
@@ -1195,12 +1437,12 @@ impl RustMixApp {
                             ui.painter().hline(
                                 (fader.rect.left() + 1.0)..=(fader.rect.left() + 4.0),
                                 y,
-                                Stroke::new(1.0, Color32::from_gray(200)),
+                                Stroke::new(1.0, Color32::from_gray(190)),
                             );
                             ui.painter().hline(
                                 (fader.rect.right() - 4.0)..=(fader.rect.right() - 1.0),
                                 y,
-                                Stroke::new(1.0, Color32::from_gray(200)),
+                                Stroke::new(1.0, Color32::from_gray(190)),
                             );
                         }
                         if is_master {
@@ -1212,7 +1454,7 @@ impl RustMixApp {
                         let (meter_rect, _) =
                             ui.allocate_exact_size(egui::vec2(14.0, fader_h), Sense::hover());
                         ui.painter()
-                            .rect_filled(meter_rect, 0.0, Color32::from_rgb(10, 14, 18));
+                            .rect_filled(meter_rect, 2.0, Color32::from_rgb(10, 14, 18));
                         for (ch, peak) in peaks.into_iter().enumerate() {
                             let frac = ((audio::db(peak) + 60.0) / 60.0).clamp(0.0, 1.0);
                             let x = meter_rect.left() + 1.5 + ch as f32 * 6.0;
@@ -1222,7 +1464,7 @@ impl RustMixApp {
                             );
                             ui.painter().rect_filled(
                                 fill,
-                                0.0,
+                                1.0,
                                 if peak >= 1.0 {
                                     RED
                                 } else {
@@ -1231,26 +1473,45 @@ impl RustMixApp {
                             );
                         }
                     });
-                    // Bottom row inside strip: headphone + rotary dial on Master, or M/A/B bus buttons on Inputs
+                    // Bottom row inside strip: vector headphone + rotary dial on Master, or M/A/B bus buttons on Inputs
                     ui.horizontal(|ui| {
                         if is_master {
-                            ui.add_space(10.0);
-                            ui.label(RichText::new("🎧").size(12.0));
-                            let (dial, _) =
+                            ui.add_space(8.0);
+                            let (hp_rect, _) =
                                 ui.allocate_exact_size(egui::vec2(18.0, 18.0), Sense::hover());
+                            paint_vector_icon(
+                                ui.painter(),
+                                hp_rect,
+                                VectorIcon::Headphones,
+                                Color32::WHITE,
+                            );
+                            let (dial, dial_resp) = ui.allocate_exact_size(
+                                egui::vec2(18.0, 18.0),
+                                Sense::click_and_drag(),
+                            );
+                            if dial_resp.dragged() {
+                                self.monitor_level = (self.monitor_level
+                                    - dial_resp.drag_delta().y * 0.01)
+                                    .clamp(0.0, 1.0);
+                            }
                             ui.painter().circle_filled(
                                 dial.center(),
                                 8.0,
-                                Color32::from_rgb(56, 62, 68),
+                                Color32::from_rgb(52, 62, 74),
                             );
                             ui.painter().circle_stroke(
                                 dial.center(),
                                 8.0,
-                                Stroke::new(1.0, Color32::from_rgb(30, 34, 38)),
+                                Stroke::new(1.0, Color32::from_rgb(30, 36, 44)),
                             );
+                            let ang = -std::f32::consts::FRAC_PI_4 * 3.0
+                                + self.monitor_level * std::f32::consts::FRAC_PI_2 * 3.0;
                             ui.painter().line_segment(
-                                [dial.center(), dial.center() + egui::vec2(-4.5, -3.5)],
-                                Stroke::new(1.5, Color32::WHITE),
+                                [
+                                    dial.center(),
+                                    dial.center() + egui::vec2(ang.cos() * 6.0, ang.sin() * 6.0),
+                                ],
+                                Stroke::new(1.5, TEAL),
                             );
                         } else {
                             ui.spacing_mut().item_spacing.x = 2.0;
@@ -1286,9 +1547,14 @@ impl RustMixApp {
                             ui.with_layout(
                                 egui::Layout::right_to_left(egui::Align::Center),
                                 |ui| {
-                                    let settings = ui
-                                        .button(RichText::new("⚙").size(12.0))
-                                        .on_hover_text("Overlay Settings for this channel");
+                                    let settings = vector_icon_button(
+                                        ui,
+                                        VectorIcon::Gear,
+                                        egui::vec2(24.0, 20.0),
+                                        false,
+                                        None,
+                                    )
+                                    .on_hover_text("Overlay Settings for this channel");
                                     self.automation.insert(
                                         format!("overlay.{}.settings", i + 1),
                                         settings.rect,
@@ -1356,7 +1622,7 @@ impl RustMixApp {
                 .collapsible(false)
                 .show(ctx, |ui| {
                     ui.heading(RichText::new("RustMix 0.1").color(TEAL));
-                    ui.label("Independent Rust native production switcher.\nOriginal procedural graphics and clean-room UI implementation.");
+                    ui.label("Independent Rust native production switcher.\nModern procedural vector UI and real-time GPU composition pipeline.");
                     ui.separator();
                     ui.collapsing("Session command log", |ui| {
                         for line in &self.history {

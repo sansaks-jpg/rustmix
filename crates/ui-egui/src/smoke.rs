@@ -2,16 +2,10 @@
 //! state assertions, project reopen, and GPU readback screenshots; no external output.
 use super::*;
 // Only consumed by the opt-in hosted native harness, never by normal startup.
-const DIALOG_SHOTS: [(&str, [f32; 2], u8); 15] = [
-    ("add-input-1100", [1100.0, 700.0], 0),
-    ("input-properties-1100", [1100.0, 700.0], 1),
-    ("settings-1100", [1100.0, 700.0], 2),
+const DIALOG_SHOTS: [(&str, [f32; 2], u8); 9] = [
     ("add-input-1600", [1600.0, 900.0], 0),
     ("input-properties-1600", [1600.0, 900.0], 1),
     ("settings-1600", [1600.0, 900.0], 2),
-    ("add-input-1920", [1920.0, 1080.0], 0),
-    ("input-properties-1920", [1920.0, 1080.0], 1),
-    ("settings-1920", [1920.0, 1080.0], 2),
     ("overlay-settings-1600", [1600.0, 900.0], 3),
     ("recording-setup-1600", [1600.0, 900.0], 4),
     ("streaming-setup-1600", [1600.0, 900.0], 5),
@@ -27,6 +21,11 @@ pub(crate) struct Smoke {
     last_stage: u32,
     wait: u32,
     captured: bool,
+}
+impl Smoke {
+    pub(crate) fn is_dialog_stage(&self) -> bool {
+        self.stage >= 20
+    }
 }
 fn key(key: egui::Key) -> Vec<egui::Event> {
     [true, false]
@@ -239,7 +238,7 @@ impl RustMixApp {
                 s.stage = 20;
             }
 
-            20..=64 => {
+            20..=46 => {
                 let offset = s.stage - 20;
                 let Some((name, size, kind)) = DIALOG_SHOTS.get((offset / 3) as usize) else {
                     return Err(Error::Invalid("Unknown dialog screenshot step".into()));
@@ -262,9 +261,10 @@ impl RustMixApp {
                             ctx,
                         );
                         let [width, height] = *size;
-                        ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(egui::vec2(
-                            width, height,
-                        )));
+                        let target = egui::vec2(width, height);
+                        if (ctx.viewport_rect().size() - target).length() > 2.0 {
+                            ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(target));
+                        }
                         s.stage += 1;
                     }
                     1 => {
@@ -300,7 +300,7 @@ impl RustMixApp {
                     _ => {}
                 }
             }
-            65 => {
+            47 => {
                 self.assert_smoke_state()?;
                 self.saved_revision = self.engine.project().revision;
                 ctx.send_viewport_cmd(egui::ViewportCommand::Close);

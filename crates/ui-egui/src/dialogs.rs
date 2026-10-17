@@ -2,9 +2,9 @@
 use super::*;
 use egui::{Align, Color32, RichText, Sense, Stroke, Vec2};
 
-const SIDEBAR: Color32 = Color32::from_rgb(16, 20, 23);
-const HEADER_DARK: Color32 = Color32::from_rgb(24, 29, 34);
-const FORM_BORDER: Color32 = Color32::from_rgb(184, 190, 198);
+const SIDEBAR: Color32 = Color32::from_rgb(14, 18, 24);
+const HEADER_DARK: Color32 = Color32::from_rgb(20, 26, 34);
+const FORM_BORDER: Color32 = Color32::from_rgb(54, 66, 82);
 
 fn operator_window<'a>(
     ctx: &egui::Context,
@@ -28,8 +28,9 @@ fn operator_window<'a>(
         .constrain_to(bounds)
 }
 
-/// Applies the light form surface used inside reference dialogs (`Add Input`, `Input Settings`,
-/// `Settings`, `Recording Setup`, `Streaming Settings`, `Overlay Settings`, `PlayList`, `MultiCorder`).
+/// Applies the modern dark-slate card surface used inside operator dialogs (`Add Input`,
+/// `Input Settings`, `Settings`, `Recording Setup`, `Streaming Settings`, `Overlay Settings`,
+/// `PlayList`, `MultiCorder`).
 fn light_form_frame<R>(
     ui: &mut egui::Ui,
     margin: i8,
@@ -37,24 +38,22 @@ fn light_form_frame<R>(
 ) -> egui::InnerResponse<R> {
     egui::Frame::new()
         .fill(FORM_LIGHT)
+        .corner_radius(6.0)
         .stroke(Stroke::new(1.0, FORM_BORDER))
         .inner_margin(margin)
         .show(ui, |ui| {
-            let mut visuals = egui::Visuals::light();
+            let mut visuals = egui::Visuals::dark();
             visuals.override_text_color = Some(FORM_TEXT);
-            visuals.widgets.noninteractive.bg_fill = Color32::WHITE;
+            visuals.widgets.noninteractive.bg_fill = Color32::from_rgb(18, 23, 30);
             visuals.widgets.noninteractive.fg_stroke = Stroke::new(1.0, FORM_TEXT);
-            visuals.widgets.inactive.bg_fill = Color32::from_rgb(232, 235, 239);
+            visuals.widgets.inactive.bg_fill = Color32::from_rgb(34, 42, 54);
             visuals.widgets.inactive.fg_stroke = Stroke::new(1.0, FORM_TEXT);
-            visuals.widgets.inactive.bg_stroke = Stroke::new(1.0, Color32::from_rgb(172, 178, 186));
-            visuals.widgets.hovered.bg_fill = Color32::from_rgb(216, 226, 238);
-            visuals.widgets.hovered.fg_stroke = Stroke::new(1.0, FORM_TEXT);
-            visuals.widgets.active.bg_fill = Color32::from_rgb(198, 214, 232);
-            visuals.widgets.active.fg_stroke = Stroke::new(1.0, FORM_TEXT);
-            visuals.extreme_bg_color = Color32::WHITE;
-            ui.ctx().style_mut_of(egui::Theme::Light, |style| {
-                style.visuals = visuals.clone();
-            });
+            visuals.widgets.inactive.bg_stroke = Stroke::new(1.0, Color32::from_rgb(64, 76, 92));
+            visuals.widgets.hovered.bg_fill = Color32::from_rgb(46, 58, 74);
+            visuals.widgets.hovered.fg_stroke = Stroke::new(1.0, Color32::WHITE);
+            visuals.widgets.active.bg_fill = PROGRAM;
+            visuals.widgets.active.fg_stroke = Stroke::new(1.0, Color32::WHITE);
+            visuals.extreme_bg_color = Color32::from_rgb(14, 18, 24);
             *ui.visuals_mut() = visuals;
             add_contents(ui)
         })
@@ -73,11 +72,11 @@ fn sidebar_row(
         let bg = if active {
             PROGRAM
         } else if response.hovered() {
-            Color32::from_rgb(48, 58, 68)
+            Color32::from_rgb(38, 48, 60)
         } else {
             SIDEBAR
         };
-        ui.painter().rect_filled(rect, 0.0, bg);
+        ui.painter().rect_filled(rect, 4.0, bg);
         let text_x = if let Some(idx) = icon_index {
             let icon_rect = egui::Rect::from_center_size(
                 egui::pos2(rect.left() + 12.0, rect.center().y),
@@ -455,7 +454,7 @@ impl RustMixApp {
                             let name = ui.add_sized(
                                 [text_w, 22.0],
                                 egui::TextEdit::singleline(&mut app.add_name)
-                                    .char_limit(64)
+                                    .char_limit(128)
                                     .hint_text("Select or enter source name / file path"),
                             );
                             app.automation.insert("dialog.add.name".into(), name.rect);
@@ -463,22 +462,37 @@ impl RustMixApp {
                                 .add_sized([80.0, 22.0], egui::Button::new("Browse"))
                                 .clicked()
                             {
-                                let sample = SAMPLE_VIDEO_FILES
-                                    .iter()
-                                    .find(|(_, k)| *k == app.add_kind)
-                                    .copied()
-                                    .unwrap_or((
-                                        "C:\\Broadcast\\Media\\Opening_Bumper_1080p.mp4",
-                                        InputKind::Grid,
-                                    ));
-                                app.add_name = sample.0.into();
+                                let picked = if app.smoke.is_none() {
+                                    rfd::FileDialog::new()
+                                        .add_filter(
+                                            "Media & Images",
+                                            &["png", "jpg", "jpeg", "bmp", "webp", "mp4", "mkv"],
+                                        )
+                                        .pick_file()
+                                } else {
+                                    None
+                                };
+                                if let Some(path) = picked {
+                                    app.add_name = path.display().to_string();
+                                } else {
+                                    let sample = SAMPLE_VIDEO_FILES
+                                        .iter()
+                                        .find(|(_, k)| *k == app.add_kind)
+                                        .copied()
+                                        .unwrap_or((
+                                            "C:\\Broadcast\\Media\\Opening_Bumper_1080p.mp4",
+                                            InputKind::Grid,
+                                        ));
+                                    app.add_name = sample.0.into();
+                                }
                             }
                         });
                         ui.add_space(6.0);
                         ui.columns(2, |cols| {
                             if let [left_col, right_col, ..] = cols {
                                 egui::Frame::new()
-                                    .fill(Color32::WHITE)
+                                    .fill(Color32::from_rgb(18, 23, 30))
+                                    .corner_radius(4.0)
                                     .stroke(Stroke::new(1.0, FORM_BORDER))
                                     .inner_margin(6.0)
                                     .show(left_col, |ui| {
@@ -505,7 +519,8 @@ impl RustMixApp {
                                     });
                                 right_col.vertical(|ui| {
                                     egui::Frame::new()
-                                        .fill(Color32::from_gray(18))
+                                        .fill(Color32::from_gray(14))
+                                        .corner_radius(4.0)
                                         .stroke(Stroke::new(1.0, FORM_BORDER))
                                         .inner_margin(4.0)
                                         .show(ui, |ui| {
@@ -516,7 +531,7 @@ impl RustMixApp {
                                                         texture.id(),
                                                         egui::vec2(w, w * 9.0 / 16.0),
                                                     ))
-                                                    .corner_radius(2.0),
+                                                    .corner_radius(3.0),
                                                 );
                                                 app.automation
                                                     .insert("dialog.add.preview".into(), r.rect);
@@ -588,7 +603,7 @@ impl RustMixApp {
                     }
                     let confirm = ui.add(
                         egui::Button::new(RichText::new("OK").color(Color32::WHITE).strong())
-                            .fill(CHIP_BG)
+                            .fill(PROGRAM)
                             .min_size(Vec2::new(92.0, 29.0)),
                     );
                     self.automation
@@ -598,10 +613,30 @@ impl RustMixApp {
                             self.notice = "Enter a source name before adding an input".into();
                             self.warning = true;
                         } else {
+                            let next_id = InputId(
+                                self.engine
+                                    .project()
+                                    .inputs
+                                    .iter()
+                                    .map(|i| i.id.0)
+                                    .max()
+                                    .unwrap_or(0)
+                                    .saturating_add(1),
+                            );
+                            let candidate_path = std::path::PathBuf::from(self.add_name.trim());
+                            let display_name = candidate_path
+                                .file_stem()
+                                .and_then(|s| s.to_str())
+                                .filter(|_| candidate_path.exists())
+                                .map(str::to_owned)
+                                .unwrap_or_else(|| self.add_name.clone());
                             self.actions.push(Action::Engine(Command::AddInput {
-                                name: self.add_name.clone(),
+                                name: display_name,
                                 kind: self.add_kind,
                             }));
+                            if candidate_path.exists() {
+                                self.load_image_into_input(next_id, &candidate_path);
+                            }
                             close_requested = true;
                         }
                     }
@@ -673,31 +708,62 @@ impl RustMixApp {
                         }
                     }
                     ui.add_space(4.0);
-                    let _ = ui.add_sized(
-                        [152.0, 22.0],
-                        egui::Button::new(RichText::new("Copy From...").size(11.0)).fill(CHIP_BG),
-                    );
+                    if ui
+                        .add_sized(
+                            [152.0, 22.0],
+                            egui::Button::new(RichText::new("Copy From...").size(11.0))
+                                .fill(CHIP_BG),
+                        )
+                        .clicked()
+                    {
+                        let pvw_id = app.engine.project().preview;
+                        if let Some(src_fx) = app.input_fx.get(&pvw_id).cloned() {
+                            app.input_fx.insert(id, src_fx);
+                            app.sync_prop_from_fx(id);
+                            app.last_demo_frame = None;
+                        }
+                    }
                 },
                 |app, ui| {
                     egui::Frame::new()
                         .fill(HEADER_DARK)
+                        .corner_radius(4.0)
                         .inner_margin(egui::Margin::symmetric(8, 4))
                         .show(ui, |ui| {
                             ui.set_min_width((ui.available_width() - 2.0).max(80.0));
                             ui.horizontal(|ui| {
+                                let path_lbl = app
+                                    .input_fx
+                                    .get(&id)
+                                    .and_then(|f| f.media_path.as_deref())
+                                    .map(str::to_owned)
+                                    .unwrap_or_else(|| format!("{}.mp4", draft.name));
                                 ui.label(
-                                    RichText::new(format!("{}.mp4", draft.name))
+                                    RichText::new(path_lbl)
                                         .color(Color32::WHITE)
                                         .size(12.0),
                                 );
                                 ui.with_layout(egui::Layout::right_to_left(Align::Center), |ui| {
-                                    let _ = ui.add_sized(
-                                        [68.0, 20.0],
-                                        egui::Button::new("Change").fill(CHIP_BG),
-                                    );
+                                    if ui
+                                        .add_sized(
+                                            [68.0, 20.0],
+                                            egui::Button::new("Change").fill(CHIP_BG),
+                                        )
+                                        .clicked()
+                                        && app.smoke.is_none()
+                                        && let Some(path) = rfd::FileDialog::new()
+                                            .add_filter(
+                                                "Images",
+                                                &["png", "jpg", "jpeg", "bmp", "webp"],
+                                            )
+                                            .pick_file()
+                                    {
+                                        app.load_image_into_input(id, &path);
+                                    }
                                 });
                             });
                         });
+                    ui.add_space(4.0);
                     light_form_frame(ui, 8, |ui| match app.input_page {
                         InputPage::General => {
                             ui.columns(2, |cols| {
@@ -755,10 +821,10 @@ impl RustMixApp {
                                                         Vec2::new(22.0, 16.0),
                                                         Sense::click(),
                                                     );
-                                                    ui.painter().rect_filled(rect, 1.0, swatch_c);
+                                                    ui.painter().rect_filled(rect, 2.0, swatch_c);
                                                     ui.painter().rect_stroke(
                                                         rect,
-                                                        1.0,
+                                                        2.0,
                                                         Stroke::new(
                                                             if draft.kind == kind {
                                                                 2.0
@@ -766,9 +832,9 @@ impl RustMixApp {
                                                                 1.0
                                                             },
                                                             if draft.kind == kind {
-                                                                Color32::BLACK
+                                                                Color32::WHITE
                                                             } else {
-                                                                Color32::from_gray(110)
+                                                                Color32::from_gray(90)
                                                             },
                                                         ),
                                                         egui::StrokeKind::Inside,
@@ -793,8 +859,15 @@ impl RustMixApp {
                                     left_col.spacing_mut().item_spacing.y = 1.5;
                                     left_col
                                         .checkbox(&mut app.prop_deinterlace, "Deinterlace Blend");
-                                    left_col.checkbox(&mut app.prop_sharpen, "Sharpen");
-                                    left_col.checkbox(&mut app.prop_mirror, "Mirror");
+                                    if left_col
+                                        .checkbox(&mut app.prop_sharpen, "Sharpen")
+                                        .changed()
+                                    {
+                                        app.sync_fx_from_prop(id);
+                                    }
+                                    if left_col.checkbox(&mut app.prop_mirror, "Mirror").changed() {
+                                        app.sync_fx_from_prop(id);
+                                    }
                                     left_col.checkbox(&mut app.prop_flatten, "Flatten Layers");
                                     left_col.checkbox(
                                         &mut app.prop_auto_mix,
@@ -876,11 +949,98 @@ impl RustMixApp {
                                         app.input_page = InputPage::Audio;
                                     }
                                     right_col.add_space(4.0);
-                                    let _ = right_col.add_sized(
-                                        [240.0, 24.0],
-                                        egui::Button::new("Create Virtual Input"),
-                                    );
+                                    if right_col
+                                        .add_sized(
+                                            [240.0, 24.0],
+                                            egui::Button::new("Create Virtual Input"),
+                                        )
+                                        .clicked()
+                                    {
+                                        app.actions.push(Action::Engine(Command::AddInput {
+                                            name: format!("{} (Virtual)", draft.name),
+                                            kind: draft.kind,
+                                        }));
+                                    }
                                 }
+                            });
+                        }
+                        InputPage::ColourKey => {
+                            ui.label(
+                                RichText::new("Real-Time GPU Chroma Key & Alpha Keying")
+                                    .size(13.0)
+                                    .strong()
+                                    .color(FORM_TEXT),
+                            );
+                            let fx = app.input_fx.entry(id).or_default();
+                            if ui
+                                .checkbox(
+                                    &mut fx.chroma_key,
+                                    "Enable Chroma Key (Key out green / high-G pixels in real time)",
+                                )
+                                .changed()
+                            {
+                                app.last_demo_frame = None;
+                            }
+                            if ui
+                                .add(
+                                    egui::Slider::new(&mut fx.chroma_tolerance, 0.05..=0.85)
+                                        .text("Chroma Key Tolerance"),
+                                )
+                                .changed()
+                            {
+                                app.last_demo_frame = None;
+                            }
+                        }
+                        InputPage::Layers => {
+                            ui.label(
+                                RichText::new("Multi-View / Picture-in-Picture Layers")
+                                    .size(13.0)
+                                    .strong()
+                                    .color(FORM_TEXT),
+                            );
+                            let inputs_list: Vec<(InputId, String)> = app
+                                .engine
+                                .project()
+                                .inputs
+                                .iter()
+                                .filter(|i| i.id != id)
+                                .map(|i| (i.id, format!("{}: {}", i.id.0, i.name)))
+                                .collect();
+                            let fx = app.input_fx.entry(id).or_default();
+                            let selected_lbl = fx
+                                .pip_source
+                                .and_then(|pid| {
+                                    inputs_list
+                                        .iter()
+                                        .find(|(i, _)| *i == pid)
+                                        .map(|(_, l)| l.as_str())
+                                })
+                                .unwrap_or("None");
+                            ui.horizontal(|ui| {
+                                ui.label("Layer 1 (PIP Overlay):");
+                                egui::ComboBox::from_id_salt("prop.layer1.pip")
+                                    .width(220.0)
+                                    .selected_text(selected_lbl)
+                                    .show_ui(ui, |ui| {
+                                        if ui
+                                            .selectable_value(&mut fx.pip_source, None, "None")
+                                            .clicked()
+                                        {
+                                            app.last_demo_frame = None;
+                                        }
+                                        for (other_id, lbl) in &inputs_list {
+                                            if ui
+                                                .selectable_value(
+                                                    &mut fx.pip_source,
+                                                    Some(*other_id),
+                                                    lbl,
+                                                )
+                                                .clicked()
+                                            {
+                                                app.last_demo_frame = None;
+                                            }
+                                        }
+                                    });
                             });
                         }
                         InputPage::Audio => {
@@ -937,26 +1097,56 @@ impl RustMixApp {
                                     .strong()
                                     .color(FORM_TEXT),
                             );
-                            ui.add(egui::Slider::new(&mut app.prop_zoom, 0.25..=4.0).text("Zoom"));
-                            ui.add(
-                                egui::Slider::new(&mut app.prop_pan_x, -1.0..=1.0).text("Pan X"),
-                            );
-                            ui.add(
-                                egui::Slider::new(&mut app.prop_pan_y, -1.0..=1.0).text("Pan Y"),
-                            );
-                            ui.add(
-                                egui::Slider::new(&mut app.prop_lift, -1.0..=1.0).text("Lift / Y"),
-                            );
-                            ui.add(egui::Slider::new(&mut app.prop_gain, 0.0..=2.0).text("Gain"));
-                            ui.add(
-                                egui::Slider::new(&mut app.prop_saturation, 0.0..=2.0)
-                                    .text("Saturation"),
-                            );
+                            let mut changed = false;
+                            changed |= ui
+                                .add(egui::Slider::new(&mut app.prop_zoom, 0.25..=4.0).text("Zoom"))
+                                .changed();
+                            changed |= ui
+                                .add(
+                                    egui::Slider::new(&mut app.prop_pan_x, -1.0..=1.0)
+                                        .text("Pan X"),
+                                )
+                                .changed();
+                            changed |= ui
+                                .add(
+                                    egui::Slider::new(&mut app.prop_pan_y, -1.0..=1.0)
+                                        .text("Pan Y"),
+                                )
+                                .changed();
+                            changed |= ui
+                                .add(
+                                    egui::Slider::new(&mut app.prop_lift, -1.0..=1.0)
+                                        .text("Lift / Y"),
+                                )
+                                .changed();
+                            changed |= ui
+                                .add(egui::Slider::new(&mut app.prop_gain, 0.0..=2.0).text("Gain"))
+                                .changed();
+                            changed |= ui
+                                .add(
+                                    egui::Slider::new(&mut app.prop_saturation, 0.0..=2.0)
+                                        .text("Saturation"),
+                                )
+                                .changed();
+                            if ui.small_button("Reset Transform & Color").clicked() {
+                                app.prop_zoom = 1.0;
+                                app.prop_pan_x = 0.0;
+                                app.prop_pan_y = 0.0;
+                                app.prop_lift = 0.0;
+                                app.prop_gain = 1.0;
+                                app.prop_saturation = 1.0;
+                                changed = true;
+                            }
+                            if changed {
+                                app.sync_fx_from_prop(id);
+                            }
                         }
                     });
-                    // Bottom black preview section matching `Input Settings.png`.
+                    ui.add_space(4.0);
+                    // Bottom black preview section with live GPU texture and zoom slider.
                     egui::Frame::new()
-                        .fill(Color32::BLACK)
+                        .fill(Color32::from_rgb(8, 10, 14))
+                        .corner_radius(4.0)
                         .inner_margin(6.0)
                         .show(ui, |ui| {
                             ui.set_min_width((ui.available_width() - 2.0).max(80.0));
@@ -976,15 +1166,20 @@ impl RustMixApp {
                                 }
                                 ui.with_layout(egui::Layout::right_to_left(Align::Center), |ui| {
                                     ui.vertical_centered(|ui| {
-                                        ui.add_sized(
-                                            [20.0, 108.0],
-                                            egui::Slider::new(&mut app.prop_zoom, 0.25..=2.0)
-                                                .vertical()
-                                                .show_value(false),
-                                        );
+                                        if ui
+                                            .add_sized(
+                                                [20.0, 108.0],
+                                                egui::Slider::new(&mut app.prop_zoom, 0.25..=2.0)
+                                                    .vertical()
+                                                    .show_value(false),
+                                            )
+                                            .changed()
+                                        {
+                                            app.sync_fx_from_prop(id);
+                                        }
                                         ui.label(
-                                            RichText::new(format!("{:.0}", app.prop_zoom))
-                                                .size(11.0)
+                                            RichText::new(format!("{:.2}x", app.prop_zoom))
+                                                .size(10.5)
                                                 .color(Color32::WHITE),
                                         );
                                     });
@@ -1018,7 +1213,7 @@ impl RustMixApp {
                     }
                     let apply = ui.add(
                         egui::Button::new(RichText::new("OK").color(Color32::WHITE).strong())
-                            .fill(CHIP_BG)
+                            .fill(PROGRAM)
                             .min_size(Vec2::new(92.0, 29.0)),
                     );
                     self.automation
@@ -1030,6 +1225,7 @@ impl RustMixApp {
             });
         });
         if apply_clicked {
+            self.sync_fx_from_prop(id);
             self.actions
                 .push(Action::Engine(Command::UpdateInput(draft)));
             self.properties = None;
@@ -1973,6 +2169,32 @@ impl RustMixApp {
             });
             ui.separator();
             ui.horizontal(|ui| {
+                let rec_btn = ui.add(
+                    egui::Button::new(
+                        RichText::new(if self.rec_active {
+                            "Stop Recording"
+                        } else {
+                            "Start Recording"
+                        })
+                        .color(Color32::WHITE)
+                        .strong(),
+                    )
+                    .fill(if self.rec_active { RED } else { PROGRAM })
+                    .min_size(Vec2::new(124.0, 29.0)),
+                );
+                if rec_btn.clicked() {
+                    self.actions.push(Action::ToggleRecordSim);
+                }
+                if self.rec_active {
+                    ui.colored_label(
+                        RED,
+                        format!(
+                            "REC ACTIVE · {} frames · {:.2} MB",
+                            self.rec_frames,
+                            self.rec_bytes as f64 / 1_048_576.0
+                        ),
+                    );
+                }
                 ui.with_layout(egui::Layout::right_to_left(Align::Center), |ui| {
                     let cancel = ui.add(
                         egui::Button::new("Cancel")
@@ -1986,7 +2208,7 @@ impl RustMixApp {
                     }
                     let ok = ui.add(
                         egui::Button::new(RichText::new("OK").color(Color32::WHITE).strong())
-                            .fill(CHIP_BG)
+                            .fill(PROGRAM)
                             .min_size(Vec2::new(92.0, 29.0)),
                     );
                     self.automation
@@ -2104,11 +2326,12 @@ impl RustMixApp {
                                     format!("Stop {}", self.stream_channel + 1)
                                 } else {
                                     format!("Start {}", self.stream_channel + 1)
-                                }),
+                                })
+                                .fill(if self.stream_active { RED } else { PROGRAM }),
                             )
                             .clicked()
                         {
-                            self.stream_active = !self.stream_active;
+                            self.actions.push(Action::ToggleStreamSim);
                         }
                         ui.end_row();
                     });
@@ -2172,6 +2395,17 @@ impl RustMixApp {
             });
             ui.separator();
             ui.horizontal(|ui| {
+                if self.stream_active {
+                    ui.colored_label(
+                        RED,
+                        format!(
+                            "LIVE · {} kbps · {} frames",
+                            self.stream_kbps, self.stream_frames
+                        ),
+                    );
+                } else {
+                    ui.label(RichText::new("Status: Standby").color(DIM));
+                }
                 ui.with_layout(egui::Layout::right_to_left(Align::Center), |ui| {
                     let close = ui.add(
                         egui::Button::new("Close")
@@ -2187,7 +2421,7 @@ impl RustMixApp {
                         egui::Button::new(
                             RichText::new("Save and Close").color(Color32::WHITE).strong(),
                         )
-                        .fill(CHIP_BG)
+                        .fill(PROGRAM)
                         .min_size(Vec2::new(112.0, 29.0)),
                     );
                     self.automation
@@ -2277,7 +2511,8 @@ impl RustMixApp {
 
                     right_col.horizontal(|ui| {
                         egui::Frame::new()
-                            .fill(Color32::WHITE)
+                            .fill(Color32::from_rgb(18, 23, 30))
+                            .corner_radius(4.0)
                             .stroke(Stroke::new(1.0, FORM_BORDER))
                             .inner_margin(10.0)
                             .show(ui, |ui| {
@@ -2302,18 +2537,31 @@ impl RustMixApp {
                             .fill(if self.mc_running {
                                 RED
                             } else {
-                                CHIP_BG
+                                PROGRAM
                             }),
                         );
                         self.automation
                             .insert("dialog.multicorder.toggle".into(), toggle.rect);
                         if toggle.clicked() {
                             self.mc_running = !self.mc_running;
+                            if self.mc_running {
+                                self.mc_started_ms = self.now;
+                            }
                         }
                     });
                 }
             });
             ui.add_space(4.0);
+            let mc_elapsed_s = if self.mc_running {
+                self.now.saturating_sub(self.mc_started_ms) / 1000
+            } else {
+                0
+            };
+            let mc_frames = if self.mc_running {
+                (self.now.saturating_sub(self.mc_started_ms) * 30 / 1000).max(1)
+            } else {
+                0
+            };
             light_form_frame(ui, 6, |ui| {
                 egui::Grid::new("mc_inputs_table")
                     .striped(true)
@@ -2334,16 +2582,21 @@ impl RustMixApp {
                             rows.push(format!("{}: {}", input.id.0, input.name));
                         }
                         for (idx, label) in rows.into_iter().take(10).enumerate() {
+                            let is_checked = self.mc_checked.get(idx).copied().unwrap_or(false);
                             if let Some(checked) = self.mc_checked.get_mut(idx) {
                                 ui.checkbox(checked, label);
                             }
                             ui.label(&self.mc_folder);
-                            ui.label(if self.mc_running {
-                                "00:01:12"
+                            ui.label(if self.mc_running && is_checked {
+                                format!("00:{:02}:{:02}", mc_elapsed_s / 60, mc_elapsed_s % 60)
                             } else {
-                                "00:00:00"
+                                "00:00:00".into()
                             });
-                            ui.label(if self.mc_running { "2160" } else { "0" });
+                            ui.label(if self.mc_running && is_checked {
+                                mc_frames.to_string()
+                            } else {
+                                "0".into()
+                            });
                             ui.label("0");
                             ui.end_row();
                         }
@@ -2504,19 +2757,50 @@ impl RustMixApp {
                         .size(16.0)
                         .color(Color32::WHITE),
                     )
-                    .fill(if self.playlist_running {
-                        PROGRAM
-                    } else {
-                        CHIP_BG
-                    }),
+                    .fill(if self.playlist_running { RED } else { PROGRAM }),
                 );
                 self.automation
                     .insert("dialog.playlist.start".into(), start.rect);
                 if start.clicked() {
                     self.playlist_running = !self.playlist_running;
+                    self.playlist_last_step_ms = self.now;
+                    if self.playlist_running
+                        && let Some(&first_id) =
+                            self.playlist_items.get(self.playlist_selected_item)
+                    {
+                        self.actions
+                            .push(Action::Engine(Command::SelectPreview(first_id)));
+                        self.actions
+                            .push(Action::Engine(Command::Transition(TransitionKind::Fade)));
+                    }
                 }
-                let _ = ui.add_sized([42.0, 26.0], egui::Button::new("|<<").fill(CHIP_BG));
-                let _ = ui.add_sized([42.0, 26.0], egui::Button::new(">>|").fill(CHIP_BG));
+                if ui
+                    .add_sized([42.0, 26.0], egui::Button::new("|<<").fill(CHIP_BG))
+                    .clicked()
+                    && !self.playlist_items.is_empty()
+                {
+                    self.playlist_selected_item = self.playlist_selected_item.saturating_sub(1);
+                    if let Some(&id) = self.playlist_items.get(self.playlist_selected_item) {
+                        self.actions
+                            .push(Action::Engine(Command::SelectPreview(id)));
+                        self.actions
+                            .push(Action::Engine(Command::Transition(TransitionKind::Fade)));
+                    }
+                }
+                if ui
+                    .add_sized([42.0, 26.0], egui::Button::new(">>|").fill(CHIP_BG))
+                    .clicked()
+                    && !self.playlist_items.is_empty()
+                {
+                    self.playlist_selected_item =
+                        (self.playlist_selected_item + 1) % self.playlist_items.len();
+                    if let Some(&id) = self.playlist_items.get(self.playlist_selected_item) {
+                        self.actions
+                            .push(Action::Engine(Command::SelectPreview(id)));
+                        self.actions
+                            .push(Action::Engine(Command::Transition(TransitionKind::Fade)));
+                    }
+                }
                 ui.with_layout(egui::Layout::right_to_left(Align::Center), |ui| {
                     let close = ui.add(
                         egui::Button::new("Close")

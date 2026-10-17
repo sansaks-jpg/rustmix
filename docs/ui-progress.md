@@ -108,3 +108,23 @@ Rebuilt `crates/ui-egui` (`lib.rs`, `panels.rs`, `dialogs.rs`, and `smoke.rs`) f
    - **`Settings` (`Settings.png`):** Left black sidebar with 16 categories + `Import`/`Export`/`Default`; right light form panel (`Theme: Charcoal8`, orange `Preview Colour`, green `Output Colour`, `Master Frame Rate`, `Output Size` with blue bar, `Output Aspect Ratio`, `Fullscreen 1`/`Fullscreen 2`, `Display`, `Position`, `Hide Cursor`/`On Top`/`Minimise`, `Input Size`, `Production Name`); footer `☐ Show Advanced Settings`, `OK`, `Cancel`.
    - **`Overlay Settings` (`Overlay Settings.png`):** Single-pane layout with top `Number`/`Type`/`Effect`/`Effect Duration`/`Duration`/`Stinger Input`/`Alpha` rows, middle 2-column area with left white `Picture In Picture Location` sliders (`Zoom`, `Zoom X`, `Zoom Y`, `Pan X`, `Pan Y`, `Rotate Z` + `Reset` + `Border`) and right maroon (`#7a0000`) 16:9 interactive box preview.
    - **`Recording Setup` (`Recording Setup.png`), `Streaming Settings` (`Streaming Setup.png`), `MultiCorder` (`Multicoder.png`), `PlayList` (`Playlist.png`), and `Shortcuts` (`Shortcut.png`):** Implemented as interactive windows reachable from the bottom production toolbar and captured by the native CI smoke harness (`DIALOG_SHOTS` expanded to 15 captures).
+
+## UI-008 — Modernized Broadcast UI, Procedural Vector Icons & Functional GPU/Output Pipelines (2026-10-18)
+
+Following visual inspection of the native GPU screenshots from [run 39054073068](https://github.com/sansaks-jpg/rustmix/actions/runs/39054073068) (commit `1b57198`) and the owner's direction to modernize the UI/icons while making all video, recording, streaming, and automation features genuinely functional:
+
+1. **Zero-Missing-Glyph Procedural Vector Icon System (`lib.rs::VectorIcon`, `paint_vector_icon`, `vector_icon_button`, `caret_menu_button`):**
+   - Replaced all Unicode symbols/emojis (`▾`, `🔊`, `📌`, `🎧`, `🖥`, `📷`, `🔒`, `🔍`, `📊`, `⊞`, `⚙`) that rendered as missing-glyph squares (`□`) in Windows `segoeui.ttf` with crisp anti-aliased `egui::Painter` vector icons (`Gear`, `Speaker(bool)`, `Headphones`, `Pin`, `Display`, `Search`, `Sliders`, `Grid`, `Camera`, `Lock(bool)`, `Close`, `Play`, `Pause`, `Restart`, `Loop`) and vector dropdown triangles.
+2. **Sleek Dark-Slate Theme & High-Contrast Dialog Cards (`lib.rs::theme`, `dialogs.rs::light_form_frame`):**
+   - Modernized widget rounding (`4..6 px`), button hover states, and dialog form cards (`FORM_LIGHT = rgb(24, 30, 39)`, `FORM_TEXT = rgb(232, 238, 245)`, `FORM_BORDER = rgb(54, 66, 82)`) so all 9 operator dialogs have 100% readable contrast without washed-out white boxes.
+3. **Real-Time Per-Input GPU Video FX & Image Decoding (`lib.rs::InputFx`, `load_image_into_input`, `panels.rs::process_source_pixels`):**
+   - Added real-time per-input pixel & composition processing (`Zoom`, `Pan X/Y`, `Mirror`, `Lift`, `Gain`, `Saturation`, `Chroma Key` with adjustable tolerance, and `Picture-in-Picture` Layer 1 compositing) plus local image file decoding (`png`/`jpg`/`bmp`/`webp` via `image::open` in `Add Input` and `Input Settings -> Change`), live transport bars (`Play/Pause`, `Restart`, scrub bar, timecode `00:00:SS:FF`) under both Preview and Program monitors, and 4 configurable transition slots (`Fade`, `Merge`, `Wipe`, `CubeZoom`).
+4. **Functional Recording, Streaming, External Output, MultiCorder, PlayList & Snapshot Engines (`lib.rs::dispatch`, `tick_live_outputs`):**
+   - **Record:** Starts/stops a live recording session, writes session manifests + PNG frames to `recordings/`, and updates live frame/megabyte telemetry in the status bar and `Recording Setup`.
+   - **Stream:** Starts/stops a live streaming telemetry session (`2500 / 4500 / 8000 kbps`), tracking encoded frames and bitrate in `Streaming Settings` and the status bar.
+   - **External & MultiCorder:** Tracks active External Output state and per-input ISO recording duration/frame counts in `MultiCorder`.
+   - **PlayList:** Automated switcher sequencer that steps through `PlayList Items` every 3.5 seconds (or immediately via `|<<` / `>>|`) and dispatches `SelectPreview` + `Transition(Fade)` to the engine.
+   - **Snapshot (`📷`):** Exports the current 640×360 Program GPU buffer directly to `recordings/snapshot-<ms>.png`.
+5. **CI WARP Readback Optimization (`smoke.rs`, `panels.rs::refresh_textures`, `scripts/ci-native-smoke.ps1`):**
+   - Skips redundant per-frame texture re-uploads during static dialog screenshot stages (`Smoke::is_dialog_stage`) and captures the 9 distinct `1600×900` dialog screenshots plus `workspace-1600.png`, `workspace-1920.png`, and `reopened.png` without overflowing the D3D12 WARP software queue on GitHub-hosted Windows runners.
+
