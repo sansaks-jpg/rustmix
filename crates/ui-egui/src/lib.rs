@@ -136,6 +136,25 @@ impl RustMixApp {
             app.smoke = Some(smoke::Smoke::default());
         }
         app.theme(&cc.egui_ctx);
+        #[cfg(target_os = "windows")]
+        if let Some(windows) = std::env::var_os("WINDIR") {
+            let font_path = PathBuf::from(windows).join("Fonts").join("segoeui.ttf");
+            if std::fs::metadata(&font_path).is_ok_and(|m| m.len() < 5_000_000)
+                && let Ok(bytes) = std::fs::read(&font_path)
+            {
+                let mut fonts = egui::FontDefinitions::default();
+                fonts.font_data.insert(
+                    "windows-ui".into(),
+                    std::sync::Arc::new(egui::FontData::from_owned(bytes)),
+                );
+                fonts
+                    .families
+                    .entry(egui::FontFamily::Proportional)
+                    .or_default()
+                    .insert(0, "windows-ui".into());
+                cc.egui_ctx.set_fonts(fonts);
+            }
+        }
         app
     }
     fn headless() -> Self {
@@ -534,7 +553,7 @@ impl RustMixApp {
             {
                 self.actions.push(Action::Last);
             }
-            ui.add_space(45.0);
+            ui.add_space((ui.max_rect().width() * 0.5 - ui.cursor().left() - 65.0).max(5.0));
             if ui.button("Fullscreen").clicked() {
                 self.actions.push(Action::Fullscreen);
             }
