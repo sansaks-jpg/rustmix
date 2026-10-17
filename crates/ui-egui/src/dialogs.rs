@@ -1670,8 +1670,8 @@ impl RustMixApp {
                                             (
                                                 "Rotate Z",
                                                 &mut self.overlay_rotate_z,
-                                                -3.14,
-                                                3.14,
+                                                -std::f32::consts::PI,
+                                                std::f32::consts::PI,
                                                 0.0,
                                             ),
                                         ] {
