@@ -1,6 +1,18 @@
 //! Opt-in hosted-runner harness. Real native frames, egui keyboard/pointer input,
 //! state assertions, project reopen, and GPU readback screenshots; no external output.
 use super::*;
+// Only consumed by the opt-in hosted native harness, never by normal startup.
+const DIALOG_SHOTS: [(&str, [f32; 2], u8); 9] = [
+    ("add-input-1100", [1100.0, 700.0], 0),
+    ("input-properties-1100", [1100.0, 700.0], 1),
+    ("settings-1100", [1100.0, 700.0], 2),
+    ("add-input-1600", [1600.0, 900.0], 0),
+    ("input-properties-1600", [1600.0, 900.0], 1),
+    ("settings-1600", [1600.0, 900.0], 2),
+    ("add-input-1920", [1920.0, 1080.0], 0),
+    ("input-properties-1920", [1920.0, 1080.0], 1),
+    ("settings-1920", [1920.0, 1080.0], 2),
+];
 #[derive(Default)]
 pub(crate) struct Smoke {
     pub events: Vec<egui::Event>,
@@ -52,11 +64,17 @@ impl RustMixApp {
             if let egui::Event::Screenshot { image, .. } = event {
                 std::fs::create_dir_all("artifacts")?;
                 let filename = if reopen {
-                    "artifacts/reopened.png"
+                    "artifacts/reopened.png".into()
+                } else if let Some((name, _, _)) = s
+                    .stage
+                    .checked_sub(20)
+                    .and_then(|stage| DIALOG_SHOTS.get((stage / 3) as usize))
+                {
+                    format!("artifacts/{name}.png")
                 } else if s.stage == 7 {
-                    "artifacts/workspace-1600.png"
+                    "artifacts/workspace-1600.png".into()
                 } else {
-                    "artifacts/workspace-1920.png"
+                    "artifacts/workspace-1920.png".into()
                 };
                 let bytes: Vec<u8> = image.pixels.iter().flat_map(|p| p.to_array()).collect();
                 image::save_buffer(
@@ -209,9 +227,67 @@ impl RustMixApp {
                             .collect::<HashMap<_, _>>(),
                     )?,
                 )?;
+                s.stage = 20;
+            }
+
+            20..=46 => {
+                let offset = s.stage - 20;
+                let Some((name, size, kind)) = DIALOG_SHOTS.get((offset / 3) as usize) else {
+                    return Err(Error::Invalid("Unknown dialog screenshot step".into()));
+                };
+                match offset % 3 {
+                    0 => {
+                        self.reset_editors();
+                        self.dispatch(
+                            match kind {
+                                0 => Action::Add,
+                                1 => Action::Properties(InputId(3)),
+                                _ => Action::Settings,
+                            },
+                            ctx,
+                        );
+                        let [width, height] = *size;
+                        ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(egui::vec2(
+                            width, height,
+                        )));
+                        s.stage += 1;
+                    }
+                    1 => {
+                        self.validate_dialog_geometry(
+                            ctx,
+                            match kind {
+                                0 => "dialog.add",
+                                1 => "dialog.properties",
+                                _ => "dialog.settings",
+                            },
+                        )?;
+                        std::fs::write(
+                            format!("artifacts/{name}-elements.json"),
+                            serde_json::to_vec_pretty(
+                                &self
+                                    .automation
+                                    .iter()
+                                    .filter(|(id, _)| id.starts_with("dialog."))
+                                    .map(|(id, rect)| (id, format!("{rect:?}")))
+                                    .collect::<HashMap<_, _>>(),
+                            )?,
+                        )?;
+                        ctx.send_viewport_cmd(egui::ViewportCommand::Screenshot(
+                            egui::UserData::default(),
+                        ));
+                        s.captured = false;
+                        s.stage += 1;
+                    }
+                    _ if s.captured => s.stage += 1,
+                    _ => {}
+                }
+            }
+            47 => {
+                self.assert_smoke_state()?;
                 self.saved_revision = self.engine.project().revision;
                 ctx.send_viewport_cmd(egui::ViewportCommand::Close);
             }
+
             _ => {}
         }
         Ok(())
@@ -227,6 +303,35 @@ impl RustMixApp {
             return Err(Error::Invalid(
                 "Smoke final state mismatch (PGM/PVW/overlay/master/workspace)".into(),
             ));
+        }
+        Ok(())
+    }
+    fn validate_dialog_geometry(&self, ctx: &egui::Context, prefix: &str) -> Result<()> {
+        let bounds = ctx.viewport_rect();
+        let body = self
+            .automation
+            .get(&format!("{prefix}.body"))
+            .ok_or_else(|| Error::Invalid(format!("Missing {prefix} body")))?;
+        let footer = if prefix == "dialog.add" {
+            "confirm"
+        } else {
+            "apply"
+        };
+        for control in [footer, "cancel"] {
+            let rect = self
+                .automation
+                .get(&format!("{prefix}.{control}"))
+                .ok_or_else(|| Error::Invalid(format!("Missing {prefix} {control}")))?;
+            if !rect.is_finite()
+                || !bounds.contains_rect(*rect)
+                || rect.height() < 27.0
+                || rect.width() < 85.0
+                || body.bottom() > rect.top() + 1.0
+            {
+                return Err(Error::Invalid(format!(
+                    "Dialog body or footer is clipped: {prefix} {control} {rect:?}"
+                )));
+            }
         }
         Ok(())
     }
@@ -287,6 +392,162 @@ mod tests {
         };
         let _ = ctx.run_ui(raw, |ui| app.frame_ui(ui));
     }
+    fn click(app: &mut RustMixApp, ctx: &egui::Context, id: &str, size: [f32; 2]) {
+        let pos = app
+            .automation
+            .get(id)
+            .expect("Visible operator control")
+            .center();
+        for pressed in [true, false] {
+            frame(
+                app,
+                ctx,
+                vec![
+                    egui::Event::PointerMoved(pos),
+                    egui::Event::PointerButton {
+                        pos,
+                        button: egui::PointerButton::Primary,
+                        pressed,
+                        modifiers: egui::Modifiers::NONE,
+                    },
+                ],
+                size,
+            );
+        }
+    }
+
+    #[test]
+    fn dialog_footers_remain_visible_on_small_and_large_workspaces() {
+        // 734×466 also represents a 1100×700 viewport at 150% UI scale.
+        for size in [
+            [734.0, 466.0],
+            [1100.0, 700.0],
+            [1600.0, 900.0],
+            [1920.0, 1080.0],
+        ] {
+            for (action, prefix, footer) in [
+                (Action::Add, "dialog.add", "dialog.add.confirm"),
+                (
+                    Action::Properties(InputId(3)),
+                    "dialog.properties",
+                    "dialog.properties.apply",
+                ),
+                (Action::Settings, "dialog.settings", "dialog.settings.apply"),
+            ] {
+                let mut app = RustMixApp::headless();
+                let ctx = egui::Context::default();
+                app.theme(&ctx);
+                app.dispatch(action, &ctx);
+                for _ in 0..4 {
+                    frame(&mut app, &ctx, vec![], size);
+                }
+                let bounds = ctx.viewport_rect();
+                let button = app.automation.get(footer).unwrap();
+                let body = app.automation.get(&format!("{prefix}.body")).unwrap();
+                assert!(
+                    bounds.contains_rect(*button),
+                    "Footer outside {size:?}: {button:?}"
+                );
+                assert!(body.bottom() <= button.top(), "Body overlaps fixed footer");
+                assert!(button.width() >= 85.0 && button.height() >= 27.0);
+                app.validate_dialog_geometry(&ctx, prefix).unwrap();
+                let pages: &[&str] = match prefix {
+                    "dialog.properties" => &["Audio", "Status", "General"],
+                    "dialog.settings" => &["Appearance", "Workspace", "Shortcuts", "Display"],
+                    _ => &[],
+                };
+                for page in pages {
+                    click(&mut app, &ctx, &format!("{prefix}.page.{page}"), size);
+                    frame(&mut app, &ctx, vec![], size);
+                    app.validate_dialog_geometry(&ctx, prefix).unwrap();
+                }
+                assert_eq!(app.engine.project().program, InputId(1));
+            }
+        }
+    }
+
+    #[test]
+    fn monitor_edit_filter_reset_and_dialog_cancel_preserve_program() {
+        let mut app = RustMixApp::headless();
+        let ctx = egui::Context::default();
+        app.theme(&ctx);
+        let size = [1600.0, 900.0];
+        for _ in 0..3 {
+            frame(&mut app, &ctx, vec![], size);
+        }
+        click(&mut app, &ctx, "monitor.preview.properties", size);
+        assert_eq!(app.properties.as_ref().unwrap().id, InputId(2));
+        app.properties.as_mut().unwrap().name = "Unsaved draft".into();
+        frame(&mut app, &ctx, vec![], size);
+        click(&mut app, &ctx, "dialog.properties.cancel", size);
+        assert!(app.properties.is_none());
+        assert_eq!(
+            app.engine.project().input(InputId(2)).unwrap().name,
+            "Camera B"
+        );
+
+        app.category = Some(InputKind::Bars);
+        app.input_filter = "no matching source".into();
+        frame(&mut app, &ctx, vec![], size);
+        click(&mut app, &ctx, "inputs.filter.clear", size);
+        assert!(app.category.is_none() && app.input_filter.is_empty());
+
+        let mut offline = app.engine.project().input(InputId(3)).unwrap().clone();
+        offline.online = false;
+        app.execute(Command::UpdateInput(offline));
+        frame(&mut app, &ctx, vec![], size);
+        assert!(app.automation.contains_key("input.3.offline"));
+
+        app.dispatch(Action::RequestRemove(InputId(3)), &ctx);
+        frame(&mut app, &ctx, key(egui::Key::Space), size);
+        click(&mut app, &ctx, "dialog.remove.cancel", size);
+        assert!(app.engine.project().input(InputId(3)).is_some());
+        assert_eq!(app.engine.project().program, InputId(1));
+        assert_eq!(app.engine.project().preview, InputId(2));
+    }
+
+    #[test]
+    fn generator_sample_survives_removal_and_settings_cancel_discards_draft() {
+        let mut app = RustMixApp::headless();
+        let ctx = egui::Context::default();
+        app.theme(&ctx);
+        let size = [1100.0, 700.0];
+        app.execute(Command::RemoveInput(InputId(3)));
+        app.dispatch(Action::Add, &ctx);
+        app.add_kind = InputKind::Bars;
+        for _ in 0..4 {
+            frame(&mut app, &ctx, vec![], size);
+        }
+        assert!(
+            !app.engine
+                .project()
+                .inputs
+                .iter()
+                .any(|input| input.kind == InputKind::Bars)
+        );
+        assert!(
+            app.add_preview
+                .as_ref()
+                .is_some_and(|(kind, _)| *kind == InputKind::Bars)
+        );
+        assert!(app.automation.contains_key("dialog.add.preview"));
+        click(&mut app, &ctx, "dialog.add.cancel", size);
+
+        app.dispatch(Action::Settings, &ctx);
+        app.settings_name = "Discard this project name".into();
+        app.settings_draft.as_mut().unwrap().high_contrast = true;
+        app.settings_layout = Some(true);
+        for _ in 0..3 {
+            frame(&mut app, &ctx, vec![], size);
+        }
+        click(&mut app, &ctx, "dialog.settings.cancel", size);
+        assert!(!app.settings);
+        assert!(!app.engine.project().preferences.high_contrast);
+        assert_eq!(app.engine.project().workspace.name, "Production");
+        assert_eq!(app.engine.project().name, "Studio / Demo production");
+        assert_eq!(app.engine.project().program, InputId(1));
+    }
+
     #[test]
     fn actual_widgets_dispatch_commands_and_survive_resize() {
         let mut app = RustMixApp::headless();
@@ -351,6 +612,130 @@ mod tests {
         let mut hostile: serde_json::Value = serde_json::from_str(&layout).unwrap();
         hostile["surfaces"][0]["Main"]["nodes"][0] = serde_json::json!("Empty");
         assert!(workspace::decode(&hostile.to_string()).is_err());
+    }
+
+    #[test]
+    fn source_dialog_and_settings_apply_dispatch_real_commands() {
+        let mut app = RustMixApp::headless();
+        let ctx = egui::Context::default();
+        app.theme(&ctx);
+        let size = [1600.0, 900.0];
+        for _ in 0..3 {
+            frame(&mut app, &ctx, vec![], size);
+        }
+        // Confirmation overlays must block switching shortcuts behind the dialog.
+        app.confirm_remove_input = Some(InputId(3));
+        frame(&mut app, &ctx, key(egui::Key::Space), size);
+        assert_eq!(app.engine.project().program, InputId(1));
+        app.confirm_remove_input = None;
+        app.dispatch(Action::Add, &ctx);
+        app.add_name = " ".into();
+        frame(&mut app, &ctx, vec![], size);
+        let add = app.automation.get("dialog.add.confirm").unwrap().center();
+        frame(
+            &mut app,
+            &ctx,
+            vec![
+                egui::Event::PointerMoved(add),
+                egui::Event::PointerButton {
+                    pos: add,
+                    button: egui::PointerButton::Primary,
+                    pressed: true,
+                    modifiers: egui::Modifiers::NONE,
+                },
+            ],
+            size,
+        );
+        frame(
+            &mut app,
+            &ctx,
+            vec![egui::Event::PointerButton {
+                pos: add,
+                button: egui::PointerButton::Primary,
+                pressed: false,
+                modifiers: egui::Modifiers::NONE,
+            }],
+            size,
+        );
+        assert_eq!(app.engine.project().inputs.len(), 7);
+        app.add_name = "Test grid".into();
+        app.add_kind = InputKind::Grid;
+        frame(&mut app, &ctx, vec![], size);
+        let add = app.automation.get("dialog.add.confirm").unwrap().center();
+        frame(
+            &mut app,
+            &ctx,
+            vec![
+                egui::Event::PointerMoved(add),
+                egui::Event::PointerButton {
+                    pos: add,
+                    button: egui::PointerButton::Primary,
+                    pressed: true,
+                    modifiers: egui::Modifiers::NONE,
+                },
+            ],
+            size,
+        );
+        frame(
+            &mut app,
+            &ctx,
+            vec![egui::Event::PointerButton {
+                pos: add,
+                button: egui::PointerButton::Primary,
+                pressed: false,
+                modifiers: egui::Modifiers::NONE,
+            }],
+            size,
+        );
+        assert_eq!(app.engine.project().inputs.len(), 8);
+        assert!(
+            app.engine
+                .project()
+                .inputs
+                .iter()
+                .any(|i| i.name == "Test grid")
+        );
+        assert_eq!(app.engine.project().program, InputId(1));
+
+        app.dispatch(Action::Settings, &ctx);
+        app.settings_draft.as_mut().unwrap().ui_scale = 1.2;
+        app.settings_layout = Some(true);
+        frame(&mut app, &ctx, vec![], size);
+        assert_eq!(app.engine.project().preferences.ui_scale, 1.0);
+        assert_eq!(app.engine.project().workspace.name, "Production");
+        let apply = app
+            .automation
+            .get("dialog.settings.apply")
+            .unwrap()
+            .center();
+        frame(
+            &mut app,
+            &ctx,
+            vec![
+                egui::Event::PointerMoved(apply),
+                egui::Event::PointerButton {
+                    pos: apply,
+                    button: egui::PointerButton::Primary,
+                    pressed: true,
+                    modifiers: egui::Modifiers::NONE,
+                },
+            ],
+            size,
+        );
+        frame(
+            &mut app,
+            &ctx,
+            vec![egui::Event::PointerButton {
+                pos: apply,
+                button: egui::PointerButton::Primary,
+                pressed: false,
+                modifiers: egui::Modifiers::NONE,
+            }],
+            size,
+        );
+        assert_eq!(app.engine.project().preferences.ui_scale, 1.2);
+        assert_eq!(app.engine.project().workspace.name, "Audio focus");
+        assert_eq!(app.engine.project().program, InputId(1));
     }
 
     #[test]

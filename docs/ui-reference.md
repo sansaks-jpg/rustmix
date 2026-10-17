@@ -19,3 +19,7 @@ RustMix UI-002 now follows this observed generic main-window arrangement. Inputs
 Unverified: exact vMix T-Bar direction/reversal, default shortcut mapping, docking persistence, source dialogs, hardware audio behavior and pixel identity. RustMix defines its own explicit semantics and tests. Its thumbnail overlay buttons use source names as lower-thirds, not full-frame video overlays. References do not prove RustMix performance or compatibility. No vMix project interoperability is claimed.
 
 The owner prohibited cua-driver during this task; no cua-driver command was executed. Executable generation and native verification were moved to GitHub Actions at the owner's request. The public repo is [sansaks-jpg/rustmix](https://github.com/sansaks-jpg/rustmix).
+
+## UI-004 reference review
+
+On 2026-10-17 the supplied local files `Interface.png`, `Add Input.png`, `Input Settings.png`, and `Settings.png` in `C:\Users\WORKPLUS\Documents\WEB\rustmix-reference` were visually inspected read-only. They informed operator placement, sidebar navigation, source selection and confirmation hierarchy. No reference bitmap, logo or vendor icon was copied into the project. Current accepted hosted RustMix screenshots were also inspected as the pre-change visual baseline; they do not depict UI-003/004.

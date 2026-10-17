@@ -1,4 +1,5 @@
 #![forbid(unsafe_code)]
+mod dialogs;
 mod panels;
 mod smoke;
 mod workspace;
@@ -27,6 +28,19 @@ pub enum Panel {
     Audio,
     Overlays,
 }
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum InputPage {
+    General,
+    Audio,
+    Status,
+}
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum SettingsPage {
+    Display,
+    Appearance,
+    Workspace,
+    Shortcuts,
+}
 impl Panel {
     fn title(self) -> &'static str {
         match self {
@@ -40,7 +54,7 @@ fn default_dock(audio_focus: bool) -> DockState<Panel> {
     let mut dock = DockState::new(vec![Panel::Inputs, Panel::Overlays]);
     dock.main_surface_mut().split_right(
         NodeIndex::root(),
-        if audio_focus { 0.59 } else { 0.80 },
+        if audio_focus { 0.59 } else { 0.84 },
         vec![Panel::Audio],
     );
     dock
@@ -52,6 +66,7 @@ pub(crate) enum Action {
     Save(bool),
     Add,
     Properties(InputId),
+    RequestRemove(InputId),
     Settings,
     About,
     Workspace(bool),
@@ -90,8 +105,15 @@ pub struct RustMixApp {
     pub(crate) add_open: bool,
     pub(crate) add_name: String,
     pub(crate) add_kind: InputKind,
+    pub(crate) add_preview: Option<(InputKind, egui::TextureHandle)>,
     pub(crate) properties: Option<InputState>,
+    pub(crate) input_page: InputPage,
+    pub(crate) confirm_remove_input: Option<InputId>,
     pub(crate) settings: bool,
+    pub(crate) settings_page: SettingsPage,
+    pub(crate) settings_draft: Option<Preferences>,
+    pub(crate) settings_name: String,
+    pub(crate) settings_layout: Option<bool>,
     pub(crate) about: bool,
     pub(crate) multiview: bool,
     pub(crate) fullscreen: bool,
@@ -178,8 +200,15 @@ impl RustMixApp {
             add_open: false,
             add_name: "New synthetic input".into(),
             add_kind: InputKind::Grid,
+            add_preview: None,
             properties: None,
+            input_page: InputPage::General,
+            confirm_remove_input: None,
             settings: false,
+            settings_page: SettingsPage::Display,
+            settings_draft: None,
+            settings_name: String::new(),
+            settings_layout: None,
             about: false,
             multiview: false,
             fullscreen: false,
@@ -202,6 +231,16 @@ impl RustMixApp {
             tbar_latched: false,
             monitor_view_height: None,
         }
+    }
+    fn reset_editors(&mut self) {
+        self.add_open = false;
+        self.properties = None;
+        self.input_page = InputPage::General;
+        self.confirm_remove_input = None;
+        self.settings = false;
+        self.settings_draft = None;
+        self.settings_name.clear();
+        self.settings_layout = None;
     }
     fn theme(&self, ctx: &egui::Context) {
         let mut style = egui::Style {
@@ -396,13 +435,13 @@ impl RustMixApp {
                     JobDone::Loaded(project, path) => match Engine::from_project(*project) {
                         Ok(engine) => {
                             let layout = engine.project().workspace.dock_json.clone();
+                            self.reset_editors();
                             self.engine = engine;
                             self.last_demo_frame = None;
                             self.theme(ctx);
                             self.path = Some(path);
                             self.saved_revision = self.engine.project().revision;
                             self.textures.clear();
-                            self.properties = None;
                             if !layout.is_empty() {
                                 match workspace::decode(&layout) {
                                     Ok(dock) => self.dock = dock,
@@ -465,8 +504,21 @@ impl RustMixApp {
             }
             Action::Save(as_new) => self.start_save(as_new, false),
             Action::Add => self.add_open = true,
-            Action::Properties(id) => self.properties = self.engine.project().input(id).cloned(),
-            Action::Settings => self.settings = true,
+            Action::Properties(id) => {
+                self.properties = self.engine.project().input(id).cloned();
+                self.input_page = InputPage::General;
+            }
+            Action::RequestRemove(id) => match self.engine.enabled(&Command::RemoveInput(id)) {
+                Ok(()) => self.confirm_remove_input = Some(id),
+                Err(error) => self.say(error.to_string(), true),
+            },
+            Action::Settings => {
+                self.settings = true;
+                self.settings_page = SettingsPage::Display;
+                self.settings_draft = Some(self.engine.project().preferences.clone());
+                self.settings_name = self.engine.project().name.clone();
+                self.settings_layout = None;
+            }
             Action::About => self.about = true,
             Action::Workspace(audio) => {
                 self.dock = default_dock(audio);
@@ -664,14 +716,13 @@ impl RustMixApp {
         if ctx.text_edit_focused()
             || self.properties.is_some()
             || self.settings
+            || self.confirm_remove_input.is_some()
             || self.add_open
+            || self.about
             || self.confirm_new
             || self.confirm_close
             || self.confirm_open
         {
-            return;
-        }
-        if !self.engine.project().preferences.shortcuts {
             return;
         }
         ctx.input_mut(|i| {
@@ -687,6 +738,11 @@ impl RustMixApp {
             if i.consume_key(egui::Modifiers::CTRL | egui::Modifiers::SHIFT, egui::Key::S) {
                 self.actions.push(Action::Save(true));
             }
+        });
+        if !self.engine.project().preferences.shortcuts {
+            return;
+        }
+        ctx.input_mut(|i| {
             for (key, command) in [
                 (egui::Key::Space, Command::Cut),
                 (egui::Key::Enter, Command::Transition(TransitionKind::Fade)),
@@ -732,14 +788,33 @@ impl RustMixApp {
     }
     fn frame_ui(&mut self, ui: &mut egui::Ui) {
         let ctx = ui.ctx().clone();
+        self.automation.clear();
         self.now = u64::try_from(self.start.elapsed().as_millis()).unwrap_or(u64::MAX);
         self.engine.tick(self.now);
         self.poll_job(&ctx);
         self.shortcuts(&ctx);
         self.refresh_textures(&ctx);
-        egui::Panel::top("toolbar").show(ui, |ui| self.toolbar(ui));
+        let dialog_busy = self.add_open
+            || self.properties.is_some()
+            || self.settings
+            || self.confirm_remove_input.is_some()
+            || self.about
+            || self.confirm_new
+            || self.confirm_close
+            || self.confirm_open;
+        egui::Panel::top("toolbar").show(ui, |ui| {
+            if dialog_busy {
+                ui.disable();
+            }
+            self.toolbar(ui);
+        });
         egui::Panel::bottom("status").show(ui, |ui| self.status(ui));
-        egui::Panel::bottom("production.controls").show(ui, |ui| self.production_toolbar(ui));
+        egui::Panel::bottom("production.controls").show(ui, |ui| {
+            if dialog_busy {
+                ui.disable();
+            }
+            self.production_toolbar(ui);
+        });
         let viewport_height = ctx.viewport_rect().height();
         let monitor_height = (viewport_height * 0.53).max(390.0);
         // Preserve the operator's monitor/input proportion when resizing the window.
@@ -761,9 +836,14 @@ impl RustMixApp {
             .min_size(390.0)
             .max_size((viewport_height - 200.0).max(390.0))
             .show(ui, |ui| {
-                ui.take_available_space();
+                if dialog_busy {
+                    ui.disable();
+                }
                 self.switcher(ui);
             });
+        if dialog_busy {
+            ui.disable();
+        }
         let mut dock = std::mem::replace(&mut self.dock, DockState::new(vec![]));
         let style = egui_dock::Style::from_egui(ui.style());
         DockArea::new(&mut dock)

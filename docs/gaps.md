@@ -14,5 +14,6 @@
 | G08 | P2 | Minimum 1100×700; dense panels use scrolling. Broader high-DPI/multi-monitor/physical-device QA remains needed. |
 | G09 | P2 | FTB/active transitions reset at load. Demo countdown loops every minute; no editable production countdown. |
 | G10 | P1 | Unsigned portable prototype only. No installer, SBOM standard, signing, upgrade/rollback or release audit. |
+| G11 | P1 for UI-003/004 | Bounded dialog layout, navigation, footer visibility, monitor edit controls and input states await hosted compilation/widget execution and review of all nine dialog screenshots at 1100×700, 1600×900 and 1920×1080. Logical 734×466 widget coverage is prepared; physical 150% DPI remains unverified. |
 
 Do not claim 1080p/4K processing based on the project-format selector; actual demo rasters are capped and only displayed in the native UI.

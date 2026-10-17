@@ -46,3 +46,17 @@ Download the [Windows executable artifact](https://github.com/sansaks-jpg/rustmi
 This remains a UI prototype: CPU procedural media presented through egui's wgpu backend, deterministic simulated meters, and no real capture, sample-based audio, independent output clock, recording or streaming. Canvas preferences do not prove corresponding processing resolution. No physical workstation, hardware-device, accessibility, long-duration or GPU-loss qualification has been completed.
 
 Next: establish timestamped Program frame delivery independent of UI redraw, CPU golden fixtures and GPU comparison tests; then bounded still-image ingest and a real synthetic sample-based audio routing graph.
+
+## UI-003 in-progress changes (no new hosted acceptance yet)
+
+The owner supplied four local screenshots for main workspace, source selector, input settings and application settings. Inspected those locally for operator flow and hierarchy; vendor bitmaps remain ignored under `references/private/`. Reworked the three RustMix dialog workflows as a separate native egui module, adding generator categories, source property tabs, immediate simulated-audio routing, read-only source status, removal confirmation and staged project Settings with Apply/Cancel. The main layout now passes its allocated monitor area through to the switcher, widens the transition column, uses larger source tiles, and narrows the default Audio dock.
+
+Local non-compiling checks: `cargo fmt --all -- --check` and `scripts/check-repository.ps1` passed on the Windows project checkout. UI-003's new dialog interaction regression, native launch, actual screenshots and MSVC builds have **not** yet run; GitHub-hosted Windows remains the only permitted compilation environment. The previous accepted CI run proves UI-002, not UI-003. Re-run the existing Windows workflow after an authorized code push and inspect its new artifacts before upgrading this milestone's status.
+
+## UI-004 — operator flow and bounded dialogs (2026-10-17)
+
+Continued the existing uncommitted UI-003 work after reading AGENTS.md, project documentation and all four supplied local vMix reference images. The previous work was retained. The main changes are viewport-bounded Add Input / Properties / Settings windows with separate navigation/page scrolling and fixed footers; independent cached generator samples; monitor-header properties access; readable category/match-count/reset feedback; explicit offline input labels; and one removal confirmation flow shared by Properties and the context menu. Preview header text uses dark foreground against orange. Current-frame widget bounds replace stale automation entries.
+
+Local non-compiling checks: `cargo fmt --all -- --check` and `scripts/check-repository.ps1` passed on the staged current source. Relevant diff and API signatures in the pinned egui 0.35.0 source were reviewed. No new dependency, engine behavior, project schema or vendor asset was introduced.
+
+Three new widget regressions and nine native dialog screenshot/geometry checks were added to the existing hosted-only verification path. Rust compilation, clippy, widget/integration test execution and new native screenshot review have **not** run for UI-003/004. No local executable was built or launched. No commit/push or hosted build was initiated in this session. G11 stays open and UI-004 is an unverified source change; old accepted UI-002 results are not evidence for it.

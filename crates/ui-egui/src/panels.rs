@@ -88,21 +88,40 @@ impl RustMixApp {
             return;
         };
         let color = if program { PROGRAM } else { PREVIEW };
+        let foreground = if program {
+            Color32::WHITE
+        } else {
+            Color32::BLACK
+        };
         egui::Frame::new()
             .fill(color)
             .inner_margin(4.0)
             .show(ui, |ui| {
                 ui.set_min_width((ui.available_width() - 1.0).max(20.0));
                 ui.horizontal(|ui| {
-                    ui.add(
+                    ui.add_sized(
+                        [(ui.available_width() - 165.0).max(40.0), 18.0],
                         egui::Label::new(
                             RichText::new(format!("{}  {}", id.0, input.name))
                                 .strong()
-                                .color(Color32::WHITE),
+                                .color(foreground),
                         )
                         .truncate(),
                     );
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        let edit = ui
+                            .small_button("Edit")
+                            .on_hover_text("Open properties for this monitor's source");
+                        self.automation.insert(
+                            format!(
+                                "monitor.{}.properties",
+                                if program { "program" } else { "preview" }
+                            ),
+                            edit.rect,
+                        );
+                        if edit.clicked() {
+                            self.actions.push(Action::Properties(id));
+                        }
                         ui.label(
                             RichText::new(if input.online {
                                 if program {
@@ -113,8 +132,9 @@ impl RustMixApp {
                             } else {
                                 "OFFLINE · BLACK"
                             })
+                            .size(10.0)
                             .strong()
-                            .color(Color32::WHITE),
+                            .color(foreground),
                         );
                     });
                 });
@@ -273,7 +293,7 @@ impl RustMixApp {
     }
     fn switcher_content(&mut self, ui: &mut egui::Ui) {
         let available = ui.available_size();
-        let center = 110.0;
+        let center = 122.0;
         let side = ((available.x - center - 100.0) / 2.0).max(200.0);
         ui.horizontal_top(|ui| {
             ui.add_space(15.0);
@@ -433,11 +453,11 @@ impl RustMixApp {
         });
     }
     pub(crate) fn inputs(&mut self, ui: &mut egui::Ui) {
-        ui.horizontal(|ui| {
-            if ui
-                .selectable_label(self.category.is_none(), "All")
-                .clicked()
-            {
+        ui.horizontal_wrapped(|ui| {
+            let all = ui.selectable_label(self.category.is_none(), "All");
+            self.automation
+                .insert("inputs.category.all".into(), all.rect);
+            if all.clicked() {
                 self.category = None;
             }
             for (kind, color) in InputKind::ALL.into_iter().zip([
@@ -449,106 +469,173 @@ impl RustMixApp {
                 Color32::from_rgb(30, 30, 95),
                 Color32::from_rgb(30, 131, 116),
             ]) {
-                if ui
+                let selected = self.category == Some(kind);
+                let response = ui
                     .add(
-                        egui::Button::new(" ")
+                        egui::Button::new(if selected { "•" } else { " " })
                             .fill(color)
                             .stroke(Stroke::new(
-                                if self.category == Some(kind) {
-                                    2.0
-                                } else {
-                                    0.5
-                                },
-                                Color32::GRAY,
+                                if selected { 2.0 } else { 0.5 },
+                                Color32::WHITE,
                             ))
-                            .min_size(egui::vec2(20.0, 19.0)),
+                            .min_size(egui::vec2(21.0, 21.0)),
                     )
-                    .on_hover_text(kind.label())
-                    .clicked()
-                {
-                    self.category = Some(kind);
+                    .on_hover_text(kind.label());
+                self.automation
+                    .insert(format!("inputs.category.{kind:?}"), response.rect);
+                if response.clicked() {
+                    self.category = if selected { None } else { Some(kind) };
                 }
             }
-            ui.add(
+            let search = ui.add(
                 egui::TextEdit::singleline(&mut self.input_filter)
                     .hint_text("Search inputs")
-                    .desired_width(130.0),
+                    .desired_width(150.0)
+                    .char_limit(64),
             );
+            self.automation
+                .insert("inputs.filter.search".into(), search.rect);
+            if self.category.is_some() || !self.input_filter.is_empty() {
+                let clear = ui.small_button("Clear filters");
+                self.automation
+                    .insert("inputs.filter.clear".into(), clear.rect);
+                if clear.clicked() {
+                    self.category = None;
+                    self.input_filter.clear();
+                }
+            }
+            let filter = self.input_filter.trim().to_lowercase();
+            let inputs = &self.engine.project().inputs;
+            let visible = inputs
+                .iter()
+                .filter(|input| {
+                    input.name.to_lowercase().contains(&filter)
+                        && self.category.is_none_or(|kind| kind == input.kind)
+                })
+                .count();
+            ui.label(
+                RichText::new(format!(
+                    "{} · {visible}/{}",
+                    self.category.map_or("All inputs", InputKind::label),
+                    inputs.len()
+                ))
+                .small()
+                .color(DIM),
+            );
+            let offline = inputs.iter().filter(|input| !input.online).count();
+            if offline > 0 {
+                ui.colored_label(RED, format!("{offline} offline"));
+            }
         });
         self.source_tiles(ui, false);
     }
     fn source_tiles(&mut self, ui: &mut egui::Ui, large: bool) {
-        let inputs = self.engine.project().inputs.clone();
-        let program = self.engine.project().program;
-        let preview = self.engine.project().preview;
-        let target = if large { 300.0 } else { 205.0 };
+        let project = self.engine.project();
+        let inputs = project.inputs.clone();
+        let program = project.program;
+        let preview = project.preview;
+        let target = if large { 300.0 } else { 235.0 };
         let columns = ((ui.available_width() + 8.0) / (target + 8.0))
             .floor()
             .max(1.0) as usize;
-        let tile_width = ((ui.available_width() - (columns.saturating_sub(1) as f32 * 8.0))
+        let tile_width = ((ui.available_width() - columns.saturating_sub(1) as f32 * 8.0)
             / columns as f32)
             .max(80.0);
-        let filter = self.input_filter.to_lowercase();
+        let filter = self.input_filter.trim().to_lowercase();
         let filtered: Vec<_> = inputs
             .into_iter()
-            .filter(|i| {
-                i.name.to_lowercase().contains(&filter) && self.category.is_none_or(|k| k == i.kind)
+            .filter(|input| {
+                input.name.to_lowercase().contains(&filter)
+                    && self.category.is_none_or(|kind| kind == input.kind)
             })
             .collect();
-        egui::ScrollArea::vertical().id_salt("inputs.scroll").show(ui,|ui| {
-            if filtered.is_empty(){ui.label("No inputs match the filter.");}
+        egui::ScrollArea::vertical().id_salt(if large { "multiview.scroll" } else { "inputs.scroll" }).show(ui, |ui| {
+            if filtered.is_empty() {
+                ui.add_space(20.0);
+                ui.strong("No matching inputs");
+                ui.label(RichText::new("Change the search or clear the category filter above.").color(DIM));
+            }
             for row in filtered.chunks(columns) {
                 ui.horizontal_top(|ui| {
+                    ui.spacing_mut().item_spacing.x = 8.0;
                     for input in row {
-                        ui.push_id(("input",input.id.0),|ui| {
-                            ui.allocate_ui_with_layout(egui::vec2(tile_width,tile_width*9.0/16.0+62.0),egui::Layout::top_down(egui::Align::Min),|ui| {
-                                let color=if input.id==program{PROGRAM}else if input.id==preview{PREVIEW}else{Color32::from_rgb(53,64,77)};
-                                egui::Frame::new().fill(Color32::from_rgb(20,25,29)).stroke(Stroke::new(1.0,color)).inner_margin(1.0).show(ui,|ui| {
-                                    ui.set_width((tile_width-4.0).max(60.0));
-                                    let state=if input.id==program{"PGM"}else if input.id==preview{"PVW"}else{"IN"};
-                                    egui::Frame::new().fill(color).inner_margin(2.0).show(ui,|ui| {
+                        ui.push_id(("input", input.id.0), |ui| {
+                            ui.allocate_ui_with_layout(egui::vec2(tile_width, tile_width * 9.0 / 16.0 + 78.0),
+                                egui::Layout::top_down(egui::Align::Min), |ui| {
+                                let color = if input.id == program { PROGRAM } else if input.id == preview { PREVIEW } else { Color32::from_rgb(53, 64, 77) };
+                                egui::Frame::new().fill(Color32::from_rgb(20,25,29)).stroke(Stroke::new(1.0, color)).inner_margin(1.0).show(ui, |ui| {
+                                    ui.set_width((tile_width - 4.0).max(60.0));
+                                    let foreground = if input.id == preview { Color32::BLACK } else { Color32::WHITE };
+                                    let state = if !input.online { "OFF" } else if input.id == program { "PGM" } else if input.id == preview { "PVW" } else { "IN" };
+                                    egui::Frame::new().fill(color).inner_margin(3.0).show(ui, |ui| {
                                         ui.horizontal(|ui| {
-                                            ui.add_sized([ui.available_width()-35.0,16.0],egui::Label::new(RichText::new(format!("{}  {}",input.id.0,input.name)).strong().color(Color32::WHITE)).truncate());
-                                            ui.label(RichText::new(state).small().color(Color32::WHITE));
+                                            ui.add_sized([(ui.available_width() - 38.0).max(25.0), 16.0], egui::Label::new(RichText::new(format!("{}  {}", input.id.0, input.name)).strong().color(foreground)).truncate());
+                                            ui.label(RichText::new(state).small().color(foreground));
                                         });
                                     });
-                                    let size=egui::vec2(ui.available_width(),ui.available_width()*9.0/16.0);
-                                    let response=if let Some(t)=self.textures.get(&input.id){ui.add(egui::Image::new(t).fit_to_exact_size(size).sense(Sense::click()))}else{ui.allocate_response(size,Sense::click())};
-                                    self.automation.insert(format!("preview.input.{}",input.id.0),response.rect);
-                                    if response.clicked(){self.actions.push(Action::Engine(Command::SelectPreview(input.id)));}
-                                    response.on_hover_text("Select into Preview. Program changes only with CUT / FADE.").context_menu(|ui| {
-                                        self.command_button(ui,"preview.select","Select Preview",Command::SelectPreview(input.id),None);
-                                        if ui.button("Properties / rename…").clicked(){self.actions.push(Action::Properties(input.id));ui.close();}
-                                        self.command_button(ui,"input.remove","Remove input",Command::RemoveInput(input.id),None);
+                                    let size = egui::vec2(ui.available_width(), ui.available_width() * 9.0 / 16.0);
+                                    let response = if let Some(texture) = self.textures.get(&input.id) {
+                                        ui.add(egui::Image::new(texture).fit_to_exact_size(size).sense(Sense::click()))
+                                    } else { ui.allocate_response(size, Sense::click()) };
+                                    self.automation.insert(format!("preview.input.{}", input.id.0), response.rect);
+                                    if !input.online {
+                                        ui.painter().rect_filled(response.rect, 0.0, Color32::BLACK);
+                                        ui.painter().text(response.rect.center(), Align2::CENTER_CENTER, "OFFLINE / BLACK", FontId::proportional(12.0), RED);
+                                        self.automation.insert(format!("input.{}.offline", input.id.0), response.rect);
+                                    }
+                                    if response.clicked() { self.actions.push(Action::Engine(Command::SelectPreview(input.id))); }
+                                    response.on_hover_text(format!("{} · {}\nClick to select Preview. Program changes only with Cut / Fade.", input.name, input.kind.label())).context_menu(|ui| {
+                                        self.command_button(ui, "preview.select", "Select Preview", Command::SelectPreview(input.id), None);
+                                        if ui.button("Properties / rename…").clicked() { self.actions.push(Action::Properties(input.id)); ui.close(); }
+                                        let check = self.engine.enabled(&Command::RemoveInput(input.id));
+                                        if ui.add_enabled(check.is_ok(), egui::Button::new("Remove input…"))
+                                            .on_disabled_hover_text(check.err().map(|error| error.to_string()).unwrap_or_default()).clicked() {
+                                            self.actions.push(Action::RequestRemove(input.id)); ui.close();
+                                        }
                                     });
                                     ui.horizontal(|ui| {
-                                        ui.spacing_mut().item_spacing.x=2.0;
+                                        ui.spacing_mut().item_spacing.x = 2.0;
                                         for slot in 0..4 {
-                                            if let Some(mut overlay)=self.engine.project().overlays.get(slot).cloned() {
-                                                let selected=overlay.enabled&&overlay.title==input.name;
-                                                if ui.add(egui::Button::new(RichText::new((slot+1).to_string()).size(10.0)).selected(selected).min_size(egui::vec2(20.0,18.0))).on_hover_text("Use this input name as the lower-third title in this overlay slot").clicked(){overlay.enabled= !selected;overlay.title=input.name.clone();overlay.subtitle=input.kind.label().into();self.actions.push(Action::Engine(Command::SetOverlay(slot,overlay)));}
+                                            if let Some(mut overlay) = self.engine.project().overlays.get(slot).cloned() {
+                                                let selected = overlay.enabled && overlay.title == input.name;
+                                                let button = ui.add(egui::Button::new(RichText::new((slot + 1).to_string()).size(10.0)).selected(selected).min_size(egui::vec2(20.0, 19.0)))
+                                                    .on_hover_text("Use this source name as an overlay title");
+                                                self.automation.insert(format!("input.{}.overlay.{}", input.id.0, slot + 1), button.rect);
+                                                if button.clicked() { overlay.enabled = !selected; overlay.title = input.name.clone(); overlay.subtitle = input.kind.label().into(); self.actions.push(Action::Engine(Command::SetOverlay(slot, overlay))); }
                                             }
                                         }
-                                        if ui.small_button("PVW").clicked(){self.actions.push(Action::Engine(Command::SelectPreview(input.id)));}
-                                        let take=Command::TakeInput(input.id);
-                                        if ui.add_enabled(self.engine.enabled(&take).is_ok(),egui::Button::new(RichText::new("Cut").size(10.0))).on_hover_text("Explicitly take this source directly to Program").clicked(){self.actions.push(Action::Engine(take));}
+                                        let select = ui.small_button("PVW").on_hover_text("Select Preview");
+                                        self.automation.insert(format!("input.{}.preview", input.id.0), select.rect);
+                                        if select.clicked() { self.actions.push(Action::Engine(Command::SelectPreview(input.id))); }
+                                        let take = Command::TakeInput(input.id);
+                                        let check = self.engine.enabled(&take);
+                                        let cut = ui.add_enabled(check.is_ok(), egui::Button::new(RichText::new("Cut").size(10.0)))
+                                            .on_hover_text("Take this source directly to Program")
+                                            .on_disabled_hover_text(check.err().map(|error| error.to_string()).unwrap_or_default());
+                                        self.automation.insert(format!("input.{}.cut", input.id.0), cut.rect);
+                                        if cut.clicked() { self.actions.push(Action::Engine(take)); }
                                     });
                                     ui.horizontal(|ui| {
-                                        ui.spacing_mut().item_spacing.x=2.0;
-                                        for slot in 5..=8 {ui.add_enabled(false,egui::Button::new(RichText::new(slot.to_string()).size(10.0)).min_size(egui::vec2(20.0,17.0))).on_disabled_hover_text("Four overlay slots are implemented");}
-                                        if ui.add(egui::Button::new(RichText::new("Audio").size(10.0)).selected(!input.audio.muted)).on_hover_text("Toggle simulated input audio mute").clicked(){let mut a=input.audio.clone();a.muted= !a.muted;self.actions.push(Action::Engine(Command::SetInputAudio(input.id,a)));}
-                                        if ui.small_button("Edit").clicked(){self.actions.push(Action::Properties(input.id));}
+                                        ui.spacing_mut().item_spacing.x = 2.0;
+                                        for slot in 5..=8 { ui.add_enabled(false, egui::Button::new(RichText::new(slot.to_string()).size(10.0)).min_size(egui::vec2(20.0, 18.0))).on_disabled_hover_text("Four overlay slots are implemented"); }
+                                        let audio = ui.add(egui::Button::new(RichText::new("Audio").size(10.0)).selected(!input.audio.muted)).on_hover_text("Toggle simulated input mute");
+                                        self.automation.insert(format!("input.{}.audio", input.id.0), audio.rect);
+                                        if audio.clicked() { let mut channel = input.audio.clone(); channel.muted = !channel.muted; self.actions.push(Action::Engine(Command::SetInputAudio(input.id, channel))); }
+                                        let edit = ui.small_button("Edit").on_hover_text("Input properties");
+                                        self.automation.insert(format!("input.{}.properties", input.id.0), edit.rect);
+                                        if edit.clicked() { self.actions.push(Action::Properties(input.id)); }
                                     });
-
+                                    ui.add(egui::Label::new(RichText::new(if input.online { input.kind.label() } else { "Offline · black fallback" }).size(10.0).color(if input.online { DIM } else { RED })).truncate());
                                 });
                             });
                         });
                     }
                 });
-                ui.add_space(2.0);
+                ui.add_space(3.0);
             }
         });
     }
+
     pub(crate) fn audio(&mut self, ui: &mut egui::Ui) {
         ui.horizontal_wrapped(|ui| {
             ui.label(RichText::new("SIMULATED METERS").color(TEAL).small());
@@ -767,111 +854,10 @@ impl RustMixApp {
             });
     }
     pub(crate) fn dialogs(&mut self, ctx: &egui::Context) {
-        if self.add_open {
-            let mut open = true;
-            egui::Window::new("Add synthetic input")
-                .id(egui::Id::new("input.add.dialog"))
-                .open(&mut open)
-                .collapsible(false)
-                .show(ctx, |ui| {
-                    ui.label("Supported procedural sources only. Hardware capture is unavailable.");
-                    ui.add(egui::TextEdit::singleline(&mut self.add_name).char_limit(64));
-                    egui::ComboBox::from_id_salt("add.kind")
-                        .selected_text(self.add_kind.label())
-                        .show_ui(ui, |ui| {
-                            for kind in InputKind::ALL {
-                                ui.selectable_value(&mut self.add_kind, kind, kind.label());
-                            }
-                        });
-                    if ui.button("Add input").clicked() {
-                        self.actions.push(Action::Engine(Command::AddInput {
-                            name: self.add_name.clone(),
-                            kind: self.add_kind,
-                        }));
-                        self.add_open = false;
-                    }
-                });
-            if !open {
-                self.add_open = false;
-            }
-        }
-        if let Some(mut input) = self.properties.clone() {
-            let mut open = true;
-            egui::Window::new(format!("Input properties · {:02}", input.id.0))
-                .id(egui::Id::new("input.properties"))
-                .open(&mut open)
-                .collapsible(false)
-                .show(ctx, |ui| {
-                    ui.label("Name");
-                    ui.add(egui::TextEdit::singleline(&mut input.name).char_limit(64));
-                    egui::ComboBox::from_id_salt("properties.kind")
-                        .selected_text(input.kind.label())
-                        .show_ui(ui, |ui| {
-                            for kind in InputKind::ALL {
-                                ui.selectable_value(&mut input.kind, kind, kind.label());
-                            }
-                        });
-                    ui.color_edit_button_srgb(&mut input.color);
-                    ui.checkbox(
-                        &mut input.online,
-                        "Source online (offline = black + warning)",
-                    );
-                    ui.label(
-                        RichText::new("Synthetic source · camera/media backends unavailable")
-                            .color(DIM),
-                    );
-                    ui.horizontal(|ui| {
-                        if ui.button("Apply properties").clicked() {
-                            self.actions
-                                .push(Action::Engine(Command::UpdateInput(input.clone())));
-                            self.properties = None;
-                        }
-                        self.command_button(
-                            ui,
-                            "input.remove.properties",
-                            "Remove input",
-                            Command::RemoveInput(input.id),
-                            None,
-                        );
-                    });
-                });
-            if !open {
-                self.properties = None;
-            } else if self.properties.is_some() {
-                self.properties = Some(input);
-            }
-        }
-        if self.settings {
-            let mut open = true;
-            let mut p = self.engine.project().preferences.clone();
-            let mut name = self.engine.project().name.clone();
-            egui::Window::new("Settings / workspace").id(egui::Id::new("settings")).open(&mut open).resizable(true).default_width(440.0).show(ctx,|ui|{
-                ui.heading("Project format");ui.add(egui::TextEdit::singleline(&mut name).char_limit(120));
-                egui::ComboBox::from_id_salt("canvas").selected_text(format!("{} × {}",p.width,p.height)).show_ui(ui,|ui|{for (w,h) in [(1280,720),(1920,1080),(2560,1440),(3840,2160)]{if ui.selectable_label(p.width==w,format!("{w} × {h}")).clicked(){p.width=w;p.height=h;}}});
-                egui::ComboBox::from_id_salt("rate").selected_text(p.rate.label()).show_ui(ui,|ui|{for (n,d) in [(24,1),(25,1),(30,1),(50,1),(60,1),(24000,1001),(30000,1001),(60000,1001)]{if let Ok(rate)=Rate::new(n,d){ui.selectable_value(&mut p.rate,rate,rate.label());}}});
-                ui.label(RichText::new("Canvas metadata only. Monitor raster: 640×360; source previews: 384×216.").color(DIM).small());
-                ui.separator();ui.heading("Appearance / controls");ui.checkbox(&mut p.high_contrast,"High contrast text");ui.add(egui::Slider::new(&mut p.ui_scale,0.8..=1.5).text("UI scale"));ui.checkbox(&mut p.shortcuts,"Enable switching shortcuts");
-                ui.label("1–7: Preview   Space: CUT   Enter: FADE\nB: Fade black / restore   F1–F4: Overlays\nEsc: Cancel transition   Ctrl+I: Add input\nCtrl+S: Save   Ctrl+Shift+S: Save As   Ctrl+O: Open");
-                ui.label(RichText::new("Shortcuts pause while editing text. Key remapping is not available yet.").small().color(DIM));
-                ui.separator();ui.label("Drag panel tabs to dock / float. Drag split boundaries to resize.");
-                ui.horizontal(|ui|{if ui.button("Production layout").clicked(){self.actions.push(Action::Workspace(false));}
-if ui.button("Audio layout").clicked(){self.actions.push(Action::Workspace(true));}});
-                if ui.button("Recover checkpoint…").clicked(){self.actions.push(Action::Recover);}
-                ui.label(RichText::new("Recover loads the last autosave. Current project is retained if validation fails.").small().color(DIM));
-                ui.separator();ui.label("Unavailable: capture devices, real audio, encoders, recording, streaming.");
-            });
-            if p != self.engine.project().preferences {
-                self.actions
-                    .push(Action::Engine(Command::SetPreferences(p)));
-            }
-            if name != self.engine.project().name {
-                self.actions
-                    .push(Action::Engine(Command::RenameProject(name)));
-            }
-            if !open {
-                self.settings = false;
-            }
-        }
+        self.add_input_dialog(ctx);
+        self.input_properties_dialog(ctx);
+        self.settings_dialog(ctx);
+        self.remove_input_confirmation(ctx);
         if self.about {
             let mut open = true;
             egui::Window::new("About RustMix").open(&mut open).collapsible(false).show(ctx,|ui|{
@@ -885,7 +871,7 @@ if ui.button("Audio layout").clicked(){self.actions.push(Action::Workspace(true)
         if self.confirm_new {
             egui::Window::new("New project?").collapsible(false).show(ctx,|ui|{ui.label("Replace the current workspace with the demo project?\nSave the current project first if you need to keep it.");ui.horizontal(|ui|{
             if ui.button("Save current").clicked(){self.actions.push(Action::Save(false));}
-            if ui.add_enabled(self.job.is_none(),egui::Button::new("Create demo project")).clicked(){self.engine=Engine::default();self.dock=default_dock(false);self.path=None;self.saved_revision=0;self.textures.clear();self.last_demo_frame=None;self.confirm_new=false;}
+            if ui.add_enabled(self.job.is_none(),egui::Button::new("Create demo project")).clicked(){self.reset_editors();self.engine=Engine::default();self.dock=default_dock(false);self.path=None;self.saved_revision=0;self.textures.clear();self.last_demo_frame=None;self.confirm_new=false;}
             if ui.button("Cancel").clicked(){self.confirm_new=false;}
         });});
         }

@@ -17,6 +17,14 @@ Invoke-NativeSmoke @('--ui-smoke')
 foreach ($file in @('smoke-ok.json','workspace-1600.png','workspace-1920.png','smoke.rustmix.json','ui-elements.json')) {
     if (-not (Test-Path (Join-Path artifacts $file))) { throw "Missing native evidence: $file" }
 }
+foreach ($size in @('1100','1600','1920')) {
+    foreach ($dialog in @('add-input','input-properties','settings')) {
+        foreach ($suffix in @('.png','-elements.json')) {
+            $evidence = Join-Path artifacts ($dialog + '-' + $size + $suffix)
+            if (-not (Test-Path -LiteralPath $evidence)) { throw "Missing native dialog evidence: $evidence" }
+        }
+    }
+}
 Invoke-NativeSmoke @('--ui-smoke-reopen','artifacts/smoke.rustmix.json')
 if (-not (Test-Path artifacts/reopen-ok.json)) { throw 'Reopen did not validate the saved production' }
 Get-CimInstance Win32_VideoController | Select-Object Name,DriverVersion | ConvertTo-Json | Out-File artifacts/runner-graphics.json

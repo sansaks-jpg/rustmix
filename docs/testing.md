@@ -15,3 +15,9 @@ Native smoke is a functional and visual check, not a long-duration/performance q
 Not yet verified: audio samples, capture devices, monitor hotplug, independent output clock, full disk interruption, GPU loss recovery, color-managed GPU parity, accessibility navigation audit, real keyboard device delivery, 30-minute/8-hour soak, production media playback and a signed installer. A headless widget test does not prove desktop event delivery; the native harness does not prove behavior on a physical operator workstation.
 
 Current run evidence and exact outcomes belong in [ui-progress.md](ui-progress.md).
+
+## Pending UI-004 acceptance checks
+
+Three added widget regressions cover: fixed footer geometry and sidebar navigation at 734×466, 1100×700, 1600×900 and 1920×1080; monitor Edit/filter reset/offline visibility/removal cancellation with Preview/Program isolation; and generator samples after source removal plus Settings draft cancellation. The 734×466 case represents reduced logical space only and does not establish physical DPI behavior. These new Rust tests have not been run locally or remotely in this task.
+
+The hosted native harness now opens Add Input, Input Properties and Settings at each of the three supported physical-size requests, checks actual footer/body bounds, and captures nine `add-input-*`, `input-properties-*`, and `settings-*` PNG files plus matching `*-elements.json`. The PowerShell evidence gate requires every file before starting the saved-project reopen check. Existing switching, fader and save/reopen assertions remain. These captures are prepared, not generated; inspect actual PNG dimensions and pixels after an authorized CI run.
