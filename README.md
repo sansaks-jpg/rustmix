@@ -10,6 +10,8 @@ Windows x64 builds and tests run **on GitHub Actions**, not on the owner's lapto
 
 `rustmix-ui-evidence` contains native rendered screenshots and smoke-state JSON when the graphics environment supports launch. A build is not accepted as a successful UI milestone until that smoke step passes.
 
+Verified prototype: [Windows build and 14 passing tests, run 39025762188](https://github.com/sansaks-jpg/rustmix/actions/runs/39025762188), code revision `db4b7c0`. Download [rustmix-windows-x64](https://github.com/sansaks-jpg/rustmix/actions/runs/39025762188/artifacts/12098313180). Native launch, switching, fader, save/reopen and actual screenshot review passed; this is limited hosted-runner evidence, not broadcast hardware qualification. See [verification details](docs/ui-progress.md).
+
 Developer commands (for CI / an authorized build machine with Rust 1.94.1 and Windows MSVC tools):
 
 ```text
