@@ -627,13 +627,16 @@ impl Engine {
                 next.inputs.retain(|i| i.id != id);
                 affected.push(id);
             }
-            Command::UpdateInput(input) => {
+            Command::UpdateInput(mut input) => {
                 let old = next
                     .inputs
                     .iter_mut()
                     .find(|i| i.id == input.id)
                     .ok_or_else(|| invalid("Input not found"))?;
                 affected.push(input.id);
+                // Properties editors may hold an old snapshot. Audio has its own command
+                // and must never be reset by applying a source name/type/color change.
+                input.audio = old.audio.clone();
                 *old = input;
             }
             Command::SetInputAudio(id, a) => {

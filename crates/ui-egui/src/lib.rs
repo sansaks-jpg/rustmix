@@ -229,6 +229,7 @@ impl RustMixApp {
         if let Some(color) = color {
             button = button.fill(color).stroke(egui::Stroke::NONE);
         }
+        button = button.min_size(egui::vec2(ui.available_width().clamp(80.0, 160.0), 28.0));
         let response = ui
             .push_id(id, |ui| ui.add_enabled(enabled.is_ok(), button))
             .inner
@@ -254,8 +255,9 @@ impl RustMixApp {
         }
     }
     fn execute(&mut self, c: Command) {
+        let label = c.definition().label;
         match self.engine.execute(c, self.now) {
-            Ok(r) => self.say(format!("{} · revision {}", r.command, r.revision), false),
+            Ok(_) => self.say(format!("{label} completed"), false),
             Err(e) => self.say(e.to_string(), true),
         }
         self.last_demo_frame = None;
@@ -625,6 +627,14 @@ struct Viewer<'a> {
 }
 impl TabViewer for Viewer<'_> {
     type Tab = Panel;
+    fn id(&mut self, tab: &mut Panel) -> egui::Id {
+        egui::Id::new(("workspace.panel", *tab))
+    }
+    fn on_tab_button(&mut self, tab: &mut Panel, response: &egui::Response) {
+        self.app
+            .automation
+            .insert(format!("workspace.tab.{tab:?}"), response.rect);
+    }
     fn title(&mut self, tab: &mut Panel) -> egui::WidgetText {
         tab.title().into()
     }
@@ -638,6 +648,9 @@ impl TabViewer for Viewer<'_> {
     }
     fn is_closeable(&self, _: &Panel) -> bool {
         false
+    }
+    fn scroll_bars(&self, _: &Panel) -> [bool; 2] {
+        [false, false]
     }
 }
 impl eframe::App for RustMixApp {

@@ -73,6 +73,7 @@ impl RustMixApp {
         if s.wait < 4 {
             return Ok(());
         }
+        self.validate_monitor_geometry(ctx.viewport_rect().right())?;
         if reopen {
             if self.job.is_some() {
                 return Ok(());
@@ -153,12 +154,15 @@ impl RustMixApp {
                     .automation
                     .get("audio.MASTER.gain")
                     .ok_or_else(|| Error::Invalid("Master fader disappeared".into()))?;
-                s.events = vec![egui::Event::PointerButton {
-                    pos: rect.center(),
-                    button: egui::PointerButton::Primary,
-                    pressed: false,
-                    modifiers: egui::Modifiers::NONE,
-                }];
+                s.events = vec![
+                    egui::Event::PointerButton {
+                        pos: rect.center(),
+                        button: egui::PointerButton::Primary,
+                        pressed: false,
+                        modifiers: egui::Modifiers::NONE,
+                    },
+                    egui::Event::PointerGone,
+                ];
                 s.stage = 10;
             }
             10 => {
@@ -226,6 +230,46 @@ impl RustMixApp {
         }
         Ok(())
     }
+    fn validate_monitor_geometry(&self, right: f32) -> Result<()> {
+        let preview = self
+            .automation
+            .get("monitor.preview")
+            .ok_or_else(|| Error::Invalid("Preview viewport was not rendered".into()))?;
+        let program = self
+            .automation
+            .get("monitor.program")
+            .ok_or_else(|| Error::Invalid("Program viewport was not rendered".into()))?;
+        let cut = self
+            .automation
+            .get("switcher.cut")
+            .ok_or_else(|| Error::Invalid("CUT control was not rendered".into()))?;
+        let fade = self
+            .automation
+            .get("switcher.fade")
+            .ok_or_else(|| Error::Invalid("FADE control was not rendered".into()))?;
+        for rect in [preview, program] {
+            if !rect.is_finite()
+                || rect.width() < 300.0
+                || rect.height() < 168.0
+                || (rect.width() / rect.height() - 16.0 / 9.0).abs() > 0.01
+                || rect.right() > right + 2.0
+            {
+                return Err(Error::Invalid(format!(
+                    "Monitor viewport is clipped or collapsed: {rect:?}"
+                )));
+            }
+        }
+        if preview.right() > cut.left()
+            || cut.right() > program.left()
+            || (cut.left() - fade.left()).abs() > 2.0
+            || fade.top() < cut.bottom()
+        {
+            return Err(Error::Invalid(
+                "Transition controls overlap the monitors or are not stacked".into(),
+            ));
+        }
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -287,6 +331,7 @@ mod tests {
         for size in [[1920.0, 1080.0], [1600.0, 900.0], [1100.0, 700.0]] {
             frame(&mut app, &ctx, vec![], size);
             assert!(app.automation.get("switcher.cut").unwrap().is_finite());
+            app.validate_monitor_geometry(size[0]).unwrap();
         }
         let layout = serde_json::to_string(&app.dock).unwrap();
         let restored: DockState<Panel> = serde_json::from_str(&layout).unwrap();
@@ -298,5 +343,63 @@ mod tests {
         let mut hostile: serde_json::Value = serde_json::from_str(&layout).unwrap();
         hostile["surfaces"][0]["Main"]["nodes"][0] = serde_json::json!("Empty");
         assert!(workspace::decode(&hostile.to_string()).is_err());
+    }
+
+    #[test]
+    fn dragging_a_panel_tab_changes_docking_and_roundtrips() {
+        let mut app = RustMixApp::headless();
+        let ctx = egui::Context::default();
+        app.theme(&ctx);
+        for _ in 0..4 {
+            frame(&mut app, &ctx, vec![], [1600.0, 900.0]);
+        }
+        let from = app.automation.get("workspace.tab.Audio").unwrap().center();
+        let to = app.automation.get("workspace.tab.Inputs").unwrap().center();
+        frame(
+            &mut app,
+            &ctx,
+            vec![
+                egui::Event::PointerMoved(from),
+                egui::Event::PointerButton {
+                    pos: from,
+                    button: egui::PointerButton::Primary,
+                    pressed: true,
+                    modifiers: egui::Modifiers::NONE,
+                },
+            ],
+            [1600.0, 900.0],
+        );
+        for _ in 0..25 {
+            frame(
+                &mut app,
+                &ctx,
+                vec![egui::Event::PointerMoved(to)],
+                [1600.0, 900.0],
+            );
+        }
+        frame(
+            &mut app,
+            &ctx,
+            vec![egui::Event::PointerButton {
+                pos: to,
+                button: egui::PointerButton::Primary,
+                pressed: false,
+                modifiers: egui::Modifiers::NONE,
+            }],
+            [1600.0, 900.0],
+        );
+        frame(&mut app, &ctx, vec![], [1600.0, 900.0]);
+        let input_path = app.dock.find_tab(&Panel::Inputs).unwrap();
+        let audio_path = app.dock.find_tab(&Panel::Audio).unwrap();
+        assert_eq!(
+            input_path.node_path(),
+            audio_path.node_path(),
+            "Drag must dock Audio alongside Inputs"
+        );
+        let encoded = serde_json::to_string(&app.dock).unwrap();
+        assert_eq!(
+            workspace::decode(&encoded).unwrap().iter_all_tabs().count(),
+            4
+        );
     }
 }

@@ -123,7 +123,9 @@ fn source_management_routing_and_validation() {
     input.audio.muted = true;
     input.audio.solo = true;
     input.audio.sends = [false, true, false];
-    e.execute(Command::UpdateInput(input), 0).unwrap();
+    e.execute(Command::UpdateInput(input.clone()), 0).unwrap();
+    e.execute(Command::SetInputAudio(id, input.audio), 0)
+        .unwrap();
     assert_eq!(e.project().input(id).unwrap().name, "Renamed");
     assert_eq!(audio::bus_peaks(e.project(), 0, 1000), [0.0, 0.0]);
     e.execute(Command::RemoveInput(id), 0).unwrap();
@@ -151,4 +153,21 @@ fn audio_controls_remain_independent_during_transition() {
     assert!(e.transition().is_some());
     e.tick(1000);
     assert_eq!(e.project().program, InputId(2));
+}
+
+#[test]
+fn stale_source_properties_cannot_reset_audio_routes() {
+    let mut e = Engine::default();
+    let mut properties = e.project().inputs[0].clone();
+    let audio = AudioChannel {
+        gain_db: -21.0,
+        muted: true,
+        solo: false,
+        sends: [false, true, true],
+    };
+    e.execute(Command::SetInputAudio(properties.id, audio.clone()), 0)
+        .unwrap();
+    properties.name = "Renamed from an older dialog".into();
+    e.execute(Command::UpdateInput(properties), 1).unwrap();
+    assert_eq!(e.project().inputs[0].audio, audio);
 }

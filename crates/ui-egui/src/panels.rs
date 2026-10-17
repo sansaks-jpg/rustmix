@@ -102,6 +102,10 @@ impl RustMixApp {
             .min((available.y - 30.0).max(9.0) * 16.0 / 9.0);
         let (rect, _) =
             ui.allocate_exact_size(Vec2::new(width, width * 9.0 / 16.0), Sense::hover());
+        self.automation.insert(
+            format!("monitor.{}", if program { "program" } else { "preview" }),
+            rect,
+        );
         ui.painter().rect_filled(rect, 0.0, Color32::BLACK);
         let texture = if program {
             self.program_texture.as_ref()
@@ -235,117 +239,129 @@ impl RustMixApp {
     }
     fn switcher_content(&mut self, ui: &mut egui::Ui) {
         let available = ui.available_size();
-        let center = 150.0;
-        let side = ((available.x - center - 24.0) / 2.0).max(200.0);
+        let center = 160.0;
+        let side = ((available.x - center - 40.0) / 2.0).max(200.0);
         ui.horizontal_top(|ui| {
-            ui.allocate_ui(egui::vec2(side, available.y), |ui| self.monitor(ui, false));
+            ui.allocate_ui_with_layout(
+                egui::vec2(side, available.y),
+                egui::Layout::top_down(egui::Align::Min),
+                |ui| self.monitor(ui, false),
+            );
             ui.separator();
-            ui.allocate_ui(egui::vec2(center, available.y), |ui| {
-                ui.set_width(center);
-                ui.add_space(9.0);
-                ui.label(RichText::new("TRANSITION").small().color(DIM));
-                ui.add_space(10.0);
-                self.command_button(
-                    ui,
-                    "switcher.cut",
-                    "CUT   [Space]",
-                    Command::Cut,
-                    Some(Color32::from_rgb(40, 112, 118)),
-                );
-                ui.add_space(5.0);
-                self.command_button(
-                    ui,
-                    "switcher.fade",
-                    "FADE  [Enter]",
-                    Command::Transition(TransitionKind::Fade),
-                    None,
-                );
-                self.command_button(
-                    ui,
-                    "switcher.wipe",
-                    "WIPE",
-                    Command::Transition(TransitionKind::Wipe),
-                    None,
-                );
-                ui.add_space(9.0);
-                let mut duration = self.engine.project().duration_ms;
-                egui::ComboBox::from_id_salt("switcher.duration")
-                    .selected_text(format!("{duration} ms"))
-                    .width(119.0)
-                    .show_ui(ui, |ui| {
-                        for ms in [250, 500, 1000, 1500, 2000, 3000] {
-                            if ui
-                                .selectable_value(&mut duration, ms, format!("{ms} ms"))
-                                .changed()
-                            {
-                                self.actions.push(Action::Engine(Command::SetDuration(ms)));
+            ui.allocate_ui_with_layout(
+                egui::vec2(center, available.y),
+                egui::Layout::top_down(egui::Align::Min),
+                |ui| {
+                    ui.set_width(center);
+                    ui.add_space(9.0);
+                    ui.label(RichText::new("TRANSITION").small().color(DIM));
+                    ui.add_space(10.0);
+                    self.command_button(
+                        ui,
+                        "switcher.cut",
+                        "CUT   [Space]",
+                        Command::Cut,
+                        Some(Color32::from_rgb(40, 112, 118)),
+                    );
+                    ui.add_space(5.0);
+                    self.command_button(
+                        ui,
+                        "switcher.fade",
+                        "FADE  [Enter]",
+                        Command::Transition(TransitionKind::Fade),
+                        None,
+                    );
+                    self.command_button(
+                        ui,
+                        "switcher.wipe",
+                        "WIPE",
+                        Command::Transition(TransitionKind::Wipe),
+                        None,
+                    );
+                    ui.add_space(9.0);
+                    let mut duration = self.engine.project().duration_ms;
+                    egui::ComboBox::from_id_salt("switcher.duration")
+                        .selected_text(format!("{duration} ms"))
+                        .width(119.0)
+                        .show_ui(ui, |ui| {
+                            for ms in [250, 500, 1000, 1500, 2000, 3000] {
+                                if ui
+                                    .selectable_value(&mut duration, ms, format!("{ms} ms"))
+                                    .changed()
+                                {
+                                    self.actions.push(Action::Engine(Command::SetDuration(ms)));
+                                }
                             }
-                        }
-                    });
-                ui.add_space(8.0);
-                ui.separator();
-                ui.label(RichText::new("T-BAR / MANUAL").small().color(DIM));
-                let progress = self.engine.transition().map_or(0.0, |t| t.progress);
-                let auto = self.engine.transition().is_some_and(|t| !t.manual);
-                let mut manual = progress;
-                let response = ui.add_enabled(
-                    !auto,
-                    egui::Slider::new(&mut manual, 0.0..=1.0)
-                        .show_value(false)
-                        .text("T-Bar"),
-                );
-                if response.changed() {
-                    self.actions
-                        .push(Action::Engine(Command::SetManualProgress(manual)));
-                }
-                ui.label(
-                    RichText::new(format!(
-                        "{:03.0}%  {}",
-                        progress * 100.0,
-                        if auto {
-                            "AUTO"
-                        } else if progress > 0.0 {
-                            "MANUAL"
+                        });
+                    ui.add_space(8.0);
+                    ui.separator();
+                    ui.label(RichText::new("T-BAR / MANUAL").small().color(DIM));
+                    let progress = self.engine.transition().map_or(0.0, |t| t.progress);
+                    let auto = self.engine.transition().is_some_and(|t| !t.manual);
+                    let mut manual = progress;
+                    let response = ui.add_enabled(
+                        !auto,
+                        egui::Slider::new(&mut manual, 0.0..=1.0)
+                            .show_value(false)
+                            .text("T-Bar"),
+                    );
+                    if response.changed() {
+                        self.actions
+                            .push(Action::Engine(Command::SetManualProgress(manual)));
+                    }
+                    ui.label(
+                        RichText::new(format!(
+                            "{:03.0}%  {}",
+                            progress * 100.0,
+                            if auto {
+                                "AUTO"
+                            } else if progress > 0.0 {
+                                "MANUAL"
+                            } else {
+                                "READY"
+                            }
+                        ))
+                        .monospace()
+                        .color(TEAL),
+                    );
+                    self.command_button(
+                        ui,
+                        "switcher.cancel",
+                        "Cancel / return",
+                        Command::CancelTransition,
+                        None,
+                    );
+                    ui.add_space(9.0);
+                    ui.separator();
+                    let is_black = self.engine.black_level() > 0.5;
+                    self.command_button(
+                        ui,
+                        "switcher.ftb",
+                        if is_black {
+                            "RESTORE  [B]"
                         } else {
-                            "READY"
-                        }
-                    ))
-                    .monospace()
-                    .color(TEAL),
-                );
-                self.command_button(
-                    ui,
-                    "switcher.cancel",
-                    "Cancel / return",
-                    Command::CancelTransition,
-                    None,
-                );
-                ui.add_space(9.0);
-                ui.separator();
-                let is_black = self.engine.black_level() > 0.5;
-                self.command_button(
-                    ui,
-                    "switcher.ftb",
-                    if is_black {
-                        "RESTORE  [B]"
-                    } else {
-                        "FADE TO BLACK"
-                    },
-                    Command::FadeBlack,
-                    if is_black {
-                        Some(Color32::from_rgb(123, 51, 59))
-                    } else {
-                        None
-                    },
-                );
-                ui.label(
-                    RichText::new("Monitor output only\nNo external broadcast")
-                        .small()
-                        .color(DIM),
-                );
-            });
+                            "FADE TO BLACK"
+                        },
+                        Command::FadeBlack,
+                        if is_black {
+                            Some(Color32::from_rgb(123, 51, 59))
+                        } else {
+                            None
+                        },
+                    );
+                    ui.label(
+                        RichText::new("Monitor output only\nNo external broadcast")
+                            .small()
+                            .color(DIM),
+                    );
+                },
+            );
             ui.separator();
-            ui.allocate_ui(egui::vec2(side, available.y), |ui| self.monitor(ui, true));
+            ui.allocate_ui_with_layout(
+                egui::vec2(side, available.y),
+                egui::Layout::top_down(egui::Align::Min),
+                |ui| self.monitor(ui, true),
+            );
         });
     }
     pub(crate) fn inputs(&mut self, ui: &mut egui::Ui) {
@@ -382,31 +398,44 @@ impl RustMixApp {
             .into_iter()
             .filter(|i| i.name.to_lowercase().contains(&filter))
             .collect();
-        egui::ScrollArea::vertical().id_salt("inputs.scroll").show(ui,|ui|{
+        egui::ScrollArea::vertical().id_salt("inputs.scroll").show(ui,|ui| {
             if filtered.is_empty(){ui.label("No inputs match the filter.");}
-            for row in filtered.chunks(columns){ui.horizontal_top(|ui|{for input in row {
-                ui.push_id(("input",input.id.0),|ui|{
-                    let color=if input.id==program{RED}else if input.id==preview{TEAL}else{Color32::from_rgb(53,64,77)};
-                    egui::Frame::new().fill(Color32::from_rgb(24,30,38)).stroke(Stroke::new(1.0,color)).inner_margin(5.0).show(ui,|ui| {
-                        ui.set_width((tile_width-12.0).max(60.0));
-                        let state=if input.id==program{"PGM"}else if input.id==preview{"PVW"}else{"IN"};
-                        ui.horizontal(|ui|{ui.label(RichText::new(format!("{:02}",input.id.0)).color(color).strong());ui.add(egui::Label::new(RichText::new(&input.name).strong()).truncate());ui.label(RichText::new(state).small().color(color));});
-                        let size=egui::vec2(ui.available_width(),ui.available_width()*9.0/16.0);
-                        let response=if let Some(t)=self.textures.get(&input.id){ui.add(egui::Image::new(t).fit_to_exact_size(size).sense(Sense::click()))}else{ui.allocate_response(size,Sense::click())};
-                        self.automation.insert(format!("preview.input.{}",input.id.0),response.rect);
-                        if response.clicked(){self.actions.push(Action::Engine(Command::SelectPreview(input.id)));}
-                        response.on_hover_text("Select into Preview. Program changes only with CUT / FADE.").context_menu(|ui|{
-                            self.command_button(ui,"preview.select","Select Preview",Command::SelectPreview(input.id),None);
-                            if ui.button("Properties / rename…").clicked(){self.actions.push(Action::Properties(input.id));ui.close();}
-                            self.command_button(ui,"input.remove","Remove input",Command::RemoveInput(input.id),None);
+            for row in filtered.chunks(columns) {
+                ui.horizontal_top(|ui| {
+                    for input in row {
+                        ui.push_id(("input",input.id.0),|ui| {
+                            ui.allocate_ui_with_layout(egui::vec2(tile_width,tile_width*9.0/16.0+62.0),egui::Layout::top_down(egui::Align::Min),|ui| {
+                                let color=if input.id==program{RED}else if input.id==preview{TEAL}else{Color32::from_rgb(53,64,77)};
+                                egui::Frame::new().fill(Color32::from_rgb(24,30,38)).stroke(Stroke::new(1.0,color)).inner_margin(5.0).show(ui,|ui| {
+                                    ui.set_width((tile_width-12.0).max(60.0));
+                                    let state=if input.id==program{"PGM"}else if input.id==preview{"PVW"}else{"IN"};
+                                    ui.horizontal(|ui| {
+                                        ui.add_sized([ui.available_width()-35.0,17.0],egui::Label::new(RichText::new(format!("{:02}  {}",input.id.0,input.name)).strong()).truncate());
+                                        ui.label(RichText::new(state).small().color(color));
+                                    });
+                                    let size=egui::vec2(ui.available_width(),ui.available_width()*9.0/16.0);
+                                    let response=if let Some(t)=self.textures.get(&input.id){ui.add(egui::Image::new(t).fit_to_exact_size(size).sense(Sense::click()))}else{ui.allocate_response(size,Sense::click())};
+                                    self.automation.insert(format!("preview.input.{}",input.id.0),response.rect);
+                                    if response.clicked(){self.actions.push(Action::Engine(Command::SelectPreview(input.id)));}
+                                    response.on_hover_text("Select into Preview. Program changes only with CUT / FADE.").context_menu(|ui| {
+                                        self.command_button(ui,"preview.select","Select Preview",Command::SelectPreview(input.id),None);
+                                        if ui.button("Properties / rename…").clicked(){self.actions.push(Action::Properties(input.id));ui.close();}
+                                        self.command_button(ui,"input.remove","Remove input",Command::RemoveInput(input.id),None);
+                                    });
+                                    ui.horizontal(|ui| {
+                                        ui.label(RichText::new(if input.online{input.kind.label()}else{"OFFLINE / BLACK"}).small().color(if input.online{DIM}else{RED}));
+                                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center),|ui| {
+                                            if ui.small_button("Edit").on_hover_text("Input properties and rename").clicked(){self.actions.push(Action::Properties(input.id));}
+                                            ui.label(RichText::new(if input.audio.muted{"M"}else{"AUD"}).small().color(if input.audio.muted{DIM}else{TEAL}));
+                                        });
+                                    });
+                                });
+                            });
                         });
-                        ui.horizontal(|ui|{
-                            ui.label(RichText::new(if input.online{input.kind.label()}else{"OFFLINE / BLACK"}).small().color(if input.online{DIM}else{RED}));
-                            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center),|ui|{if ui.small_button("Edit").on_hover_text("Input properties and rename").clicked(){self.actions.push(Action::Properties(input.id));}ui.label(RichText::new(if input.audio.muted{"M"}else{"AUD"}).small().color(if input.audio.muted{DIM}else{TEAL}));});
-                        });
-                    });
+                    }
                 });
-            }});ui.add_space(2.0);}
+                ui.add_space(2.0);
+            }
         });
     }
     pub(crate) fn audio(&mut self, ui: &mut egui::Ui) {
