@@ -761,8 +761,8 @@ impl RustMixApp {
             .min_size(390.0)
             .max_size((viewport_height - 200.0).max(390.0))
             .show(ui, |ui| {
-                self.switcher(ui);
                 ui.take_available_space();
+                self.switcher(ui);
             });
         let mut dock = std::mem::replace(&mut self.dock, DockState::new(vec![]));
         let style = egui_dock::Style::from_egui(ui.style());
