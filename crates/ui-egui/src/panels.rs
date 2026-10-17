@@ -784,24 +784,22 @@ impl RustMixApp {
             .show(ui, |ui| {
                 ui.horizontal_top(|ui| {
                     ui.spacing_mut().item_spacing.x = 3.0;
-                    mixer_rail(ui, height, "OUTPUTS");
-                    for (bus, name) in ["MASTER", "AUX A", "AUX B"].into_iter().enumerate() {
-                        if let Some(a) = p.buses.get(bus) {
-                            let peaks = audio::bus_peaks(&p, bus, self.now);
-                            let changed = self.strip(
-                                ui,
-                                (format!("bus.{bus}"), name),
-                                a.clone(),
-                                peaks,
-                                height,
-                                None,
-                            );
-                            if let Some(a) = changed {
-                                self.actions.push(Action::Engine(Command::SetBus(bus, a)));
-                            }
+                    mixer_rail(ui, height, "MASTER");
+                    if let Some(a) = p.buses.first() {
+                        let peaks = audio::bus_peaks(&p, 0, self.now);
+                        let changed = self.strip(
+                            ui,
+                            ("bus.0".into(), "MASTER"),
+                            a.clone(),
+                            peaks,
+                            height,
+                            None,
+                        );
+                        if let Some(a) = changed {
+                            self.actions.push(Action::Engine(Command::SetBus(0, a)));
                         }
                     }
-                    ui.add_space(5.0);
+                    ui.add_space(4.0);
                     mixer_rail(ui, height, "INPUTS");
                     for input in &p.inputs {
                         let peaks = audio::input_peaks(input, solo, self.now);
@@ -819,6 +817,24 @@ impl RustMixApp {
                             self.selected_audio = Some(i.id);
                             self.actions
                                 .push(Action::Engine(Command::SetInputAudio(i.id, i.audio)));
+                        }
+                    }
+                    ui.add_space(4.0);
+                    mixer_rail(ui, height, "AUX");
+                    for (bus, name) in [(1, "AUX A"), (2, "AUX B")] {
+                        if let Some(a) = p.buses.get(bus) {
+                            let peaks = audio::bus_peaks(&p, bus, self.now);
+                            let changed = self.strip(
+                                ui,
+                                (format!("bus.{bus}"), name),
+                                a.clone(),
+                                peaks,
+                                height,
+                                None,
+                            );
+                            if let Some(a) = changed {
+                                self.actions.push(Action::Engine(Command::SetBus(bus, a)));
+                            }
                         }
                     }
                 });
@@ -925,11 +941,12 @@ impl RustMixApp {
                 });
                 ui.horizontal(|ui| {
                     ui.spacing_mut().item_spacing.x = 2.0;
+                    ui.spacing_mut().button_padding = egui::vec2(4.0, 2.0);
                     let mute = ui
                         .add(
                             egui::Button::new(RichText::new("M").size(11.0))
                                 .selected(a.muted)
-                                .min_size(egui::vec2(22.0, 19.0)),
+                                .min_size(egui::vec2(20.0, 19.0)),
                         )
                         .on_hover_text("Mute this channel across all buses");
                     if mute.clicked() {
@@ -939,7 +956,7 @@ impl RustMixApp {
                         .add(
                             egui::Button::new(RichText::new("S").size(11.0))
                                 .selected(a.solo)
-                                .min_size(egui::vec2(22.0, 19.0)),
+                                .min_size(egui::vec2(20.0, 19.0)),
                         )
                         .on_hover_text("Solo this channel in the simulated mix");
                     if solo.clicked() {
@@ -949,7 +966,7 @@ impl RustMixApp {
                         let gear = ui
                             .add(
                                 egui::Button::new(RichText::new("⚙").size(11.0))
-                                    .min_size(egui::vec2(20.0, 19.0)),
+                                    .min_size(egui::vec2(18.0, 19.0)),
                             )
                             .on_hover_text("Open Audio / buses settings for this input");
                         self.automation
