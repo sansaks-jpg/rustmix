@@ -1049,12 +1049,10 @@ impl RustMixApp {
                 ui.horizontal_top(|ui| {
                     ui.spacing_mut().item_spacing.x = 3.0;
                     // Pin icon at top-left of Audio Mixer matching Interface.png
-                    ui.vertical(|ui| {
-                        let _ = ui.add(
-                            egui::Button::new(RichText::new("📌").size(11.0))
-                                .min_size(egui::vec2(20.0, 20.0)),
-                        );
-                    });
+                    let _ = ui.add(
+                        egui::Button::new(RichText::new("📌").size(11.0))
+                            .min_size(egui::vec2(20.0, 20.0)),
+                    );
                     mixer_rail(ui, height, "OUTPUTS");
                     if let Some(a) = p.buses.first() {
                         let peaks = audio::bus_peaks(&p, 0, self.now);

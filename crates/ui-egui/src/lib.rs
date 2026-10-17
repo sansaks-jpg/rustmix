@@ -117,7 +117,7 @@ fn default_dock(audio_focus: bool) -> DockState<Panel> {
     let mut dock = DockState::new(vec![Panel::Inputs, Panel::Overlays]);
     dock.main_surface_mut().split_right(
         NodeIndex::root(),
-        if audio_focus { 0.59 } else { 0.82 },
+        if audio_focus { 0.59 } else { 0.76 },
         vec![Panel::Audio],
     );
     dock
