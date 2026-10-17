@@ -1,0 +1,19 @@
+# ADR 0004 — Main-window control fidelity
+
+2026-10-17 · UI-005 · UI-only source change set; hosted verification pending.
+
+**Context.** UI-002 adopted the observed generic main-window arrangement and UI-003/004 added bounded configuration dialogs. Re-reviewing the private `Interface.png` and `Input Settings.png` references for UI-005 showed five operator-level differences still worth adopting at prototype level: the transition handle is vertical and pulled downward to complete; each output in the bottom strip carries its own settings affordance; mixer group labels sit in vertical side rails; source tiles separate overlay, preview/take and audio/properties controls into rows with header controls; and workspace commands live at the bottom right rather than in a top View menu.
+
+**Decision.** Change presentation only; keep the engine, command contract, project schema and existing automation IDs that the harness already uses.
+
+- Vertical T-Bar: the displayed handle is `1.0 − progress`, so it rests at the top when the engine's manual progress is 0 and completes when pulled to the bottom. `SetManualProgress` keeps its unchanged 0..1 meaning and the existing completion latch stays active through the pointer-release frame, because egui can emit the final slider value on release. Inverting the engine instead would change tested domain semantics for a display preference.
+- Grouped outputs: every disabled output (Record, External, Stream, MultiCorder, PlayList) keeps its button and gains its own disabled gear with an explicit reason, publishing `output.<id>` and `output.<id>.settings`.
+- Mixer rails: OUTPUTS and INPUTS groups are separated by blue side rails with rotated labels drawn through epaint `TextShape`; strips use a filled name chip and M/S selected-state buttons. `audio.<name>.gain` IDs are unchanged.
+- Tiles: the header shows source number/name, a PGM / PVW / OFFLINE chip and a hover "×" remove control (`input.<n>.remove`) that dispatches the existing single removal confirmation; the properties gear keeps `input.<n>.properties`. Control rows become overlays 1–4 + PVW + Cut, then overlays 5–8 (disabled with a reason) + Audio + properties.
+- Workspace menu: remove the top View menu; its items plus Settings move to the bottom-right "☰" menu. Fullscreen stays centred in the toolbar with the new `toolbar.fullscreen` ID.
+
+**Consequences.** No command, schema, transition rule or asset changes, and monitor/audio/property automation IDs keep their meaning, so the held-endpoint T-Bar widget regression only retargets its drag to the bottom of the vertical slider. The UI now resolves one previously unverified visual detail (T-Bar direction) in favour of the observed pull-down behaviour; this is RustMix's own documented semantics, not a compatibility or pixel-identity claim. The status readout continues to separate demo measurements from broadcast/encoder performance. Remaining fidelity work is tracked in [gaps.md](../gaps.md) for UI-006: the Overlay Settings dialog, a per-tile audio channel dialog, dialog category icons and grouping, dock tab styling, multiview presets and study of the remaining private references.
+
+**Asset rule.** All new visuals are original RustMix artwork and UI constants (`IDLE_TILE`, `MIXER_RAIL`, `CHIP_BG`). The gear, "×", "☰" and "▼" glyphs come from the pinned egui/epaint bundled fonts already covered by the preserved notices. No vendor bitmap, icon, font, wording or pixel was copied, and no file was added under `assets/`, so ATTRIBUTION.md is unchanged.
+
+**Acceptance.** Existing engine and widget suite unchanged except the T-Bar drag endpoint. Verified by hosted Windows run [39046367904](https://github.com/sansaks-jpg/rustmix/actions/runs/39046367904), commit `a19fc03`: all steps passed, including the native T-Bar/smoke harness, and the 1600×900 and 1920×1080 workspace captures were reviewed. No local build was used.
