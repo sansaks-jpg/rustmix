@@ -714,7 +714,8 @@ impl RustMixApp {
                 ui.label("1–7: Preview   Space: CUT   Enter: FADE\nB: Fade black / restore   F1–F4: Overlays\nEsc: Cancel transition   Ctrl+I: Add input\nCtrl+S: Save   Ctrl+Shift+S: Save As   Ctrl+O: Open");
                 ui.label(RichText::new("Shortcuts pause while editing text. Key remapping is not available yet.").small().color(DIM));
                 ui.separator();ui.label("Drag panel tabs to dock / float. Drag split boundaries to resize.");
-                ui.horizontal(|ui|{if ui.button("Production layout").clicked(){self.actions.push(Action::Workspace(false));}if ui.button("Audio layout").clicked(){self.actions.push(Action::Workspace(true));}});
+                ui.horizontal(|ui|{if ui.button("Production layout").clicked(){self.actions.push(Action::Workspace(false));}
+if ui.button("Audio layout").clicked(){self.actions.push(Action::Workspace(true));}});
                 if ui.button("Recover checkpoint…").clicked(){self.actions.push(Action::Recover);}
                 ui.label(RichText::new("Recover loads the last autosave. Current project is retained if validation fails.").small().color(DIM));
                 ui.separator();ui.label("Unavailable: capture devices, real audio, encoders, recording, streaming.");
@@ -744,7 +745,7 @@ impl RustMixApp {
         if self.confirm_new {
             egui::Window::new("New project?").collapsible(false).show(ctx,|ui|{ui.label("Replace the current workspace with the demo project?\nSave the current project first if you need to keep it.");ui.horizontal(|ui|{
             if ui.button("Save current").clicked(){self.actions.push(Action::Save(false));}
-            if ui.button("Create demo project").clicked(){self.engine=Engine::default();self.dock=default_dock(false);self.path=None;self.saved_revision=0;self.textures.clear();self.last_demo_frame=None;self.confirm_new=false;}
+            if ui.add_enabled(self.job.is_none(),egui::Button::new("Create demo project")).clicked(){self.engine=Engine::default();self.dock=default_dock(false);self.path=None;self.saved_revision=0;self.textures.clear();self.last_demo_frame=None;self.confirm_new=false;}
             if ui.button("Cancel").clicked(){self.confirm_new=false;}
         });});
         }

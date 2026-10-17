@@ -159,12 +159,23 @@ impl RustMixApp {
                     pressed: false,
                     modifiers: egui::Modifiers::NONE,
                 }];
-                self.capture_workspace();
+                s.stage = 10;
+            }
+            10 => {
                 std::fs::create_dir_all("artifacts")?;
-                persistence::save(
-                    &PathBuf::from("artifacts/smoke.rustmix.json"),
-                    self.engine.project(),
-                )?;
+                self.path = Some(PathBuf::from("artifacts/smoke.rustmix.json"));
+                self.dispatch(Action::Save(false), ctx);
+                s.stage = 11;
+            }
+            11 => {
+                if self.job.is_some() {
+                    return Ok(());
+                }
+                if !PathBuf::from("artifacts/smoke.rustmix.json").exists() {
+                    return Err(Error::Invalid(
+                        "UI save worker did not write the project".into(),
+                    ));
+                }
                 self.assert_smoke_state()?;
                 ctx.send_viewport_cmd(egui::ViewportCommand::Screenshot(egui::UserData::default()));
                 s.captured = false;
@@ -230,9 +241,7 @@ mod tests {
             events,
             ..Default::default()
         };
-        let _ = ctx.run(raw, |ctx| {
-            egui::CentralPanel::default().show(ctx, |ui| app.frame_ui(ui));
-        });
+        let _ = ctx.run_ui(raw, |ui| app.frame_ui(ui));
     }
     #[test]
     fn actual_widgets_dispatch_commands_and_survive_resize() {

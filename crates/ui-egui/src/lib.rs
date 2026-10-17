@@ -69,7 +69,7 @@ pub(crate) enum Action {
 }
 enum JobDone {
     Saved(PathBuf, u64, bool),
-    Loaded(ProjectState, PathBuf),
+    Loaded(Box<ProjectState>, PathBuf),
     Cancelled,
     Failed(String),
 }
@@ -335,7 +335,7 @@ impl RustMixApp {
             });
             let result = if let Some(path) = path {
                 match persistence::load(&path) {
-                    Ok(p) => JobDone::Loaded(p, path),
+                    Ok(p) => JobDone::Loaded(Box::new(p), path),
                     Err(e) => JobDone::Failed(e.to_string()),
                 }
             } else {
@@ -364,7 +364,7 @@ impl RustMixApp {
                             false,
                         );
                     }
-                    JobDone::Loaded(project, path) => match Engine::from_project(project) {
+                    JobDone::Loaded(project, path) => match Engine::from_project(*project) {
                         Ok(engine) => {
                             let layout = engine.project().workspace.dock_json.clone();
                             self.engine = engine;
