@@ -1,7 +1,7 @@
 //! Validated same-filesystem atomic replacement, two backups, recovery journal.
 use crate::{Error, ProjectState, Result, invalid};
 use std::{
-    fs::{self, File},
+    fs::File,
     io::{Read, Write},
     path::{Path, PathBuf},
 };

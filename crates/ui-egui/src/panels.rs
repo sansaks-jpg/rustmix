@@ -458,7 +458,8 @@ impl RustMixApp {
                             let mut i = input.clone();
                             i.audio = a;
                             self.selected_audio = Some(i.id);
-                            self.actions.push(Action::Engine(Command::UpdateInput(i)));
+                            self.actions
+                                .push(Action::Engine(Command::SetInputAudio(i.id, i.audio)));
                         }
                     }
                 });

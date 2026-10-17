@@ -334,6 +334,7 @@ pub enum Command {
     AddInput { name: String, kind: InputKind },
     RemoveInput(InputId),
     UpdateInput(InputState),
+    SetInputAudio(InputId, AudioChannel),
     SetBus(usize, AudioChannel),
     SetOverlay(usize, OverlayState),
     SetPreferences(Preferences),
@@ -399,6 +400,14 @@ impl Command {
             ),
             Self::RemoveInput(_) => ("input.remove", "Remove input", "Inputs", "", false, false),
             Self::UpdateInput(_) => ("input.update", "Edit input", "Inputs", "", true, false),
+            Self::SetInputAudio(..) => (
+                "audio.input.set",
+                "Input audio controls",
+                "Audio",
+                "",
+                true,
+                false,
+            ),
             Self::SetBus(..) => (
                 "audio.bus.set",
                 "Set bus controls",
@@ -626,6 +635,15 @@ impl Engine {
                     .ok_or_else(|| invalid("Input not found"))?;
                 affected.push(input.id);
                 *old = input;
+            }
+            Command::SetInputAudio(id, a) => {
+                let input = next
+                    .inputs
+                    .iter_mut()
+                    .find(|i| i.id == id)
+                    .ok_or_else(|| invalid("Input not found"))?;
+                input.audio = a;
+                affected.push(id);
             }
             Command::SetBus(i, a) => {
                 *next

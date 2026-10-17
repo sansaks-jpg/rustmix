@@ -1,6 +1,7 @@
 #![forbid(unsafe_code)]
 mod panels;
 mod smoke;
+mod workspace;
 
 use eframe::egui::{self, Color32, RichText};
 use egui_dock::{DockArea, DockState, NodeIndex, TabViewer};
@@ -110,7 +111,7 @@ impl RustMixApp {
         let mut app = Self::headless();
         if let Some(storage) = cc.storage {
             if let Some(json) = storage.get_string("workspace.v1") {
-                match serde_json::from_str::<DockState<Panel>>(&json) {
+                match workspace::decode(&json) {
                     Ok(dock) => app.dock = dock,
                     Err(_) => {
                         app.notice = "Saved workspace was invalid; using Production layout".into()
@@ -202,7 +203,8 @@ impl RustMixApp {
         style
             .text_styles
             .insert(egui::TextStyle::Button, egui::FontId::proportional(13.0));
-        ctx.set_style(style);
+        ctx.set_theme(egui::ThemePreference::Dark);
+        ctx.set_style_of(egui::Theme::Dark, style);
         ctx.set_zoom_factor(self.engine.project().preferences.ui_scale);
     }
     pub(crate) fn command_button(
@@ -363,7 +365,7 @@ impl RustMixApp {
                             self.textures.clear();
                             self.properties = None;
                             if !layout.is_empty() {
-                                match serde_json::from_str(&layout) {
+                                match workspace::decode(&layout) {
                                     Ok(dock) => self.dock = dock,
                                     Err(_) => {
                                         self.dock = default_dock(false);
@@ -484,7 +486,7 @@ impl RustMixApp {
         ui.label(RichText::new(&self.notice).color(if self.warning { RED } else { DIM }));
     }
     fn shortcuts(&mut self, ctx: &egui::Context) {
-        if ctx.wants_keyboard_input()
+        if ctx.egui_wants_keyboard_input()
             || self.properties.is_some()
             || self.settings
             || self.add_open
