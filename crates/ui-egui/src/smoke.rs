@@ -354,7 +354,8 @@ mod tests {
             frame(&mut app, &ctx, vec![], [1600.0, 900.0]);
         }
         let from = app.automation.get("workspace.tab.Audio").unwrap().center();
-        let to = app.automation.get("workspace.tab.Inputs").unwrap().center();
+        let destination = app.dock.find_tab(&Panel::Inputs).unwrap().node_path();
+        let to = app.dock.leaf(destination).unwrap().viewport.center();
         frame(
             &mut app,
             &ctx,

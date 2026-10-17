@@ -9,3 +9,5 @@ eframe includes egui font assets through epaint_default_fonts. Preserve their in
 No FFmpeg, GStreamer, GPL/LGPL runtime, x264/x265, NDI, ASIO, VST or capture SDK is added. Codecs, patents and device SDK licensing remain future integration reviews. Native dependencies include Windows/wgpu/winit/AccessKit FFI; crate unsafe restrictions apply to RustMix code, not audited claims about dependencies.
 
 The portable CI artifact includes a locked dependency manifest and collected upstream license/notice texts, including font notices. This is a prototype inventory, not a formal legal audit or a signed distribution SBOM. Security advisories must be checked using cargo-audit if installed on the runner; do not claim a vulnerability scan without a result.
+
+UI-002 optionally uses the existing Windows Segoe UI font through a runtime file read from the installed OS fonts folder. No Segoe font is copied or redistributed. On systems without it, the unmodified egui fallback font resources and notices apply.
