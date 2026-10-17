@@ -64,6 +64,8 @@ pub(crate) enum Action {
     Fullscreen,
     Close,
     Recover,
+    ConfirmOpen,
+    CloseDiscard,
 }
 enum JobDone {
     Saved(PathBuf, u64, bool),
@@ -97,6 +99,9 @@ pub struct RustMixApp {
     pub(crate) fullscreen: bool,
     pub(crate) confirm_new: bool,
     pub(crate) confirm_close: bool,
+    pub(crate) confirm_open: bool,
+    pub(crate) allow_close: bool,
+    pub(crate) pending_open: Option<PathBuf>,
     pub(crate) fps: f32,
     fps_start: Instant,
     fps_frames: u32,
@@ -109,13 +114,13 @@ pub struct RustMixApp {
 impl RustMixApp {
     pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
         let mut app = Self::headless();
-        if let Some(storage) = cc.storage {
-            if let Some(json) = storage.get_string("workspace.v1") {
-                match workspace::decode(&json) {
-                    Ok(dock) => app.dock = dock,
-                    Err(_) => {
-                        app.notice = "Saved workspace was invalid; using Production layout".into()
-                    }
+        if let Some(storage) = cc.storage
+            && let Some(json) = storage.get_string("workspace.v1")
+        {
+            match workspace::decode(&json) {
+                Ok(dock) => app.dock = dock,
+                Err(_) => {
+                    app.notice = "Saved workspace was invalid; using Production layout".into()
                 }
             }
         }
@@ -158,6 +163,9 @@ impl RustMixApp {
             fullscreen: false,
             confirm_new: false,
             confirm_close: false,
+            confirm_open: false,
+            allow_close: false,
+            pending_open: None,
             fps: 0.0,
             fps_start: Instant::now(),
             fps_frames: 0,
@@ -336,7 +344,7 @@ impl RustMixApp {
             let _ = tx.send(result);
         });
     }
-    fn poll_job(&mut self) {
+    fn poll_job(&mut self, ctx: &egui::Context) {
         let result = self.job.as_ref().map(Receiver::try_recv);
         match result {
             Some(Ok(done)) => {
@@ -360,6 +368,8 @@ impl RustMixApp {
                         Ok(engine) => {
                             let layout = engine.project().workspace.dock_json.clone();
                             self.engine = engine;
+                            self.last_demo_frame = None;
+                            self.theme(ctx);
                             self.path = Some(path);
                             self.saved_revision = self.engine.project().revision;
                             self.textures.clear();
@@ -412,7 +422,17 @@ impl RustMixApp {
                 self.confirm_new = true;
             }
             Action::Open => {
-                self.start_load(None);
+                self.pending_open = None;
+                if self.saved_revision != self.engine.project().revision {
+                    self.confirm_open = true;
+                } else {
+                    self.start_load(None);
+                }
+            }
+            Action::ConfirmOpen => {
+                self.confirm_open = false;
+                let path = self.pending_open.take();
+                self.start_load(path);
             }
             Action::Save(as_new) => self.start_save(as_new, false),
             Action::Add => self.add_open = true,
@@ -436,7 +456,19 @@ impl RustMixApp {
                 ctx.send_viewport_cmd(egui::ViewportCommand::Fullscreen(self.fullscreen));
             }
             Action::Close => self.confirm_close = true,
-            Action::Recover => self.start_load(Some(Self::recovery_path())),
+            Action::Recover => {
+                self.pending_open = Some(Self::recovery_path());
+                if self.saved_revision != self.engine.project().revision {
+                    self.confirm_open = true;
+                } else {
+                    let path = self.pending_open.take();
+                    self.start_load(path);
+                }
+            }
+            Action::CloseDiscard => {
+                self.allow_close = true;
+                ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+            }
         }
     }
     fn toolbar(&mut self, ui: &mut egui::Ui) {
@@ -486,12 +518,13 @@ impl RustMixApp {
         ui.label(RichText::new(&self.notice).color(if self.warning { RED } else { DIM }));
     }
     fn shortcuts(&mut self, ctx: &egui::Context) {
-        if ctx.egui_wants_keyboard_input()
+        if ctx.text_edit_focused()
             || self.properties.is_some()
             || self.settings
             || self.add_open
             || self.confirm_new
             || self.confirm_close
+            || self.confirm_open
         {
             return;
         }
@@ -533,23 +566,23 @@ impl RustMixApp {
             .into_iter()
             .enumerate()
             {
-                if i.consume_key(egui::Modifiers::NONE, key) {
-                    if let Some(input) = self.engine.project().inputs.get(n) {
-                        self.actions
-                            .push(Action::Engine(Command::SelectPreview(input.id)));
-                    }
+                if i.consume_key(egui::Modifiers::NONE, key)
+                    && let Some(input) = self.engine.project().inputs.get(n)
+                {
+                    self.actions
+                        .push(Action::Engine(Command::SelectPreview(input.id)));
                 }
             }
             for (n, key) in [egui::Key::F1, egui::Key::F2, egui::Key::F3, egui::Key::F4]
                 .into_iter()
                 .enumerate()
             {
-                if i.consume_key(egui::Modifiers::NONE, key) {
-                    if let Some(o) = self.engine.project().overlays.get(n) {
-                        let mut o = o.clone();
-                        o.enabled = !o.enabled;
-                        self.actions.push(Action::Engine(Command::SetOverlay(n, o)));
-                    }
+                if i.consume_key(egui::Modifiers::NONE, key)
+                    && let Some(o) = self.engine.project().overlays.get(n)
+                {
+                    let mut o = o.clone();
+                    o.enabled = !o.enabled;
+                    self.actions.push(Action::Engine(Command::SetOverlay(n, o)));
                 }
             }
         });
@@ -558,7 +591,7 @@ impl RustMixApp {
         let ctx = ui.ctx().clone();
         self.now = u64::try_from(self.start.elapsed().as_millis()).unwrap_or(u64::MAX);
         self.engine.tick(self.now);
-        self.poll_job();
+        self.poll_job(&ctx);
         self.shortcuts(&ctx);
         self.refresh_textures(&ctx);
         egui::Panel::top("toolbar").show(ui, |ui| self.toolbar(ui));
@@ -616,7 +649,7 @@ impl eframe::App for RustMixApp {
     fn ui(&mut self, ui: &mut egui::Ui, _: &mut eframe::Frame) {
         if ui.ctx().input(|i| i.viewport().close_requested())
             && self.saved_revision != self.engine.project().revision
-            && !self.confirm_close
+            && !self.allow_close
         {
             ui.ctx()
                 .send_viewport_cmd(egui::ViewportCommand::CancelClose);

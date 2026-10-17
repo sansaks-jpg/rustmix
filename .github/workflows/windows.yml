@@ -23,6 +23,9 @@ jobs:
           cache-on-failure: true
       - name: Formatting
         run: cargo fmt --all -- --check
+      - name: Dependency layering and asset inventory
+        shell: pwsh
+        run: ./scripts/check-repository.ps1
       - name: Check workspace
         run: cargo check --workspace --locked
       - name: Clippy (warnings are errors)
@@ -47,7 +50,7 @@ jobs:
           New-Item -ItemType Directory -Path dist -Force | Out-Null
           Copy-Item -LiteralPath target/release/rustmix.exe -Destination dist/
           Copy-Item -LiteralPath README.md,ATTRIBUTION.md,LICENSE-MIT -Destination dist/
-          cargo metadata --locked --format-version 1 | Out-File -Encoding utf8 dist/dependency-manifest.json
+          ./scripts/collect-notices.ps1
           Get-FileHash -Algorithm SHA256 dist/rustmix.exe | Format-List | Out-File dist/SHA256.txt
       - uses: actions/upload-artifact@v4
         with:

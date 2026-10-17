@@ -82,26 +82,24 @@ pub(crate) fn decode(json: &str) -> Result<DockState<Panel>> {
                 return Err(bad());
             }
         }
-        if let Some(focus) = tree.get("focused_node").and_then(Value::as_u64) {
-            if nodes
+        if let Some(focus) = tree.get("focused_node").and_then(Value::as_u64)
+            && nodes
                 .get(focus as usize)
                 .and_then(|n| n.get("Leaf"))
                 .is_none()
-            {
-                return Err(bad());
-            }
+        {
+            return Err(bad());
         }
     }
     if seen.len() != 4 {
         return Err(bad());
     }
-    if let Some(focus) = value.get("focused_surface").and_then(Value::as_u64) {
-        if surfaces
+    if let Some(focus) = value.get("focused_surface").and_then(Value::as_u64)
+        && surfaces
             .get(focus as usize)
             .is_none_or(|s| s.as_str() == Some("Empty"))
-        {
-            return Err(bad());
-        }
+    {
+        return Err(bad());
     }
     Ok(serde_json::from_value(value)?)
 }

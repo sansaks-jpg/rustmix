@@ -430,8 +430,7 @@ impl RustMixApp {
                             let peaks = audio::bus_peaks(&p, bus, self.now);
                             let changed = self.strip(
                                 ui,
-                                format!("bus.{bus}"),
-                                name,
+                                (format!("bus.{bus}"), name),
                                 a.clone(),
                                 peaks,
                                 height,
@@ -447,8 +446,7 @@ impl RustMixApp {
                         let peaks = audio::input_peaks(input, solo, self.now);
                         let changed = self.strip(
                             ui,
-                            format!("input.{}", input.id.0),
-                            &input.name,
+                            (format!("input.{}", input.id.0), &input.name),
                             input.audio.clone(),
                             peaks,
                             height,
@@ -483,13 +481,13 @@ impl RustMixApp {
     fn strip(
         &mut self,
         ui: &mut egui::Ui,
-        id: String,
-        name: &str,
+        identity: (String, &str),
         mut a: AudioChannel,
         peaks: [f32; 2],
         height: f32,
         sends: bool,
     ) -> Option<AudioChannel> {
+        let (id, name) = identity;
         let before = a.clone();
         ui.push_id(id, |ui| {
             ui.vertical(|ui| {
@@ -760,13 +758,23 @@ impl RustMixApp {
                             self.actions.push(Action::Save(false));
                         }
                         if ui.button("Close without saving").clicked() {
-                            ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+                            self.actions.push(Action::CloseDiscard);
                         }
                         if ui.button("Keep working").clicked() {
                             self.confirm_close = false;
                         }
                     });
                 });
+        }
+        if self.confirm_open {
+            egui::Window::new("Open another project?").collapsible(false).show(ctx,|ui|{
+                ui.label("The current project has unsaved changes. Save it before replacing the workspace.");
+                ui.horizontal(|ui|{
+                    if ui.button("Save current").clicked(){self.actions.push(Action::Save(false));}
+                    if ui.add_enabled(self.job.is_none(),egui::Button::new("Open project")).clicked(){self.actions.push(Action::ConfirmOpen);}
+                    if ui.button("Cancel").clicked(){self.confirm_open=false;self.pending_open=None;}
+                });
+            });
         }
     }
 }

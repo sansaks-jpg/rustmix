@@ -685,19 +685,17 @@ impl Engine {
         let now = now.max(self.last_ms);
         self.last_ms = now;
         let mut completed = false;
-        if let Some(t) = &mut self.transition {
-            if !t.manual {
-                t.progress =
-                    (now.saturating_sub(t.start_ms) as f32 / t.duration_ms.max(1) as f32).min(1.0);
-                completed = t.progress >= 1.0;
-            }
+        if let Some(t) = &mut self.transition
+            && !t.manual
+        {
+            t.progress =
+                (now.saturating_sub(t.start_ms) as f32 / t.duration_ms.max(1) as f32).min(1.0);
+            completed = t.progress >= 1.0;
         }
-        if completed {
-            if let Some(t) = self.transition.take() {
-                self.project.program = t.to;
-                self.project.preview = t.from;
-                self.project.revision = self.project.revision.saturating_add(1);
-            }
+        if completed && let Some(t) = self.transition.take() {
+            self.project.program = t.to;
+            self.project.preview = t.from;
+            self.project.revision = self.project.revision.saturating_add(1);
         }
         if let Some((start, from, to)) = self.black_ramp {
             let p = (now.saturating_sub(start) as f32 / self.project.duration_ms.max(1) as f32)

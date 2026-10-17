@@ -136,3 +136,19 @@ fn source_management_routing_and_validation() {
     );
     assert!(render::source(&e.project().inputs[0], 99999, 99999, 0).is_err());
 }
+
+#[test]
+fn audio_controls_remain_independent_during_transition() {
+    let mut e = Engine::default();
+    e.execute(Command::Transition(TransitionKind::Wipe), 0)
+        .unwrap();
+    let mut audio = e.project().inputs[0].audio.clone();
+    audio.gain_db = -18.0;
+    audio.sends = [true, true, false];
+    e.execute(Command::SetInputAudio(InputId(1), audio), 100)
+        .unwrap();
+    assert_eq!(e.project().inputs[0].audio.gain_db, -18.0);
+    assert!(e.transition().is_some());
+    e.tick(1000);
+    assert_eq!(e.project().program, InputId(2));
+}

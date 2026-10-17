@@ -282,5 +282,12 @@ mod tests {
         let layout = serde_json::to_string(&app.dock).unwrap();
         let restored: DockState<Panel> = serde_json::from_str(&layout).unwrap();
         assert_eq!(restored.iter_all_tabs().count(), 4);
+        assert!(workspace::decode(&layout).is_ok());
+        let mut hostile: serde_json::Value = serde_json::from_str(&layout).unwrap();
+        hostile["focused_surface"] = serde_json::json!(999);
+        assert!(workspace::decode(&hostile.to_string()).is_err());
+        let mut hostile: serde_json::Value = serde_json::from_str(&layout).unwrap();
+        hostile["surfaces"][0]["Main"]["nodes"][0] = serde_json::json!("Empty");
+        assert!(workspace::decode(&hostile.to_string()).is_err());
     }
 }
