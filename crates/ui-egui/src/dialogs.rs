@@ -27,14 +27,33 @@ fn operator_window<'a>(
         .constrain_to(bounds)
 }
 
-fn sidebar_button(ui: &mut egui::Ui, active: bool, label: &str) -> egui::Response {
+fn sidebar_button(
+    ui: &mut egui::Ui,
+    active: bool,
+    label: &str,
+    accent: Option<Color32>,
+) -> egui::Response {
     ui.push_id(label, |ui| {
-        ui.add_sized(
+        let response = ui.add_sized(
             [152.0, 29.0],
             egui::Button::new(RichText::new(label).strong().color(Color32::WHITE))
                 .fill(if active { PROGRAM } else { SIDEBAR })
                 .stroke(Stroke::NONE),
-        )
+        );
+        if let Some(accent) = accent {
+            let mark = egui::Rect::from_min_size(
+                egui::pos2(response.rect.left() + 8.0, response.rect.center().y - 7.0),
+                Vec2::new(14.0, 14.0),
+            );
+            ui.painter().rect_filled(mark, 2.0, accent);
+            ui.painter().rect_stroke(
+                mark,
+                2.0,
+                Stroke::new(1.0, Color32::from_gray(24)),
+                egui::StrokeKind::Inside,
+            );
+        }
+        response
     })
     .inner
 }
@@ -55,6 +74,14 @@ fn kind_description(kind: InputKind) -> &'static str {
         InputKind::Studio => "Procedurally drawn newsroom-style background.",
         InputKind::Color => "Static color generator for a full-frame fill.",
         InputKind::Countdown => "Animated one-minute countdown reference.",
+    }
+}
+
+fn position_label(position: Position) -> &'static str {
+    match position {
+        Position::LowerLeft => "Lower left",
+        Position::LowerRight => "Lower right",
+        Position::TopLeft => "Top left",
     }
 }
 
@@ -174,7 +201,12 @@ impl RustMixApp {
                 |app, ui| {
                     ui.label(RichText::new("AVAILABLE").small().strong().color(DIM));
                     for kind in InputKind::ALL {
-                        let button = sidebar_button(ui, app.add_kind == kind, kind.label());
+                        let button = sidebar_button(
+                            ui,
+                            app.add_kind == kind,
+                            kind.label(),
+                            Some(kind_color(kind)),
+                        );
                         app.automation
                             .insert(format!("dialog.add.kind.{kind:?}"), button.rect);
                         if button.clicked() {
@@ -315,7 +347,12 @@ impl RustMixApp {
                             (InputPage::Audio, "Audio / buses"),
                             (InputPage::Status, "Source status"),
                         ] {
-                            let button = sidebar_button(ui, app.input_page == page, label);
+                            let accent = match page {
+                                InputPage::General => TEAL,
+                                InputPage::Audio => PREVIEW,
+                                InputPage::Status => Color32::from_rgb(120, 132, 145),
+                            };
+                            let button = sidebar_button(ui, app.input_page == page, label, Some(accent));
                             app.automation.insert(format!("dialog.properties.page.{page:?}"), button.rect);
                             if button.clicked() {
                                 app.input_page = page;
@@ -539,7 +576,13 @@ impl RustMixApp {
                             (SettingsPage::Workspace, "Workspace"),
                             (SettingsPage::Shortcuts, "Shortcuts"),
                         ] {
-                            let button = sidebar_button(ui, app.settings_page == page, label);
+                            let accent = match page {
+                                SettingsPage::Display => TEAL,
+                                SettingsPage::Appearance => Color32::from_rgb(132, 29, 145),
+                                SettingsPage::Workspace => Color32::from_rgb(0, 144, 229),
+                                SettingsPage::Shortcuts => PREVIEW,
+                            };
+                            let button = sidebar_button(ui, app.settings_page == page, label, Some(accent));
                             app.automation.insert(format!("dialog.settings.page.{page:?}"), button.rect);
                             if button.clicked() {
                                 app.settings_page = page;
@@ -747,6 +790,274 @@ impl RustMixApp {
         } else {
             self.settings_draft = Some(p);
             self.settings_name = name;
+        }
+    }
+
+    /// Overlay Settings: the real title-overlay model with staged edits per slot.
+    /// Unsupported graphics pages stay visible but disabled with an explicit reason.
+    pub(crate) fn overlay_settings_dialog(&mut self, ctx: &egui::Context) {
+        if self.overlay_settings.is_none() {
+            return;
+        }
+        let mut open = true;
+        let mut close_after = false;
+        let slots = self.engine.project().overlays.len();
+        let duration = self.engine.project().duration_ms;
+        let number = self
+            .overlay_settings
+            .as_ref()
+            .map_or(1, |(slot, _)| slot + 1);
+        operator_window(
+            ctx,
+            format!("Overlay Settings  /  Overlay {number}"),
+            "overlay.settings",
+            &mut open,
+            Vec2::new(720.0, 640.0),
+        )
+        .show(ctx, |ui| {
+            let body_height = (ui.available_height() - 54.0).max(130.0);
+            self.dialog_columns(
+                ui,
+                "dialog.overlay",
+                body_height,
+                |app, ui| {
+                    let current = app.overlay_settings.as_ref().map_or(0, |(slot, _)| *slot);
+                    ui.label(RichText::new("NUMBER").small().strong().color(DIM));
+                    for index in 0..slots {
+                        let on = app
+                            .engine
+                            .project()
+                            .overlays
+                            .get(index)
+                            .is_some_and(|overlay| overlay.enabled);
+                        let label = format!(
+                            "Overlay {}{}",
+                            index + 1,
+                            if on { "  · on" } else { "" }
+                        );
+                        let button = sidebar_button(ui, index == current, &label, Some(TEAL));
+                        app.automation
+                            .insert(format!("dialog.overlay.slot.{}", index + 1), button.rect);
+                        if button.clicked()
+                            && let Some(target) = app.engine.project().overlays.get(index).cloned()
+                        {
+                            app.overlay_settings = Some((index, target));
+                        }
+                    }
+                    ui.add_space(10.0);
+                    ui.label(RichText::new("UNAVAILABLE").small().strong().color(DIM));
+                    for label in ["Data sources", "Templates", "Playlist"] {
+                        ui.add_enabled(
+                            false,
+                            egui::Button::new(label).min_size(Vec2::new(152.0, 27.0)),
+                        )
+                        .on_disabled_hover_text("This graphics backend is not implemented");
+                    }
+                    ui.add_space(10.0);
+                    ui.label(
+                        RichText::new("Edits are staged per slot; switching slots or closing the window discards unapplied changes.")
+                            .small()
+                            .color(DIM),
+                    );
+                },
+                |app, ui| {
+                    let Some((slot, draft)) = app.overlay_settings.as_mut() else {
+                        return;
+                    };
+                    let slot = *slot;
+                    section_heading(
+                        ui,
+                        &format!("Overlay {}", slot + 1),
+                        "Title overlay composited over the simulated Program output",
+                    );
+                    let show = ui.checkbox(&mut draft.enabled, "Show on Program");
+                    app.automation.insert("dialog.overlay.enabled".into(), show.rect);
+                    ui.label(
+                        RichText::new("Slots composite over Program only; Preview is unchanged.")
+                            .small()
+                            .color(DIM),
+                    );
+                    ui.add_space(6.0);
+                    ui.horizontal(|ui| {
+                        ui.label("Type");
+                        let field = ui.add_enabled(
+                            false,
+                            egui::Button::new(RichText::new("Title (text overlay)   ▼").size(12.0))
+                                .min_size(Vec2::new(190.0, 25.0)),
+                        );
+                        app.automation.insert("dialog.overlay.type".into(), field.rect);
+                        ui.label(RichText::new("only implemented type").small().color(DIM));
+                    });
+                    ui.horizontal(|ui| {
+                        ui.label("Effect");
+                        ui.label(
+                            RichText::new(format!(
+                                "Fade · {duration} ms (project transition duration)"
+                            ))
+                            .color(DIM),
+                        );
+                    });
+                    ui.label(
+                        RichText::new("Per-overlay duration is not implemented; the fade follows Settings → Display.")
+                            .small()
+                            .color(DIM),
+                    );
+                    ui.add_space(8.0);
+                    ui.label("Title");
+                    let title_edit = ui.add_sized(
+                        [ui.available_width().min(320.0), 25.0],
+                        egui::TextEdit::singleline(&mut draft.title)
+                            .char_limit(96)
+                            .hint_text("Title text"),
+                    );
+                    app.automation
+                        .insert("dialog.overlay.title".into(), title_edit.rect);
+                    ui.label("Subtitle");
+                    let subtitle_edit = ui.add_sized(
+                        [ui.available_width().min(320.0), 25.0],
+                        egui::TextEdit::singleline(&mut draft.subtitle)
+                            .char_limit(160)
+                            .hint_text("Subtitle text"),
+                    );
+                    app.automation
+                        .insert("dialog.overlay.subtitle".into(), subtitle_edit.rect);
+                    if draft.enabled && draft.title.trim().is_empty() {
+                        ui.colored_label(
+                            RED,
+                            "An enabled overlay with an empty title still shows its panel bar on Program.",
+                        );
+                    }
+                    ui.add_space(8.0);
+                    ui.label("Position");
+                    ui.horizontal(|ui| {
+                        for position in [
+                            Position::LowerLeft,
+                            Position::LowerRight,
+                            Position::TopLeft,
+                        ] {
+                            let response = ui.selectable_label(
+                                draft.position == position,
+                                position_label(position),
+                            );
+                            app.automation.insert(
+                                format!("dialog.overlay.position.{position:?}"),
+                                response.rect,
+                            );
+                            if response.clicked() {
+                                draft.position = position;
+                            }
+                        }
+                    });
+                    ui.add_space(6.0);
+                    let (frame, _) =
+                        ui.allocate_exact_size(Vec2::new(256.0, 144.0), egui::Sense::hover());
+                    app.automation
+                        .insert("dialog.overlay.preview".into(), frame);
+                    let shown = draft.position;
+                    let visible = if draft.enabled { 1.0 } else { 0.35 };
+                    let panel = overlay_panel_rect(frame, shown, slot);
+                    let painter = ui.painter_at(frame);
+                    painter.rect_filled(frame, 2.0, Color32::from_rgb(23, 29, 35));
+                    painter.rect_stroke(
+                        frame,
+                        2.0,
+                        Stroke::new(1.0, TEAL.gamma_multiply(0.6)),
+                        egui::StrokeKind::Inside,
+                    );
+                    painter.rect_stroke(
+                        frame.shrink(frame.height() * 0.05),
+                        0.0,
+                        Stroke::new(1.0, Color32::from_gray(66)),
+                        egui::StrokeKind::Inside,
+                    );
+                    painter.rect_filled(
+                        panel,
+                        0.0,
+                        Color32::from_rgb(14, 29, 42).gamma_multiply(visible),
+                    );
+                    painter.rect_filled(
+                        egui::Rect::from_min_size(
+                            panel.min,
+                            egui::vec2(frame.width() * 0.008, panel.height()),
+                        ),
+                        0.0,
+                        Color32::from_rgb(39, 192, 207).gamma_multiply(visible),
+                    );
+                    painter.with_clip_rect(panel).text(
+                        panel.left_top() + egui::vec2(frame.width() * 0.02, frame.height() * 0.006),
+                        egui::Align2::LEFT_TOP,
+                        &draft.title,
+                        egui::FontId::proportional(9.0),
+                        Color32::WHITE.gamma_multiply(visible),
+                    );
+                    painter.with_clip_rect(panel).text(
+                        panel.left_top() + egui::vec2(frame.width() * 0.02, frame.height() * 0.052),
+                        egui::Align2::LEFT_TOP,
+                        &draft.subtitle,
+                        egui::FontId::proportional(7.0),
+                        Color32::from_gray(190).gamma_multiply(visible),
+                    );
+                    painter.rect_stroke(
+                        panel,
+                        0.0,
+                        Stroke::new(
+                            1.0,
+                            if draft.enabled {
+                                TEAL
+                            } else {
+                                Color32::from_gray(120)
+                            },
+                        ),
+                        egui::StrokeKind::Inside,
+                    );
+                    ui.label(
+                        RichText::new("Preview uses the committed Program proportions (panel 56% × 9.5%, text inset 2%). The demo Program raster is 640×360.")
+                            .small()
+                            .color(DIM),
+                    );
+                },
+            );
+            ui.separator();
+            ui.horizontal(|ui| {
+                ui.with_layout(egui::Layout::right_to_left(Align::Center), |ui| {
+                    let cancel = ui.add_sized([88.0, 29.0], egui::Button::new("Cancel"));
+                    self.automation
+                        .insert("dialog.overlay.cancel".into(), cancel.rect);
+                    if cancel.clicked() {
+                        close_after = true;
+                    }
+                    let command = self
+                        .overlay_settings
+                        .as_ref()
+                        .map(|(slot, draft)| Command::SetOverlay(*slot, draft.clone()));
+                    let ready = command
+                        .as_ref()
+                        .is_some_and(|command| self.engine.enabled(command).is_ok());
+                    let apply = ui.add_enabled(
+                        ready,
+                        egui::Button::new("Apply")
+                            .fill(PROGRAM)
+                            .min_size(Vec2::new(110.0, 29.0)),
+                    );
+                    self.automation
+                        .insert("dialog.overlay.apply".into(), apply.rect);
+                    if apply.clicked()
+                        && let Some(command) = command
+                    {
+                        self.actions.push(Action::Engine(command));
+                        close_after = true;
+                    }
+                    ui.add(
+                        egui::Label::new(
+                            RichText::new("OFFLINE DEMO · Program only").small().color(DIM),
+                        )
+                        .truncate(),
+                    );
+                });
+            });
+        });
+        if !open || close_after {
+            self.overlay_settings = None;
         }
     }
 

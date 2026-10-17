@@ -2,7 +2,7 @@
 //! state assertions, project reopen, and GPU readback screenshots; no external output.
 use super::*;
 // Only consumed by the opt-in hosted native harness, never by normal startup.
-const DIALOG_SHOTS: [(&str, [f32; 2], u8); 9] = [
+const DIALOG_SHOTS: [(&str, [f32; 2], u8); 10] = [
     ("add-input-1100", [1100.0, 700.0], 0),
     ("input-properties-1100", [1100.0, 700.0], 1),
     ("settings-1100", [1100.0, 700.0], 2),
@@ -12,6 +12,7 @@ const DIALOG_SHOTS: [(&str, [f32; 2], u8); 9] = [
     ("add-input-1920", [1920.0, 1080.0], 0),
     ("input-properties-1920", [1920.0, 1080.0], 1),
     ("settings-1920", [1920.0, 1080.0], 2),
+    ("overlay-settings-1600", [1600.0, 900.0], 3),
 ];
 #[derive(Default)]
 pub(crate) struct Smoke {
@@ -233,7 +234,7 @@ impl RustMixApp {
                 s.stage = 20;
             }
 
-            20..=46 => {
+            20..=49 => {
                 let offset = s.stage - 20;
                 let Some((name, size, kind)) = DIALOG_SHOTS.get((offset / 3) as usize) else {
                     return Err(Error::Invalid("Unknown dialog screenshot step".into()));
@@ -245,7 +246,8 @@ impl RustMixApp {
                             match kind {
                                 0 => Action::Add,
                                 1 => Action::Properties(InputId(3)),
-                                _ => Action::Settings,
+                                2 => Action::Settings,
+                                _ => Action::OverlaySettings(0),
                             },
                             ctx,
                         );
@@ -261,7 +263,8 @@ impl RustMixApp {
                             match kind {
                                 0 => "dialog.add",
                                 1 => "dialog.properties",
-                                _ => "dialog.settings",
+                                2 => "dialog.settings",
+                                _ => "dialog.overlay",
                             },
                         )?;
                         std::fs::write(
@@ -285,7 +288,7 @@ impl RustMixApp {
                     _ => {}
                 }
             }
-            47 => {
+            50 => {
                 self.assert_smoke_state()?;
                 self.saved_revision = self.engine.project().revision;
                 ctx.send_viewport_cmd(egui::ViewportCommand::Close);
@@ -453,6 +456,11 @@ mod tests {
                     "dialog.properties.apply",
                 ),
                 (Action::Settings, "dialog.settings", "dialog.settings.apply"),
+                (
+                    Action::OverlaySettings(0),
+                    "dialog.overlay",
+                    "dialog.overlay.apply",
+                ),
             ] {
                 let mut app = RustMixApp::headless();
                 let ctx = egui::Context::default();
@@ -820,5 +828,72 @@ mod tests {
             workspace::decode(&encoded).unwrap().iter_all_tabs().count(),
             3
         );
+    }
+
+    #[test]
+    fn overlay_settings_stage_slot_edits_and_apply_only_on_apply() {
+        let mut app = RustMixApp::headless();
+        let ctx = egui::Context::default();
+        app.theme(&ctx);
+        let size = [1600.0, 900.0];
+        for _ in 0..3 {
+            frame(&mut app, &ctx, vec![], size);
+        }
+        click(&mut app, &ctx, "workspace.tab.Overlays", size);
+        let before = app.engine.project().revision;
+
+        click(&mut app, &ctx, "overlay.1.settings", size);
+        let (slot, draft) = app.overlay_settings.clone().expect("Overlay 1 draft");
+        assert_eq!(slot, 0);
+        assert!(!draft.enabled);
+        assert_eq!(draft.position, Position::LowerLeft);
+
+        // Position edits stay in the draft until Apply is selected.
+        click(&mut app, &ctx, "dialog.overlay.position.TopLeft", size);
+        assert_eq!(
+            app.overlay_settings
+                .as_ref()
+                .map(|(_, draft)| draft.position),
+            Some(Position::TopLeft)
+        );
+        assert_eq!(
+            app.engine.project().overlays[0].position,
+            Position::LowerLeft
+        );
+        assert_eq!(app.engine.project().revision, before);
+
+        // Switching the number reloads that slot's committed state.
+        click(&mut app, &ctx, "dialog.overlay.slot.2", size);
+        assert_eq!(
+            app.overlay_settings.as_ref().map(|(slot, _)| *slot),
+            Some(1)
+        );
+        assert_eq!(
+            app.overlay_settings
+                .as_ref()
+                .map(|(_, draft)| draft.position),
+            Some(Position::LowerLeft)
+        );
+
+        // Cancel discards every staged edit.
+        click(&mut app, &ctx, "dialog.overlay.cancel", size);
+        assert!(app.overlay_settings.is_none());
+        assert_eq!(app.engine.project().revision, before);
+        assert_eq!(
+            app.engine.project().overlays[0].position,
+            Position::LowerLeft
+        );
+
+        // Apply commits only the selected slot.
+        click(&mut app, &ctx, "overlay.2.settings", size);
+        click(&mut app, &ctx, "dialog.overlay.enabled", size);
+        click(&mut app, &ctx, "dialog.overlay.position.LowerRight", size);
+        click(&mut app, &ctx, "dialog.overlay.apply", size);
+        let project = app.engine.project();
+        assert!(project.overlays[1].enabled);
+        assert_eq!(project.overlays[1].position, Position::LowerRight);
+        assert_eq!(project.overlays[0].position, Position::LowerLeft);
+        assert!(project.revision > before);
+        assert!(app.overlay_settings.is_none());
     }
 }

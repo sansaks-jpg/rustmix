@@ -239,14 +239,9 @@ impl RustMixApp {
         if program {
             for (i, o) in p.overlays.iter().enumerate() {
                 if o.enabled {
-                    let offset = i as f32 * 0.105;
-                    let (left, top) = match o.position {
-                        Position::LowerLeft => (0.05, 0.78 - offset),
-                        Position::LowerRight => (0.38, 0.78 - offset),
-                        Position::TopLeft => (0.05, 0.08 + offset),
-                    };
+                    let panel = overlay_panel_rect(rect, o.position, i);
                     let text_rect = Rect::from_min_size(
-                        rect.lerp_inside(egui::vec2(left + 0.02, top)),
+                        panel.left_top() + egui::vec2(rect.width() * 0.02, 0.0),
                         egui::vec2(rect.width() * 0.52, rect.height() * 0.095),
                     );
                     let painter = ui.painter().with_clip_rect(text_rect);
@@ -500,15 +495,7 @@ impl RustMixApp {
             if all.clicked() {
                 self.category = None;
             }
-            for (kind, color) in InputKind::ALL.into_iter().zip([
-                Color32::from_rgb(145, 0, 0),
-                PROGRAM,
-                PREVIEW,
-                Color32::from_rgb(132, 29, 145),
-                Color32::from_rgb(0, 144, 229),
-                Color32::from_rgb(30, 30, 95),
-                Color32::from_rgb(30, 131, 116),
-            ]) {
+            for (kind, color) in InputKind::ALL.into_iter().map(|k| (k, kind_color(k))) {
                 let selected = self.category == Some(kind);
                 let response = ui
                     .add(
@@ -685,7 +672,10 @@ impl RustMixApp {
                                     ui.horizontal(|ui| {
                                         ui.spacing_mut().item_spacing.x = 2.0;
                                         for slot in 5..=8 { ui.add_enabled(false, egui::Button::new(RichText::new(slot.to_string()).size(10.0)).min_size(egui::vec2(20.0, 18.0))).on_disabled_hover_text("Four overlay slots are implemented"); }
-                                        let audio = ui.add(egui::Button::new(RichText::new("Audio").size(10.0)).selected(!input.audio.muted).min_size(egui::vec2(34.0, 18.0))).on_hover_text("Toggle simulated input mute");
+                                        let muted = input.audio.muted;
+                                        let mut mute = egui::Button::new(RichText::new(if muted { "Muted" } else { "Audio" }).size(10.0)).min_size(egui::vec2(34.0, 18.0));
+                                        if muted { mute = mute.fill(RED).stroke(Stroke::NONE); }
+                                        let audio = ui.add(mute).on_hover_text(if muted { "This input is muted in the simulated mix; click to unmute" } else { "Mute this input in the simulated mix" });
                                         self.automation.insert(format!("input.{}.audio", input.id.0), audio.rect);
                                         if audio.clicked() { let mut channel = input.audio.clone(); channel.muted = !channel.muted; self.actions.push(Action::Engine(Command::SetInputAudio(input.id, channel))); }
                                         let edit = ui.add(egui::Button::new(RichText::new("⚙").size(11.0)).min_size(egui::vec2(20.0, 18.0))).on_hover_text("Input properties");
@@ -903,6 +893,21 @@ impl RustMixApp {
                             self.automation
                                 .insert(format!("overlay.{}.toggle", i + 1), response.rect);
                             ui.label(RichText::new(format!("F{}", i + 1)).small().color(DIM));
+                            ui.with_layout(
+                                egui::Layout::right_to_left(egui::Align::Center),
+                                |ui| {
+                                    let settings = ui
+                                        .button(RichText::new("⚙").size(12.0))
+                                        .on_hover_text("Overlay settings for this slot");
+                                    self.automation.insert(
+                                        format!("overlay.{}.settings", i + 1),
+                                        settings.rect,
+                                    );
+                                    if settings.clicked() {
+                                        self.actions.push(Action::OverlaySettings(i));
+                                    }
+                                },
+                            );
                         });
                         egui::CollapsingHeader::new("Title / position")
                             .default_open(i == 0)
@@ -951,6 +956,7 @@ impl RustMixApp {
         self.add_input_dialog(ctx);
         self.input_properties_dialog(ctx);
         self.settings_dialog(ctx);
+        self.overlay_settings_dialog(ctx);
         self.remove_input_confirmation(ctx);
         if self.about {
             let mut open = true;

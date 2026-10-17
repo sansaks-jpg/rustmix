@@ -28,6 +28,37 @@ pub(crate) const MIXER_RAIL: Color32 = Color32::from_rgb(21, 108, 176);
 /// Meter/label chip background used across tiles and strips.
 pub(crate) const CHIP_BG: Color32 = Color32::from_rgb(43, 52, 60);
 
+/// Category palette shared by the input filter chips and the dialog navigation marks.
+/// Original RustMix colors; no vendor artwork is derived from them.
+pub(crate) fn kind_color(kind: InputKind) -> Color32 {
+    match kind {
+        InputKind::Grid => Color32::from_rgb(145, 0, 0),
+        InputKind::Geometry => PROGRAM,
+        InputKind::Bars => PREVIEW,
+        InputKind::Graphics => Color32::from_rgb(132, 29, 145),
+        InputKind::Studio => Color32::from_rgb(0, 144, 229),
+        InputKind::Color => Color32::from_rgb(30, 30, 95),
+        InputKind::Countdown => Color32::from_rgb(30, 131, 116),
+    }
+}
+
+/// Frame-normalized title-overlay panel shared by the Program monitor painters and
+/// the Overlay Settings preview. Mirrors the committed CPU reference compositor in
+/// `rustmix-engine`: panel height 9.5% of the frame, slot 0 stacks 10.5% per index,
+/// panel width 56% and a 0.8% accent stripe at the left edge.
+pub(crate) fn overlay_panel_rect(frame: egui::Rect, position: Position, slot: usize) -> egui::Rect {
+    let offset = slot as f32 * 0.105;
+    let (left, top) = match position {
+        Position::LowerLeft => (0.05, 0.78 - offset),
+        Position::LowerRight => (0.38, 0.78 - offset),
+        Position::TopLeft => (0.05, 0.08 + offset),
+    };
+    egui::Rect::from_min_size(
+        frame.lerp_inside(egui::vec2(left, top)),
+        egui::vec2(frame.width() * 0.56, frame.height() * 0.095),
+    )
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Panel {
     Inputs,
@@ -74,6 +105,7 @@ pub(crate) enum Action {
     Properties(InputId),
     RequestRemove(InputId),
     Settings,
+    OverlaySettings(usize),
     About,
     Workspace(bool),
     Multiview,
@@ -120,6 +152,8 @@ pub struct RustMixApp {
     pub(crate) settings_draft: Option<Preferences>,
     pub(crate) settings_name: String,
     pub(crate) settings_layout: Option<bool>,
+    /// Staged Overlay Settings draft: selected slot plus its uncommitted copy.
+    pub(crate) overlay_settings: Option<(usize, OverlayState)>,
     pub(crate) about: bool,
     pub(crate) multiview: bool,
     pub(crate) fullscreen: bool,
@@ -215,6 +249,7 @@ impl RustMixApp {
             settings_draft: None,
             settings_name: String::new(),
             settings_layout: None,
+            overlay_settings: None,
             about: false,
             multiview: false,
             fullscreen: false,
@@ -247,6 +282,7 @@ impl RustMixApp {
         self.settings_draft = None;
         self.settings_name.clear();
         self.settings_layout = None;
+        self.overlay_settings = None;
     }
     fn theme(&self, ctx: &egui::Context) {
         let mut style = egui::Style {
@@ -524,6 +560,11 @@ impl RustMixApp {
                 self.settings_draft = Some(self.engine.project().preferences.clone());
                 self.settings_name = self.engine.project().name.clone();
                 self.settings_layout = None;
+            }
+            Action::OverlaySettings(slot) => {
+                if let Some(overlay) = self.engine.project().overlays.get(slot).cloned() {
+                    self.overlay_settings = Some((slot, overlay));
+                }
             }
             Action::About => self.about = true,
             Action::Workspace(audio) => {
@@ -870,6 +911,7 @@ impl RustMixApp {
         if ctx.text_edit_focused()
             || self.properties.is_some()
             || self.settings
+            || self.overlay_settings.is_some()
             || self.confirm_remove_input.is_some()
             || self.add_open
             || self.about
@@ -951,6 +993,7 @@ impl RustMixApp {
         let dialog_busy = self.add_open
             || self.properties.is_some()
             || self.settings
+            || self.overlay_settings.is_some()
             || self.confirm_remove_input.is_some()
             || self.about
             || self.confirm_new
