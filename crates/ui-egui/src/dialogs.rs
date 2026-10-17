@@ -566,13 +566,13 @@ impl RustMixApp {
                 ui.label(RichText::new("Number").size(12.0).color(Color32::WHITE));
                 egui::ComboBox::from_id_salt("dialog.add.number")
                     .width(54.0)
-                    .selected_text(app.add_number.to_string())
+                    .selected_text(self.add_number.to_string())
                     .show_ui(ui, |ui| {
                         for n in 1..=16 {
-                            ui.selectable_value(&mut app.add_number, n, n.to_string());
+                            ui.selectable_value(&mut self.add_number, n, n.to_string());
                         }
                     });
-                if app.add_name.trim().is_empty() {
+                if self.add_name.trim().is_empty() {
                     ui.colored_label(PREVIEW, "Enter a non-empty source label.");
                 }
                 ui.with_layout(egui::Layout::right_to_left(Align::Center), |ui| {
@@ -901,7 +901,7 @@ impl RustMixApp {
                             ui.horizontal(|ui| {
                                 for (route, label) in draft
                                     .audio
-                                    .routes
+                                    .sends
                                     .iter_mut()
                                     .zip(["MASTER", "BUS A", "BUS B"])
                                 {
@@ -1111,7 +1111,7 @@ impl RustMixApp {
                             .clicked()
                             && action_lbl == "Default"
                         {
-                            draft = Preferences::default();
+                            draft = ProjectState::demo().preferences;
                         }
                     }
                 },
@@ -1159,14 +1159,23 @@ impl RustMixApp {
                                     );
                                     egui::ComboBox::from_id_salt("settings.rate")
                                         .width(210.0)
-                                        .selected_text(format!("NTSC {}", draft.rate.label()))
+                                        .selected_text(format!("NTSC {}p", draft.rate.label()))
                                         .show_ui(ui, |ui| {
-                                            for rate in FrameRate::ALL {
-                                                let r = ui.selectable_value(
-                                                    &mut draft.rate,
-                                                    rate,
-                                                    format!("NTSC {}", rate.label()),
-                                                );
+                                            for (num, den, lbl) in [
+                                                (24, 1, "24p"),
+                                                (25, 1, "25p"),
+                                                (30000, 1001, "NTSC 29.97p"),
+                                                (30, 1, "NTSC 30p"),
+                                                (50, 1, "PAL 50p"),
+                                                (60000, 1001, "NTSC 59.94p"),
+                                                (60, 1, "60p"),
+                                            ] {
+                                                let rate = Rate {
+                                                    numerator: num,
+                                                    denominator: den,
+                                                };
+                                                let r =
+                                                    ui.selectable_value(&mut draft.rate, rate, lbl);
                                                 app.automation.insert(
                                                     format!(
                                                         "dialog.settings.rate.{}",
@@ -1315,12 +1324,12 @@ impl RustMixApp {
                             );
                             app.automation
                                 .insert("dialog.settings.highContrast".into(), contrast.rect);
-                            let confirm_exit = ui.checkbox(
-                                &mut draft.confirm_exit,
-                                "Confirm closing unsaved presets",
+                            let shortcuts_chk = ui.checkbox(
+                                &mut draft.shortcuts,
+                                "Enable single-key production shortcuts",
                             );
                             app.automation
-                                .insert("dialog.settings.confirmExit".into(), confirm_exit.rect);
+                                .insert("dialog.settings.shortcuts".into(), shortcuts_chk.rect);
                         }
                         SettingsPage::Workspace => {
                             ui.label(
@@ -1380,8 +1389,8 @@ impl RustMixApp {
                             );
                             ui.label("Configured for 1080p29,97 low-latency production routing.");
                             ui.checkbox(
-                                &mut draft.confirm_exit,
-                                "Protect active broadcast session from accidental close",
+                                &mut draft.shortcuts,
+                                "Enable single-key production shortcuts",
                             );
                         }
                     });
@@ -1423,7 +1432,7 @@ impl RustMixApp {
             if !self.settings_name.trim().is_empty()
                 && self.settings_name.trim() != self.engine.project().name
             {
-                self.actions.push(Action::Engine(Command::SetProjectName(
+                self.actions.push(Action::Engine(Command::RenameProject(
                     self.settings_name.clone(),
                 )));
             }
@@ -2539,18 +2548,21 @@ impl RustMixApp {
         .show(ctx, |ui| {
             let tiles: [(&str, Action); 12] = [
                 ("Cut\n[Space]", Action::Engine(Command::Cut)),
-                ("Fade\n[Enter]", Action::Engine(Command::StartTransition)),
+                (
+                    "Fade\n[Enter]",
+                    Action::Engine(Command::Transition(TransitionKind::Fade)),
+                ),
                 (
                     "Merge\n[300 ms]",
-                    Action::Engine(Command::SetTransitionKind(TransitionKind::Dip)),
+                    Action::Engine(Command::Transition(TransitionKind::Fade)),
                 ),
                 (
                     "Wipe\n[300 ms]",
-                    Action::Engine(Command::SetTransitionKind(TransitionKind::Wipe)),
+                    Action::Engine(Command::Transition(TransitionKind::Wipe)),
                 ),
-                ("FTB\n[Fade to Black]", Action::Engine(Command::ToggleBlack)),
-                ("Overlay 1\n[F1]", Action::Engine(Command::ToggleOverlay(0))),
-                ("Overlay 2\n[F2]", Action::Engine(Command::ToggleOverlay(1))),
+                ("FTB\n[Fade to Black]", Action::Engine(Command::FadeBlack)),
+                ("Overlay 1\n[F1]", Action::OverlaySettings(0)),
+                ("Overlay 2\n[F2]", Action::OverlaySettings(1)),
                 (
                     "Preview 1\n[Key 1]",
                     Action::Engine(Command::SelectPreview(InputId(1))),
