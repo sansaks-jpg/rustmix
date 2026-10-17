@@ -895,5 +895,27 @@ mod tests {
         assert_eq!(project.overlays[0].position, Position::LowerLeft);
         assert!(project.revision > before);
         assert!(app.overlay_settings.is_none());
+
+        // Bottom production-bar gear opens Overlay Settings directly, and Audio strip gear opens Input Audio routing.
+        click(&mut app, &ctx, "output.overlay.settings", size);
+        assert_eq!(app.overlay_settings.as_ref().map(|(s, _)| *s), Some(0));
+        click(&mut app, &ctx, "dialog.overlay.cancel", size);
+
+        click(&mut app, &ctx, "audio.input.1.settings", size);
+        assert_eq!(app.properties.as_ref().map(|i| i.id), Some(InputId(1)));
+        assert_eq!(app.input_page, InputPage::Audio);
+        click(&mut app, &ctx, "dialog.properties.page.General", size);
+        assert_eq!(app.input_page, InputPage::General);
+        click(&mut app, &ctx, "dialog.properties.audioSettings", size);
+        assert_eq!(app.input_page, InputPage::Audio);
+        click(&mut app, &ctx, "dialog.properties.cancel", size);
+
+        // Multiview layout presets switch between Split (Monitors + Grid) and Full Source Grid.
+        click(&mut app, &ctx, "output.multiview", size);
+        assert!(app.multiview && app.multiview_split);
+        click(&mut app, &ctx, "multiview.preset.grid", size);
+        assert!(!app.multiview_split);
+        click(&mut app, &ctx, "multiview.return", size);
+        assert!(!app.multiview);
     }
 }

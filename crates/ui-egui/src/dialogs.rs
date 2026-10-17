@@ -34,16 +34,26 @@ fn sidebar_button(
     accent: Option<Color32>,
 ) -> egui::Response {
     ui.push_id(label, |ui| {
-        let response = ui.add_sized(
-            [152.0, 29.0],
-            egui::Button::new(RichText::new(label).strong().color(Color32::WHITE))
-                .fill(if active { PROGRAM } else { SIDEBAR })
-                .stroke(Stroke::NONE),
-        );
-        if let Some(accent) = accent {
+        let (rect, response) = ui.allocate_exact_size(Vec2::new(152.0, 29.0), egui::Sense::click());
+        let bg = if active {
+            PROGRAM
+        } else if response.hovered() {
+            Color32::from_rgb(53, 64, 77)
+        } else {
+            SIDEBAR
+        };
+        ui.painter().rect_filled(rect, 0.0, bg);
+        if active {
+            ui.painter().rect_filled(
+                egui::Rect::from_min_size(rect.min, Vec2::new(3.0, rect.height())),
+                0.0,
+                TEAL,
+            );
+        }
+        let text_x = if let Some(accent) = accent {
             let mark = egui::Rect::from_min_size(
-                egui::pos2(response.rect.left() + 8.0, response.rect.center().y - 7.0),
-                Vec2::new(14.0, 14.0),
+                egui::pos2(rect.left() + 7.0, rect.center().y - 8.0),
+                Vec2::new(16.0, 16.0),
             );
             ui.painter().rect_filled(mark, 2.0, accent);
             ui.painter().rect_stroke(
@@ -52,7 +62,53 @@ fn sidebar_button(
                 Stroke::new(1.0, Color32::from_gray(24)),
                 egui::StrokeKind::Inside,
             );
-        }
+            let fg = Stroke::new(1.2, Color32::WHITE);
+            let inner = mark.shrink(3.5);
+            if label.starts_with("Grid") || label.starts_with("Workspace") {
+                ui.painter()
+                    .rect_stroke(inner, 0.0, fg, egui::StrokeKind::Inside);
+                ui.painter().hline(inner.x_range(), inner.center().y, fg);
+                ui.painter().vline(inner.center().x, inner.y_range(), fg);
+            } else if label.starts_with("Geometry") || label.starts_with("Countdown") {
+                ui.painter()
+                    .circle_stroke(inner.center(), inner.width() * 0.48, fg);
+                ui.painter().line_segment(
+                    [
+                        inner.center(),
+                        egui::pos2(inner.center().x + 2.5, inner.top() + 1.5),
+                    ],
+                    fg,
+                );
+            } else if label.starts_with("Colour") || label.starts_with("Audio") {
+                for (idx, h) in [0.55_f32, 0.95, 0.72].into_iter().enumerate() {
+                    let x = inner.left() + idx as f32 * 3.3;
+                    let bar = egui::Rect::from_min_max(
+                        egui::pos2(x, inner.bottom() - inner.height() * h),
+                        egui::pos2(x + 2.0, inner.bottom()),
+                    );
+                    ui.painter().rect_filled(bar, 0.0, Color32::WHITE);
+                }
+            } else if label.starts_with("Title") || label.starts_with("Overlay") {
+                ui.painter().hline(inner.x_range(), inner.top() + 1.0, fg);
+                ui.painter()
+                    .vline(inner.center().x, (inner.top() + 1.0)..=inner.bottom(), fg);
+            } else {
+                ui.painter()
+                    .rect_stroke(inner, 1.0, fg, egui::StrokeKind::Inside);
+            }
+            rect.left() + 29.0
+        } else {
+            rect.left() + 10.0
+        };
+        ui.painter()
+            .with_clip_rect(rect.shrink2(Vec2::new(4.0, 0.0)))
+            .text(
+                egui::pos2(text_x, rect.center().y),
+                egui::Align2::LEFT_CENTER,
+                label,
+                egui::FontId::proportional(12.0),
+                Color32::WHITE,
+            );
         response
     })
     .inner
@@ -359,6 +415,23 @@ impl RustMixApp {
                             }
                         }
                         ui.add_space(10.0);
+                        ui.label(RichText::new("UNAVAILABLE").small().strong().color(DIM));
+                        for label in [
+                            "Colour Adjust",
+                            "Chroma / Key",
+                            "Position / Crop",
+                            "Layers / MultiView",
+                            "Triggers",
+                        ] {
+                            ui.add_enabled(
+                                false,
+                                egui::Button::new(label).min_size(Vec2::new(152.0, 26.0)),
+                            )
+                            .on_disabled_hover_text(
+                                "Per-input color grading, chroma key, DVE crop and triggers are not implemented",
+                            );
+                        }
+                        ui.add_space(8.0);
                         ui.label(RichText::new("SYNTHETIC INPUT").small().color(DIM));
                     }, |app, ui| {
 
@@ -389,7 +462,25 @@ impl RustMixApp {
                                 ui.horizontal(|ui| {
                                     ui.label("Generator tint");
                                     ui.color_edit_button_srgb(&mut input.color);
+                                    ui.separator();
+                                    let audio_btn = ui
+                                        .button("Audio Settings…")
+                                        .on_hover_text("Open Audio / buses routing for this source");
+                                    app.automation.insert(
+                                        "dialog.properties.audioSettings".into(),
+                                        audio_btn.rect,
+                                    );
+                                    if audio_btn.clicked() {
+                                        app.input_page = InputPage::Audio;
+                                    }
                                 });
+                                ui.label(
+                                    RichText::new(
+                                        "Format: 384×216 procedural RGBA · 16:9 widescreen · 48 kHz simulated stereo",
+                                    )
+                                    .small()
+                                    .color(DIM),
+                                );
                                 ui.add_space(6.0);
                                 let on_program = app.engine.project().program == input.id;
                                 ui.add_enabled(
@@ -733,22 +824,65 @@ impl RustMixApp {
                                     "Switching is suppressed while editing text or dialogs",
                                 );
                                 ui.checkbox(&mut p.shortcuts, "Enable switching shortcuts");
-                                ui.add_space(8.0);
-                                for (keys, action) in [
-                                    ("1–7", "Select Preview source"),
-                                    ("Space / Enter", "CUT / FADE"),
-                                    ("B / Esc", "Fade to black / cancel transition"),
-                                    ("F1–F4", "Toggle graphics overlays"),
-                                    ("Ctrl+I / Ctrl+S", "Add source / save project"),
-                                    ("Ctrl+O / Ctrl+Shift+S", "Open / Save As"),
+                                ui.add_space(6.0);
+                                let card_w = ((ui.available_width() - 12.0) * 0.5).clamp(160.0, 260.0);
+                                for pair in [
+                                    [
+                                        ("1 – 7", "Select Preview 1–7", "SWITCHER"),
+                                        ("Space", "Cut Preview → Program", "PROGRAM"),
+                                    ],
+                                    [
+                                        ("Enter", "Fade Transition", "PROGRAM"),
+                                        ("B / Esc", "FTB / Cancel Transition", "PROGRAM"),
+                                    ],
+                                    [
+                                        ("F1 – F4", "Toggle Overlay 1–4", "GRAPHICS"),
+                                        ("Ctrl + I", "Add Input Dialog", "SOURCE"),
+                                    ],
+                                    [
+                                        ("Ctrl + S", "Save Project", "PROJECT"),
+                                        ("Ctrl + O", "Open / Save As (Shift)", "PROJECT"),
+                                    ],
                                 ] {
                                     ui.horizontal(|ui| {
-                                        ui.monospace(format!("{keys:22}"));
-                                        ui.label(action);
+                                        for (key, action, scope) in pair {
+                                            egui::Frame::new()
+                                                .fill(CHIP_BG)
+                                                .stroke(Stroke::new(1.0, Color32::from_gray(64)))
+                                                .inner_margin(egui::Margin::symmetric(8, 5))
+                                                .show(ui, |ui| {
+                                                    ui.set_width(card_w);
+                                                    ui.horizontal(|ui| {
+                                                        egui::Frame::new()
+                                                            .fill(SIDEBAR)
+                                                            .inner_margin(egui::Margin::symmetric(6, 2))
+                                                            .show(ui, |ui| {
+                                                                ui.label(
+                                                                    RichText::new(key)
+                                                                        .monospace()
+                                                                        .strong()
+                                                                        .color(TEAL),
+                                                                );
+                                                            });
+                                                        ui.with_layout(
+                                                            egui::Layout::right_to_left(Align::Center),
+                                                            |ui| {
+                                                                ui.label(
+                                                                    RichText::new(scope)
+                                                                        .size(9.0)
+                                                                        .strong()
+                                                                        .color(DIM),
+                                                                );
+                                                            },
+                                                        );
+                                                    });
+                                                    ui.label(RichText::new(action).strong());
+                                                });
+                                        }
                                     });
                                 }
-                                ui.add_space(8.0);
-                                ui.label(RichText::new("Custom key remapping is not yet implemented.").small().color(DIM));
+                                ui.add_space(6.0);
+                                ui.label(RichText::new("Custom key remapping and MIDI/controller triggers are not yet implemented.").small().color(DIM));
                             }
                         }
                     });

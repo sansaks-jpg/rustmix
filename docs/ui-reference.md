@@ -37,6 +37,17 @@ Re-inspected `Interface.png` and `Input Settings.png` in the same private, untra
 | `Interface.png` | Compact monitor-header access to the shown source's settings | Gear glyph replaces the Edit text button; automation IDs unchanged |
 | `Input Settings.png` | The properties page shows the input's picture above the fields | General page shows the committed demo frame (`dialog.properties.preview`) with a "No frame yet" fallback |
 
-Pending UI-006 study: `Overlay Settings.png` (planned per-slot overlay dialog) alongside the not-yet-studied `External.png`, `Multicoder.png`, `Playlist.png`, `Recording Setup.png`, `Shortcut.png` and `Streaming Setup.png`. These files informed no implemented change. The pull-down T-Bar direction is now RustMix's own documented semantics from the observation above; it remains a workflow observation, not a vMix compatibility or pixel-identity claim.
-
 Verified by hosted Windows run 39046367904, commit `a19fc03`; the workspace captures at 1600×900 and 1920×1080 were inspected against these observations. No local build was used.
+
+## UI-006 reference review
+
+Inspected the remaining local reference files (`Overlay Settings.png`, `Shortcut.png`, `External.png`, `Multicoder.png`, `Playlist.png`, `Recording Setup.png`, `Streaming Setup.png`) alongside `Interface.png`, `Add Input.png`, `Input Settings.png`, and `Settings.png` read-only. No reference bitmap, icon, font or proprietary text was copied.
+
+| Local reference | Observed generic layout fact | RustMix UI-006 decision |
+|---|---|---|
+| `Overlay Settings.png` | Per-slot numbered overlay dialog with Type/Effect rows, placement preview and staged Apply/Cancel | Implemented bounded `Overlay Settings` window (`dialog.overlay.*`) for slots 1–4 with live 16:9 normalized preview (`overlay_panel_rect`) and staged per-slot edits; reachable from Overlays panel `⚙`, bottom production bar `⚙` beside `Overlay` (`output.overlay.settings`), `☰` menu and `Settings ▼` caret |
+| `Shortcut.png` | Structured shortcut table/cards showing key combination, function and scope | Rendered 2-column broadcast shortcut keycap cards on `Settings → Shortcuts` while keeping custom remapping explicitly disclosed as unimplemented |
+| `Input Settings.png` & `Interface.png` | Left-aligned sidebar categories with icons; direct per-input audio settings access from mixer strips and input properties | Left-aligned `sidebar_button` with procedural `egui::Painter` category glyphs; added `⚙` on Audio Mixer input strips (`audio.input.<id>.settings`), `"Audio Settings…"` on `Input Properties → General` (`dialog.properties.audioSettings`) and disabled `UNAVAILABLE` category disclosures |
+| `Interface.png` | Toolbar dropdown carets on file/settings groups; green Master strip header; graduated T-Bar scale; Multiview presets | Added real-action `▼` menus beside `Open`, `Save As` and `Settings`; green `MASTER` strip header when unmuted; procedural T-Bar graduations; and `Multiview` presets (`Split: Monitors + Grid` vs `Full Source Grid`) |
+| `External.png`, `Multicoder.png`, `Playlist.png`, `Recording Setup.png`, `Streaming Setup.png` | Dedicated modal setup dialogs for external output, ISO recording, playlist automation, disk recording and RTMP streaming | Kept `Record`, `External`, `Stream`, `MultiCorder` and `PlayList` buttons and their `⚙` buttons explicitly disabled with clear hover reasons per `AGENTS.md` §0 ("Do not implement a fake UI with nonfunctional buttons") |
+

@@ -16,8 +16,9 @@ Not yet verified: audio samples, capture devices, monitor hotplug, independent o
 
 Current run evidence and exact outcomes belong in [ui-progress.md](ui-progress.md).
 
-## Pending UI-004 acceptance checks
+## UI-004 / UI-005 / UI-006 dialog and workflow checks
 
-Three added widget regressions cover: fixed footer geometry and sidebar navigation at 734×466, 1100×700, 1600×900 and 1920×1080; monitor Edit/filter reset/offline visibility/removal cancellation with Preview/Program isolation; and generator samples after source removal plus Settings draft cancellation. The 734×466 case represents reduced logical space only and does not establish physical DPI behavior. These new Rust tests have not been run locally or remotely in this task.
+Widget regressions cover: fixed footer geometry and sidebar navigation at 734×466, 1100×700, 1600×900 and 1920×1080 across `Add Input`, `Input Properties`, `Settings` and `Overlay Settings`; monitor gear / filter reset / offline visibility / removal cancellation with Preview/Program isolation; generator samples after source removal plus Settings draft cancellation; vertical T-Bar endpoint hold/release; and `overlay_settings_stage_slot_edits_and_apply_only_on_apply` (staged per-slot edits, slot switching, Cancel discard, Apply commit, bottom-bar `output.overlay.settings` gear, Audio strip `audio.input.1.settings` routing shortcut, `dialog.properties.audioSettings`, and `Multiview` Split/Grid layout presets).
 
-The hosted native harness now opens Add Input, Input Properties and Settings at each of the three supported physical-size requests, checks actual footer/body bounds, and captures nine `add-input-*`, `input-properties-*`, and `settings-*` PNG files plus matching `*-elements.json`. The PowerShell evidence gate requires every file before starting the saved-project reopen check. Existing switching, fader and save/reopen assertions remain. These captures are prepared, not generated; inspect actual PNG dimensions and pixels after an authorized CI run.
+The hosted native harness opens `Add Input`, `Input Properties` and `Settings` at 1100×700, 1600×900 and 1920×1080 plus `Overlay Settings` at 1600×900 (`overlay-settings-1600.png` and `overlay-settings-1600-elements.json`), checks actual footer/body bounds, and verifies every artifact in `scripts/ci-native-smoke.ps1` before running the saved-project reopen check.
+

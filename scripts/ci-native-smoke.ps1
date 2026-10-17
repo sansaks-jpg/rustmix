@@ -25,6 +25,10 @@ foreach ($size in @('1100','1600','1920')) {
         }
     }
 }
+foreach ($suffix in @('.png','-elements.json')) {
+    $overlayEvidence = Join-Path artifacts ('overlay-settings-1600' + $suffix)
+    if (-not (Test-Path -LiteralPath $overlayEvidence)) { throw "Missing overlay dialog evidence: $overlayEvidence" }
+}
 Invoke-NativeSmoke @('--ui-smoke-reopen','artifacts/smoke.rustmix.json')
 if (-not (Test-Path artifacts/reopen-ok.json)) { throw 'Reopen did not validate the saved production' }
 Get-CimInstance Win32_VideoController | Select-Object Name,DriverVersion | ConvertTo-Json | Out-File artifacts/runner-graphics.json

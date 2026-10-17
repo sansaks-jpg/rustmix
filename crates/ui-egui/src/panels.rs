@@ -153,6 +153,15 @@ impl RustMixApp {
                             .strong()
                             .color(foreground),
                         );
+                        let (badge, _) =
+                            ui.allocate_exact_size(egui::vec2(10.0, 10.0), Sense::hover());
+                        ui.painter().rect_filled(badge, 1.0, kind_color(input.kind));
+                        ui.painter().rect_stroke(
+                            badge,
+                            1.0,
+                            Stroke::new(1.0, Color32::from_gray(20)),
+                            egui::StrokeKind::Inside,
+                        );
                     });
                 });
             });
@@ -283,14 +292,57 @@ impl RustMixApp {
         });
     }
     pub(crate) fn switcher(&mut self, ui: &mut egui::Ui) {
+        ui.set_min_height(ui.available_height());
         if self.multiview {
             ui.horizontal(|ui| {
-                ui.label(RichText::new("MULTIVIEW · click a tile to select Preview").color(TEAL));
-                if ui.button("Return to switcher").clicked() {
+                ui.label(
+                    RichText::new("MULTIVIEW · click a tile to select Preview")
+                        .strong()
+                        .color(TEAL),
+                );
+                ui.separator();
+                let split = ui.selectable_label(self.multiview_split, "Split: Monitors + Grid");
+                self.automation
+                    .insert("multiview.preset.split".into(), split.rect);
+                if split.clicked() {
+                    self.multiview_split = true;
+                }
+                let grid = ui.selectable_label(!self.multiview_split, "Full Source Grid");
+                self.automation
+                    .insert("multiview.preset.grid".into(), grid.rect);
+                if grid.clicked() {
+                    self.multiview_split = false;
+                }
+                let back = ui.button("Return to switcher");
+                self.automation.insert("multiview.return".into(), back.rect);
+                if back.clicked() {
                     self.actions.push(Action::Multiview);
                 }
             });
-            self.source_tiles(ui, true);
+            if self.multiview_split
+                && ui.available_height() >= 300.0
+                && ui.available_width() >= 620.0
+            {
+                let top_h = (ui.available_height() * 0.44).clamp(145.0, 215.0);
+                let side_w = ((ui.available_width() - 24.0) * 0.5).max(180.0);
+                ui.horizontal_top(|ui| {
+                    ui.allocate_ui_with_layout(
+                        egui::vec2(side_w, top_h),
+                        egui::Layout::top_down(egui::Align::Min),
+                        |ui| self.monitor(ui, false),
+                    );
+                    ui.add_space(12.0);
+                    ui.allocate_ui_with_layout(
+                        egui::vec2(side_w, top_h),
+                        egui::Layout::top_down(egui::Align::Min),
+                        |ui| self.monitor(ui, true),
+                    );
+                });
+                ui.separator();
+                self.source_tiles(ui, false);
+            } else {
+                self.source_tiles(ui, true);
+            }
             return;
         }
         let width = ui.available_width();
@@ -305,6 +357,7 @@ impl RustMixApp {
     }
     fn switcher_content(&mut self, ui: &mut egui::Ui) {
         let available = ui.available_size();
+        ui.set_min_height(available.y);
         let center = 132.0;
         let side = ((available.x - center - 110.0) / 2.0).max(200.0);
         ui.horizontal_top(|ui| {
@@ -408,7 +461,7 @@ impl RustMixApp {
                     // vMix-style vertical T-Bar: the handle rests at the top and is
                     // pulled down to take Preview. The engine keeps progress 0..1.
                     let mut handle = 1.0 - progress;
-                    let reserve = 56.0;
+                    let reserve = 52.0;
                     let tbar_length = (ui.available_height() - reserve).clamp(56.0, 520.0);
                     ui.vertical_centered(|ui| {
                         let response = ui
@@ -432,6 +485,25 @@ impl RustMixApp {
                             .on_hover_text(
                                 "Manual transition · drag down from the top to take Preview; return to the top to cancel",
                             );
+                        for step in 0..=4 {
+                            let y = egui::lerp(
+                                (response.rect.top() + 8.0)..=(response.rect.bottom() - 8.0),
+                                step as f32 / 4.0,
+                            );
+                            let major = step % 2 == 0;
+                            let tick_w = if major { 6.0 } else { 3.5 };
+                            let tick_color = if major { DIM } else { Color32::from_gray(95) };
+                            ui.painter().hline(
+                                (response.rect.left() - tick_w - 2.0)..=(response.rect.left() - 2.0),
+                                y,
+                                Stroke::new(1.0, tick_color),
+                            );
+                            ui.painter().hline(
+                                (response.rect.right() + 2.0)..=(response.rect.right() + tick_w + 2.0),
+                                y,
+                                Stroke::new(1.0, tick_color),
+                            );
+                        }
                         self.automation.insert("switcher.tbar".into(), response.rect);
                         if response.changed() && !self.tbar_latched {
                             let value = 1.0 - handle;
@@ -640,6 +712,8 @@ impl RustMixApp {
                                     response.on_hover_text(format!("{} · {}\nClick to select Preview. Program changes only with Cut / Fade.", input.name, input.kind.label())).context_menu(|ui| {
                                         self.command_button(ui, "preview.select", "Select Preview", Command::SelectPreview(input.id), None);
                                         if ui.button("Properties / rename…").clicked() { self.actions.push(Action::Properties(input.id)); ui.close(); }
+                                        if ui.button("Audio routing…").clicked() { self.actions.push(Action::InputAudio(input.id)); ui.close(); }
+                                        if ui.button("Overlay 1 settings…").clicked() { self.actions.push(Action::OverlaySettings(0)); ui.close(); }
                                         let check = self.engine.enabled(&Command::RemoveInput(input.id));
                                         if ui.add_enabled(check.is_ok(), egui::Button::new("Remove input…"))
                                             .on_disabled_hover_text(check.err().map(|error| error.to_string()).unwrap_or_default()).clicked() {
@@ -720,7 +794,7 @@ impl RustMixApp {
                                 a.clone(),
                                 peaks,
                                 height,
-                                false,
+                                None,
                             );
                             if let Some(a) = changed {
                                 self.actions.push(Action::Engine(Command::SetBus(bus, a)));
@@ -737,7 +811,7 @@ impl RustMixApp {
                             input.audio.clone(),
                             peaks,
                             height,
-                            true,
+                            Some(input.id),
                         );
                         if let Some(a) = changed {
                             let mut i = input.clone();
@@ -772,19 +846,29 @@ impl RustMixApp {
         mut a: AudioChannel,
         peaks: [f32; 2],
         height: f32,
-        sends: bool,
+        input_id: Option<InputId>,
     ) -> Option<AudioChannel> {
         let (id, name) = identity;
         let before = a.clone();
+        let header_fill = if name == "MASTER" && !a.muted {
+            PROGRAM
+        } else {
+            CHIP_BG
+        };
         ui.push_id(id, |ui| {
             ui.vertical(|ui| {
                 ui.set_width(80.0);
                 egui::Frame::new()
-                    .fill(CHIP_BG)
+                    .fill(header_fill)
                     .inner_margin(egui::Margin::symmetric(3, 1))
                     .show(ui, |ui| {
                         ui.set_width(70.0);
-                        ui.add(egui::Label::new(RichText::new(name).small().strong()).truncate());
+                        ui.add(
+                            egui::Label::new(
+                                RichText::new(name).small().strong().color(Color32::WHITE),
+                            )
+                            .truncate(),
+                        );
                     });
                 ui.label(
                     RichText::new(audio::gain_label(&a))
@@ -861,8 +945,22 @@ impl RustMixApp {
                     if solo.clicked() {
                         a.solo = !a.solo;
                     }
+                    if let Some(source_id) = input_id {
+                        let gear = ui
+                            .add(
+                                egui::Button::new(RichText::new("⚙").size(11.0))
+                                    .min_size(egui::vec2(20.0, 19.0)),
+                            )
+                            .on_hover_text("Open Audio / buses settings for this input");
+                        self.automation
+                            .insert(format!("audio.input.{}.settings", source_id.0), gear.rect);
+                        if gear.clicked() {
+                            self.selected_audio = Some(source_id);
+                            self.actions.push(Action::InputAudio(source_id));
+                        }
+                    }
                 });
-                if sends {
+                if input_id.is_some() {
                     ui.horizontal(|ui| {
                         ui.spacing_mut().item_spacing.x = 2.0;
                         for (v, label) in a.sends.iter_mut().zip(["M", "A", "B"]) {

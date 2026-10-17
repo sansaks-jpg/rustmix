@@ -38,12 +38,13 @@ Save / Save As writes versioned `.rustmix.json` project JSON with the panel layo
 
 Canvas resolution is a project preference; the UI demo raster is capped at 640×360 and source previews at 384×216. CPU demo generation time and UI callback FPS are measured; they are not broadcast output, encoder, GPU or end-to-end latency metrics.
 
-UI-004 continues the reference-driven operator work: Add Input, Input Properties and Settings now constrain themselves to the viewport, scroll their navigation and content separately, and keep Apply/Cancel outside the scroll areas. Monitor headers open source properties directly. The input bank shows the selected category, matching count, clear-filter action and explicit offline labels. Context-menu removal now uses the same confirmation as Properties. Generator samples are independent of existing inputs. These are source changes awaiting a new hosted compile, widget run and native screenshot review; the downloadable UI-002 executable does not contain them.
+UI-004 through UI-006 refine the broadcast operator workflow across all four bounded dialogs (`Add Input`, `Input Properties`, `Settings`, and `Overlay Settings`): left-aligned sidebar navigation with procedural vector icons, fixed Apply/Cancel footers, staged per-slot `Overlay Settings` with a normalized 16:9 placement preview, visual shortcut keycap cards, direct per-input audio routing shortcuts (`⚙` on mixer strips and `"Audio Settings…"` on Input Properties), toolbar dropdown carets (`Open ▼`, `Save As ▼`, `Settings ▼`), graduated vertical T-Bar scale marks, broadcast-dark dock tabs, and `Multiview` Split/Grid layout presets.
 
 ## Documentation
 
 - [UI references](docs/ui-reference.md), [UI architecture](docs/ui-architecture.md), [progress and evidence](docs/ui-progress.md)
 - [Feature matrix](docs/feature-matrix.md), [gaps](docs/gaps.md), [testing](docs/testing.md), [roadmap](ROADMAP.md)
-- [Architecture decision](docs/adr/0001-native-demo-ui.md), [licensing](docs/licensing.md)
+- [ADR 0001](docs/adr/0001-native-demo-ui.md), [ADR 0004](docs/adr/0004-main-window-control-fidelity.md), [ADR 0005](docs/adr/0005-overlay-and-reference-dialogs.md), [licensing](docs/licensing.md)
 
 No production readiness, hardware support, GPU compositor parity, long-run timing or live output continuity is claimed.
+

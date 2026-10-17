@@ -101,10 +101,13 @@ pub(crate) enum Action {
     New,
     Open,
     Save(bool),
+    CheckpointNow,
     Add,
     Properties(InputId),
+    InputAudio(InputId),
     RequestRemove(InputId),
     Settings,
+    SettingsAt(SettingsPage),
     OverlaySettings(usize),
     About,
     Workspace(bool),
@@ -156,6 +159,7 @@ pub struct RustMixApp {
     pub(crate) overlay_settings: Option<(usize, OverlayState)>,
     pub(crate) about: bool,
     pub(crate) multiview: bool,
+    pub(crate) multiview_split: bool,
     pub(crate) fullscreen: bool,
     pub(crate) confirm_new: bool,
     pub(crate) confirm_close: bool,
@@ -252,6 +256,7 @@ impl RustMixApp {
             overlay_settings: None,
             about: false,
             multiview: false,
+            multiview_split: true,
             fullscreen: false,
             confirm_new: false,
             confirm_close: false,
@@ -545,10 +550,15 @@ impl RustMixApp {
                 self.start_load(path);
             }
             Action::Save(as_new) => self.start_save(as_new, false),
+            Action::CheckpointNow => self.start_save(false, true),
             Action::Add => self.add_open = true,
             Action::Properties(id) => {
                 self.properties = self.engine.project().input(id).cloned();
                 self.input_page = InputPage::General;
+            }
+            Action::InputAudio(id) => {
+                self.properties = self.engine.project().input(id).cloned();
+                self.input_page = InputPage::Audio;
             }
             Action::RequestRemove(id) => match self.engine.enabled(&Command::RemoveInput(id)) {
                 Ok(()) => self.confirm_remove_input = Some(id),
@@ -557,6 +567,13 @@ impl RustMixApp {
             Action::Settings => {
                 self.settings = true;
                 self.settings_page = SettingsPage::Display;
+                self.settings_draft = Some(self.engine.project().preferences.clone());
+                self.settings_name = self.engine.project().name.clone();
+                self.settings_layout = None;
+            }
+            Action::SettingsAt(page) => {
+                self.settings = true;
+                self.settings_page = page;
                 self.settings_draft = Some(self.engine.project().preferences.clone());
                 self.settings_name = self.engine.project().name.clone();
                 self.settings_layout = None;
@@ -640,23 +657,92 @@ impl RustMixApp {
                 self.actions.push(Action::About);
             }
             ui.separator();
-            for (label, action, hint) in [
-                ("New", Action::New, "New demo project"),
-                ("Open", Action::Open, "Open project · Ctrl+O"),
-                ("Save", Action::Save(false), "Save · Ctrl+S"),
-                ("Save As", Action::Save(true), "Save a copy · Ctrl+Shift+S"),
-            ] {
-                if ui
-                    .add_enabled(
-                        self.job.is_none(),
-                        egui::Button::new(label).min_size(egui::vec2(66.0, 24.0)),
-                    )
-                    .on_hover_text(hint)
-                    .clicked()
-                {
-                    self.actions.push(action);
-                }
+            if ui
+                .add_enabled(
+                    self.job.is_none(),
+                    egui::Button::new("New").min_size(egui::vec2(58.0, 24.0)),
+                )
+                .on_hover_text("New demo project")
+                .clicked()
+            {
+                self.actions.push(Action::New);
             }
+            if ui
+                .add_enabled(
+                    self.job.is_none(),
+                    egui::Button::new("Open").min_size(egui::vec2(58.0, 24.0)),
+                )
+                .on_hover_text("Open project · Ctrl+O")
+                .clicked()
+            {
+                self.actions.push(Action::Open);
+            }
+            ui.add_enabled_ui(self.job.is_none(), |ui| {
+                let open_menu = ui.menu_button(RichText::new("▼").size(9.0), |ui| {
+                    ui.label(RichText::new("PROJECT FILE").small().color(DIM));
+                    if ui.button("Open project… · Ctrl+O").clicked() {
+                        self.actions.push(Action::Open);
+                        ui.close();
+                    }
+                    if ui
+                        .add_enabled(
+                            self.path.is_some(),
+                            egui::Button::new("Reload last saved project"),
+                        )
+                        .clicked()
+                    {
+                        self.actions.push(Action::Last);
+                        ui.close();
+                    }
+                    if ui.button("Recover last checkpoint…").clicked() {
+                        self.actions.push(Action::Recover);
+                        ui.close();
+                    }
+                });
+                open_menu
+                    .response
+                    .on_hover_text("Open, reload or recover a project file");
+            });
+            if ui
+                .add_enabled(
+                    self.job.is_none(),
+                    egui::Button::new("Save").min_size(egui::vec2(58.0, 24.0)),
+                )
+                .on_hover_text("Save · Ctrl+S")
+                .clicked()
+            {
+                self.actions.push(Action::Save(false));
+            }
+            if ui
+                .add_enabled(
+                    self.job.is_none(),
+                    egui::Button::new("Save As").min_size(egui::vec2(64.0, 24.0)),
+                )
+                .on_hover_text("Save a copy · Ctrl+Shift+S")
+                .clicked()
+            {
+                self.actions.push(Action::Save(true));
+            }
+            ui.add_enabled_ui(self.job.is_none(), |ui| {
+                let save_menu = ui.menu_button(RichText::new("▼").size(9.0), |ui| {
+                    ui.label(RichText::new("ATOMIC PERSISTENCE").small().color(DIM));
+                    if ui.button("Save project · Ctrl+S").clicked() {
+                        self.actions.push(Action::Save(false));
+                        ui.close();
+                    }
+                    if ui.button("Save project as… · Ctrl+Shift+S").clicked() {
+                        self.actions.push(Action::Save(true));
+                        ui.close();
+                    }
+                    if ui.button("Write recovery checkpoint now").clicked() {
+                        self.actions.push(Action::CheckpointNow);
+                        ui.close();
+                    }
+                });
+                save_menu
+                    .response
+                    .on_hover_text("Save project or write an immediate recovery checkpoint");
+            });
             if ui
                 .add_enabled(
                     self.path.is_some() && self.job.is_none(),
@@ -692,6 +778,28 @@ impl RustMixApp {
                 {
                     self.actions.push(Action::About);
                 }
+                let settings_menu = ui.menu_button(RichText::new("▼").size(9.0), |ui| {
+                    ui.label(RichText::new("SETTINGS PAGES").small().color(DIM));
+                    for (label, page) in [
+                        ("Display / format…", SettingsPage::Display),
+                        ("Appearance…", SettingsPage::Appearance),
+                        ("Workspace…", SettingsPage::Workspace),
+                        ("Shortcuts…", SettingsPage::Shortcuts),
+                    ] {
+                        if ui.button(label).clicked() {
+                            self.actions.push(Action::SettingsAt(page));
+                            ui.close();
+                        }
+                    }
+                    ui.separator();
+                    if ui.button("Overlay Settings…").clicked() {
+                        self.actions.push(Action::OverlaySettings(0));
+                        ui.close();
+                    }
+                });
+                settings_menu
+                    .response
+                    .on_hover_text("Jump directly to a Settings page or Overlay Settings");
                 let settings = ui
                     .add(egui::Button::new("Settings").min_size(egui::vec2(74.0, 24.0)))
                     .on_hover_text("Project, appearance and workspace settings");
@@ -795,6 +903,7 @@ impl RustMixApp {
                             "Overlay / Graphics panel",
                             Action::FocusPanel(Panel::Overlays),
                         ),
+                        ("Overlay Settings…", Action::OverlaySettings(0)),
                         ("Settings…", Action::Settings),
                     ] {
                         if ui.button(label).clicked() {
@@ -818,11 +927,16 @@ impl RustMixApp {
                 ui.painter()
                     .rect_filled(fill, 0.0, if peak >= 1.0 { RED } else { TEAL });
                 meter_response.on_hover_text("Master meter · simulated signal, no audio device");
-                if ui
-                    .add(egui::Button::new("Multiview").min_size(egui::vec2(76.0, 26.0)))
-                    .on_hover_text("Full-width source tiles for monitoring")
-                    .clicked()
-                {
+                let multiview_btn = ui
+                    .add(
+                        egui::Button::new("Multiview")
+                            .selected(self.multiview)
+                            .min_size(egui::vec2(76.0, 26.0)),
+                    )
+                    .on_hover_text("Switch between main switcher and Multiview layout");
+                self.automation
+                    .insert("output.multiview".into(), multiview_btn.rect);
+                if multiview_btn.clicked() {
                     self.actions.push(Action::Multiview);
                 }
                 if ui
@@ -832,11 +946,23 @@ impl RustMixApp {
                 {
                     self.actions.push(Action::FocusPanel(Panel::Audio));
                 }
-                if ui
+                let overlay_gear = ui
+                    .add(
+                        egui::Button::new(RichText::new("⚙").size(12.0))
+                            .min_size(egui::vec2(24.0, 26.0)),
+                    )
+                    .on_hover_text("Open Overlay Settings dialog (slots 1–4)");
+                self.automation
+                    .insert("output.overlay.settings".into(), overlay_gear.rect);
+                if overlay_gear.clicked() {
+                    self.actions.push(Action::OverlaySettings(0));
+                }
+                let overlay_btn = ui
                     .add(egui::Button::new("Overlay").min_size(egui::vec2(70.0, 26.0)))
-                    .on_hover_text("Show the Overlay / Graphics panel · F1–F4 toggle slots")
-                    .clicked()
-                {
+                    .on_hover_text("Show the Overlay / Graphics panel · F1–F4 toggle slots");
+                self.automation
+                    .insert("output.overlay".into(), overlay_btn.rect);
+                if overlay_btn.clicked() {
                     self.actions.push(Action::FocusPanel(Panel::Overlays));
                 }
             });
@@ -1042,7 +1168,21 @@ impl RustMixApp {
             ui.disable();
         }
         let mut dock = std::mem::replace(&mut self.dock, DockState::new(vec![]));
-        let style = egui_dock::Style::from_egui(ui.style());
+        let mut style = egui_dock::Style::from_egui(ui.style());
+        style.tab_bar.bg_fill = Color32::from_rgb(19, 26, 31);
+        style.tab_bar.hline_color = Color32::from_rgb(56, 70, 82);
+        style.tab.active.bg_fill = CHIP_BG;
+        style.tab.active.text_color = Color32::WHITE;
+        style.tab.active.outline_color = TEAL;
+        style.tab.focused.bg_fill = CHIP_BG;
+        style.tab.focused.text_color = Color32::WHITE;
+        style.tab.focused.outline_color = TEAL;
+        style.tab.inactive.bg_fill = Color32::from_rgb(24, 30, 35);
+        style.tab.inactive.text_color = DIM;
+        style.tab.hovered.bg_fill = Color32::from_rgb(53, 64, 77);
+        style.tab.hovered.text_color = Color32::WHITE;
+        style.separator.color_idle = Color32::from_rgb(18, 22, 26);
+        style.separator.color_hovered = TEAL;
         DockArea::new(&mut dock)
             .style(style)
             .show_close_buttons(false)
