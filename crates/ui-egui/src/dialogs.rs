@@ -373,6 +373,38 @@ impl RustMixApp {
                                         .small()
                                         .color(DIM),
                                 );
+                                ui.add_space(10.0);
+                                ui.label(
+                                    RichText::new(
+                                        "Source preview · current committed demo frame (384×216)",
+                                    )
+                                    .small()
+                                    .color(DIM),
+                                );
+                                let id = input.id;
+                                let width = ui.available_width().min(320.0);
+                                if let Some(texture) = app.textures.get(&id) {
+                                    let preview = ui.add(
+                                        egui::Image::new(texture)
+                                            .fit_to_exact_size(Vec2::new(width, width * 9.0 / 16.0))
+                                            .sense(egui::Sense::hover()),
+                                    );
+                                    app.automation
+                                        .insert("dialog.properties.preview".into(), preview.rect);
+                                } else {
+                                    let (rect, _) = ui.allocate_exact_size(
+                                        Vec2::new(width, width * 9.0 / 16.0),
+                                        egui::Sense::hover(),
+                                    );
+                                    ui.painter().rect_filled(rect, 0.0, Color32::BLACK);
+                                    ui.painter().text(
+                                        rect.center(),
+                                        egui::Align2::CENTER_CENTER,
+                                        "No frame yet",
+                                        egui::FontId::proportional(13.0),
+                                        DIM,
+                                    );
+                                }
                             }
                             InputPage::Audio => {
                                 section_heading(

@@ -713,7 +713,9 @@ mod tests {
             frame(&mut app, &ctx, vec![], [1600.0, 900.0]);
         }
         let rect = app.automation.get("switcher.tbar").unwrap();
-        let pos = egui::pos2(rect.right() - 1.0, rect.center().y);
+        // The vMix-style T-Bar is vertical: the handle rests at the top and the
+        // transition completes when it is pulled to the bottom.
+        let pos = egui::pos2(rect.center().x, rect.bottom() - 1.0);
         frame(
             &mut app,
             &ctx,

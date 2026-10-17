@@ -21,6 +21,12 @@ pub(crate) const PROGRAM: Color32 = Color32::from_rgb(0, 116, 0);
 pub(crate) const RED: Color32 = Color32::from_rgb(241, 100, 105);
 pub(crate) const DIM: Color32 = Color32::from_rgb(141, 155, 171);
 pub(crate) const BG: Color32 = Color32::from_rgb(29, 35, 39);
+/// Idle source-tile header; Program and Preview override it with their own color.
+pub(crate) const IDLE_TILE: Color32 = Color32::from_rgb(53, 64, 77);
+/// Mixer side rails. Decorative group labels, original artwork and text.
+pub(crate) const MIXER_RAIL: Color32 = Color32::from_rgb(21, 108, 176);
+/// Meter/label chip background used across tiles and strips.
+pub(crate) const CHIP_BG: Color32 = Color32::from_rgb(43, 52, 60);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Panel {
@@ -573,13 +579,26 @@ impl RustMixApp {
     }
     fn toolbar(&mut self, ui: &mut egui::Ui) {
         ui.horizontal(|ui| {
-            if ui
-                .button(RichText::new("RustMix").strong())
-                .on_hover_text(&self.engine.project().name)
-                .clicked()
-            {
+            ui.spacing_mut().item_spacing.x = 5.0;
+            let brand = ui
+                .add(
+                    egui::Button::new(
+                        RichText::new("RustMix")
+                            .strong()
+                            .color(Color32::from_rgb(9, 22, 18)),
+                    )
+                    .fill(TEAL)
+                    .min_size(egui::vec2(76.0, 24.0)),
+                )
+                .on_hover_text(format!(
+                    "{}\nIndependent Rust production switcher",
+                    self.engine.project().name
+                ));
+            self.automation.insert("toolbar.brand".into(), brand.rect);
+            if brand.clicked() {
                 self.actions.push(Action::About);
             }
+            ui.separator();
             for (label, action, hint) in [
                 ("New", Action::New, "New demo project"),
                 ("Open", Action::Open, "Open project · Ctrl+O"),
@@ -589,7 +608,7 @@ impl RustMixApp {
                 if ui
                     .add_enabled(
                         self.job.is_none(),
-                        egui::Button::new(label).min_size(egui::vec2(66.0, 23.0)),
+                        egui::Button::new(label).min_size(egui::vec2(66.0, 24.0)),
                     )
                     .on_hover_text(hint)
                     .clicked()
@@ -600,40 +619,52 @@ impl RustMixApp {
             if ui
                 .add_enabled(
                     self.path.is_some() && self.job.is_none(),
-                    egui::Button::new("Last"),
+                    egui::Button::new("Last").min_size(egui::vec2(50.0, 24.0)),
                 )
                 .on_disabled_hover_text("Save or open a project first")
+                .on_hover_text("Reload the most recently saved project")
                 .clicked()
             {
                 self.actions.push(Action::Last);
             }
-            ui.add_space((ui.max_rect().width() * 0.5 - ui.cursor().left() - 65.0).max(5.0));
-            if ui.button("Fullscreen").clicked() {
+            ui.add_space((ui.max_rect().width() * 0.5 - ui.cursor().left() - 58.0).max(5.0));
+            let fullscreen = ui
+                .add(
+                    egui::Button::new(RichText::new(if self.fullscreen {
+                        "Exit fullscreen"
+                    } else {
+                        "Fullscreen"
+                    }))
+                    .min_size(egui::vec2(112.0, 24.0)),
+                )
+                .on_hover_text("Toggle native fullscreen");
+            self.automation
+                .insert("toolbar.fullscreen".into(), fullscreen.rect);
+            if fullscreen.clicked() {
                 self.actions.push(Action::Fullscreen);
             }
-            ui.menu_button("View", |ui| {
-                for (label, action) in [
-                    ("Multiview", Action::Multiview),
-                    ("Production layout", Action::Workspace(false)),
-                    ("Audio layout", Action::Workspace(true)),
-                    ("Audio Mixer", Action::FocusPanel(Panel::Audio)),
-                    ("Overlay / Graphics", Action::FocusPanel(Panel::Overlays)),
-                ] {
-                    if ui.button(label).clicked() {
-                        self.actions.push(action);
-                        ui.close();
-                    }
-                }
-            });
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if ui.button("?").clicked() {
+                if ui
+                    .add(egui::Button::new("?").min_size(egui::vec2(28.0, 24.0)))
+                    .on_hover_text("About RustMix")
+                    .clicked()
+                {
                     self.actions.push(Action::About);
                 }
-                if ui.button("Settings").clicked() {
+                let settings = ui
+                    .add(egui::Button::new("Settings").min_size(egui::vec2(74.0, 24.0)))
+                    .on_hover_text("Project, appearance and workspace settings");
+                self.automation
+                    .insert("toolbar.settings".into(), settings.rect);
+                if settings.clicked() {
                     self.actions.push(Action::Settings);
                 }
                 if ui
-                    .selectable_label(self.demo_paused, "Pause Inputs")
+                    .add(
+                        egui::Button::new("Pause Inputs")
+                            .selected(self.demo_paused)
+                            .min_size(egui::vec2(90.0, 24.0)),
+                    )
                     .on_hover_text(
                         "Freeze the procedural demo source clock. Transitions remain responsive.",
                     )
@@ -641,65 +672,188 @@ impl RustMixApp {
                 {
                     self.actions.push(Action::PauseDemo);
                 }
-                ui.label(RichText::new("SYNTHETIC / OFFLINE").small().color(DIM));
+                ui.add(
+                    egui::Label::new(
+                        RichText::new(" SYNTHETIC / OFFLINE ")
+                            .small()
+                            .strong()
+                            .color(DIM),
+                    )
+                    .selectable(false),
+                )
+                .on_hover_text("Local demo sources only; no devices, files or network outputs");
             });
         });
     }
     fn production_toolbar(&mut self, ui: &mut egui::Ui) {
         ui.horizontal(|ui| {
-            if ui.button("Add Input  +").clicked() {
+            ui.spacing_mut().item_spacing.x = 4.0;
+            let add = ui
+                .add(
+                    egui::Button::new(RichText::new("Add Input  +").strong())
+                        .min_size(egui::vec2(108.0, 26.0)),
+                )
+                .on_hover_text("Add a synthetic source · Ctrl+I");
+            self.automation.insert("production.add".into(), add.rect);
+            if add.clicked() {
                 self.actions.push(Action::Add);
             }
+            let caret = ui.menu_button(RichText::new("▼").size(9.0), |ui| {
+                ui.label(RichText::new("SYNTHETIC GENERATORS").small().color(DIM));
+                for kind in InputKind::ALL {
+                    if ui.button(kind.label()).clicked() {
+                        self.add_kind = kind;
+                        self.add_name = format!("{} input", kind.label());
+                        self.actions.push(Action::Add);
+                        ui.close();
+                    }
+                }
+            });
+            caret
+                .response
+                .on_hover_text("Pick a generator and open the source dialog");
             ui.separator();
-            for (name, reason) in [
-                ("Record", "No recording or recoverable encoder backend"),
-                ("External", "No external video output backend"),
-                ("Stream", "No encoder or streaming backend"),
-                ("MultiCorder", "ISO recording is unavailable"),
-                ("PlayList", "Media playlists are unavailable"),
+            for (id, name, reason) in [
+                (
+                    "record",
+                    "Record",
+                    "No recording or recoverable encoder backend",
+                ),
+                ("external", "External", "No external video output backend"),
+                ("stream", "Stream", "No encoder or streaming backend"),
+                ("multicorder", "MultiCorder", "ISO recording is unavailable"),
+                ("playlist", "PlayList", "Media playlists are unavailable"),
             ] {
-                ui.add_enabled(
-                    false,
-                    egui::Button::new(name).min_size(egui::vec2(86.0, 25.0)),
-                )
-                .on_disabled_hover_text(reason);
+                let button = ui
+                    .add_enabled(
+                        false,
+                        egui::Button::new(name).min_size(egui::vec2(84.0, 26.0)),
+                    )
+                    .on_disabled_hover_text(reason);
+                self.automation.insert(format!("output.{id}"), button.rect);
+                let gear = ui
+                    .add_enabled(
+                        false,
+                        egui::Button::new(RichText::new("⚙").size(12.0))
+                            .min_size(egui::vec2(24.0, 26.0)),
+                    )
+                    .on_disabled_hover_text(format!("{name} settings unavailable: {reason}"));
+                self.automation
+                    .insert(format!("output.{id}.settings"), gear.rect);
+                ui.separator();
             }
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if ui.button("Overlay").clicked() {
-                    self.actions.push(Action::FocusPanel(Panel::Overlays));
+                let menu = ui.menu_button(RichText::new("☰").size(14.0), |ui| {
+                    ui.label(RichText::new("WORKSPACE").small().color(DIM));
+                    for (label, action) in [
+                        ("Production layout", Action::Workspace(false)),
+                        ("Audio focus layout", Action::Workspace(true)),
+                        ("Multiview", Action::Multiview),
+                        ("Audio Mixer panel", Action::FocusPanel(Panel::Audio)),
+                        (
+                            "Overlay / Graphics panel",
+                            Action::FocusPanel(Panel::Overlays),
+                        ),
+                        ("Settings…", Action::Settings),
+                    ] {
+                        if ui.button(label).clicked() {
+                            self.actions.push(action);
+                            ui.close();
+                        }
+                    }
+                });
+                menu.response.on_hover_text("Workspace and layout menu");
+                let peaks = audio::bus_peaks(self.engine.project(), 0, self.now);
+                let (meter, meter_response) =
+                    ui.allocate_exact_size(egui::vec2(9.0, 18.0), egui::Sense::hover());
+                ui.painter()
+                    .rect_filled(meter, 1.0, egui::Color32::from_rgb(9, 13, 17));
+                let peak = peaks.iter().copied().fold(0.0_f32, f32::max);
+                let frac = ((audio::db(peak) + 60.0) / 60.0).clamp(0.0, 1.0);
+                let fill = egui::Rect::from_min_max(
+                    egui::pos2(meter.left() + 2.0, meter.bottom() - meter.height() * frac),
+                    egui::pos2(meter.right() - 2.0, meter.bottom()),
+                );
+                ui.painter()
+                    .rect_filled(fill, 0.0, if peak >= 1.0 { RED } else { TEAL });
+                meter_response.on_hover_text("Master meter · simulated signal, no audio device");
+                if ui
+                    .add(egui::Button::new("Multiview").min_size(egui::vec2(76.0, 26.0)))
+                    .on_hover_text("Full-width source tiles for monitoring")
+                    .clicked()
+                {
+                    self.actions.push(Action::Multiview);
                 }
-                if ui.button("Audio Mixer").clicked() {
+                if ui
+                    .add(egui::Button::new("Audio").min_size(egui::vec2(60.0, 26.0)))
+                    .on_hover_text("Focus the Audio Mixer panel")
+                    .clicked()
+                {
                     self.actions.push(Action::FocusPanel(Panel::Audio));
                 }
-                if ui.button("Multiview").clicked() {
-                    self.actions.push(Action::Multiview);
+                if ui
+                    .add(egui::Button::new("Overlay").min_size(egui::vec2(70.0, 26.0)))
+                    .on_hover_text("Show the Overlay / Graphics panel · F1–F4 toggle slots")
+                    .clicked()
+                {
+                    self.actions.push(Action::FocusPanel(Panel::Overlays));
                 }
             });
         });
     }
     fn status(&mut self, ui: &mut egui::Ui) {
         let p = self.engine.project();
+        let rate = p.preferences.rate;
+        let rate_label = if rate.denominator == 1 {
+            rate.numerator.to_string()
+        } else {
+            rate.label()
+        };
         ui.horizontal(|ui| {
+            ui.spacing_mut().item_spacing.x = 6.0;
             ui.label(
-                RichText::new(format!(
-                    "{}p{} target",
-                    p.preferences.height,
-                    p.preferences.rate.label()
-                ))
-                .strong()
-                .color(TEAL),
-            );
-            ui.label(format!(
-                "UI FPS: {:.1}   Demo CPU: {:.2} ms   Inputs: {}   Revision: {}",
-                self.fps,
-                self.generation_ms,
-                p.inputs.len(),
-                p.revision
-            ))
+                RichText::new(format!("{}p{}", p.preferences.height, rate_label))
+                    .strong()
+                    .color(TEAL),
+            )
             .on_hover_text(
-                "Measured UI refresh and demo CPU generation; not broadcast or encoder performance",
+                "Configured project target. Demo rasters stay capped; this is not encoder output.",
             );
-            ui.label(RichText::new("Record / Stream unavailable").color(DIM));
+            ui.separator();
+            ui.label(
+                RichText::new(format!("UI FPS: {:.0}", self.fps))
+                    .monospace()
+                    .small(),
+            )
+            .on_hover_text("Measured native UI refresh rate");
+            ui.separator();
+            ui.label(
+                RichText::new(format!("Demo CPU: {:.1} ms", self.generation_ms))
+                    .monospace()
+                    .small(),
+            )
+            .on_hover_text(
+                "Procedural frame generation time; not broadcast or encoder performance",
+            );
+            ui.separator();
+            ui.label(
+                RichText::new(format!("Inputs: {}", p.inputs.len()))
+                    .monospace()
+                    .small(),
+            );
+            ui.separator();
+            ui.label(
+                RichText::new(format!("Rev: {}", p.revision))
+                    .monospace()
+                    .small(),
+            )
+            .on_hover_text("Committed engine state revision");
+            ui.separator();
+            ui.label(
+                RichText::new("Record / Stream unavailable")
+                    .small()
+                    .color(DIM),
+            );
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 ui.add(
                     egui::Label::new(RichText::new(&self.notice).small().color(if self.warning {
