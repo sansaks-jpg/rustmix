@@ -1,0 +1,693 @@
+#![forbid(unsafe_code)]
+pub mod audio;
+pub mod persistence;
+pub mod render;
+
+use serde::{Deserialize, Serialize};
+use std::collections::HashSet;
+
+#[derive(Debug, thiserror::Error)]
+pub enum Error {
+    #[error("{0}")]
+    Invalid(String),
+    #[error("Project file operation failed: {0}")]
+    Io(#[from] std::io::Error),
+    #[error("Invalid project JSON: {0}")]
+    Json(#[from] serde_json::Error),
+}
+pub type Result<T> = std::result::Result<T, Error>;
+fn invalid(message: &str) -> Error {
+    Error::Invalid(message.into())
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct InputId(pub u32);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Rate {
+    pub numerator: u32,
+    pub denominator: u32,
+}
+impl Rate {
+    pub fn new(numerator: u32, denominator: u32) -> Result<Self> {
+        if numerator == 0
+            || denominator == 0
+            || numerator > 120_000
+            || denominator > 10_000
+            || !(1.0..=120.0).contains(&(numerator as f64 / denominator as f64))
+        {
+            return Err(invalid("Frame rate must be between 1 and 120 fps"));
+        }
+        let (mut a, mut b) = (numerator, denominator);
+        while b != 0 {
+            (a, b) = (b, a % b);
+        }
+        Ok(Self {
+            numerator: numerator / a,
+            denominator: denominator / a,
+        })
+    }
+    pub fn label(self) -> String {
+        format!(
+            "{:.2}",
+            self.numerator as f64 / self.denominator.max(1) as f64
+        )
+    }
+    pub fn frame_at(self, millis: u64) -> u64 {
+        millis.saturating_mul(u64::from(self.numerator))
+            / (1000 * u64::from(self.denominator.max(1)))
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum InputKind {
+    Grid,
+    Geometry,
+    Bars,
+    Graphics,
+    Studio,
+    Color,
+    Countdown,
+}
+impl InputKind {
+    pub const ALL: [Self; 7] = [
+        Self::Grid,
+        Self::Geometry,
+        Self::Bars,
+        Self::Graphics,
+        Self::Studio,
+        Self::Color,
+        Self::Countdown,
+    ];
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Grid => "Motion grid",
+            Self::Geometry => "Geometry",
+            Self::Bars => "Color bars",
+            Self::Graphics => "Graphics",
+            Self::Studio => "Virtual studio",
+            Self::Color => "Color generator",
+            Self::Countdown => "Countdown",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct AudioChannel {
+    pub gain_db: f32,
+    pub muted: bool,
+    pub solo: bool,
+    pub sends: [bool; 3],
+}
+impl Default for AudioChannel {
+    fn default() -> Self {
+        Self {
+            gain_db: 0.0,
+            muted: false,
+            solo: false,
+            sends: [true, false, false],
+        }
+    }
+}
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct InputState {
+    pub id: InputId,
+    pub name: String,
+    pub kind: InputKind,
+    pub color: [u8; 3],
+    pub online: bool,
+    pub audio: AudioChannel,
+}
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Position {
+    LowerLeft,
+    LowerRight,
+    TopLeft,
+}
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct OverlayState {
+    pub enabled: bool,
+    pub title: String,
+    pub subtitle: String,
+    pub position: Position,
+}
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Preferences {
+    pub width: u32,
+    pub height: u32,
+    pub rate: Rate,
+    pub high_contrast: bool,
+    pub ui_scale: f32,
+    pub shortcuts: bool,
+}
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct WorkspaceState {
+    pub name: String,
+    pub dock_json: String,
+}
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ProjectState {
+    pub schema: u32,
+    pub name: String,
+    pub revision: u64,
+    pub inputs: Vec<InputState>,
+    pub program: InputId,
+    pub preview: InputId,
+    pub duration_ms: u32,
+    pub buses: [AudioChannel; 3],
+    pub overlays: [OverlayState; 4],
+    pub preferences: Preferences,
+    pub workspace: WorkspaceState,
+}
+impl ProjectState {
+    pub fn demo() -> Self {
+        let names = [
+            "Camera A",
+            "Camera B",
+            "Camera C",
+            "Graphics",
+            "News Background",
+            "Color Source",
+            "Countdown",
+        ];
+        let colors = [
+            [38, 156, 192],
+            [227, 147, 65],
+            [100, 166, 142],
+            [47, 139, 209],
+            [40, 112, 167],
+            [114, 79, 183],
+            [35, 174, 157],
+        ];
+        let inputs = names
+            .into_iter()
+            .zip(InputKind::ALL)
+            .zip(colors)
+            .enumerate()
+            .map(|(i, ((name, kind), color))| InputState {
+                id: InputId(i as u32 + 1),
+                name: name.into(),
+                kind,
+                color,
+                online: true,
+                audio: AudioChannel {
+                    muted: i > 1,
+                    ..Default::default()
+                },
+            })
+            .collect();
+        Self {
+            schema: 1,
+            name: "Studio / Demo production".into(),
+            revision: 0,
+            inputs,
+            program: InputId(1),
+            preview: InputId(2),
+            duration_ms: 1000,
+            buses: std::array::from_fn(|_| AudioChannel::default()),
+            overlays: std::array::from_fn(|i| OverlayState {
+                enabled: false,
+                title: if i == 0 {
+                    "RUSTMIX / STUDIO".into()
+                } else {
+                    format!("Overlay {}", i + 1)
+                },
+                subtitle: "Independent live production • Synthetic demo".into(),
+                position: Position::LowerLeft,
+            }),
+            preferences: Preferences {
+                width: 1920,
+                height: 1080,
+                rate: Rate {
+                    numerator: 30,
+                    denominator: 1,
+                },
+                high_contrast: false,
+                ui_scale: 1.0,
+                shortcuts: true,
+            },
+            workspace: WorkspaceState {
+                name: "Production".into(),
+                dock_json: String::new(),
+            },
+        }
+    }
+    pub fn input(&self, id: InputId) -> Option<&InputState> {
+        self.inputs.iter().find(|s| s.id == id)
+    }
+    pub fn validate(&self) -> Result<()> {
+        if self.schema != 1 {
+            return Err(invalid(
+                "Unsupported project version; this application supports schema 1",
+            ));
+        }
+        valid_text(&self.name, 120)?;
+        if !(2..=32).contains(&self.inputs.len()) {
+            return Err(invalid("A project needs 2–32 synthetic inputs"));
+        }
+        let mut ids = HashSet::new();
+        for input in &self.inputs {
+            if input.id.0 == 0 || !ids.insert(input.id) {
+                return Err(invalid("Invalid or duplicate input ID"));
+            }
+            valid_text(&input.name, 64)?;
+            valid_audio(&input.audio)?;
+        }
+        if self.input(self.program).is_none() || self.input(self.preview).is_none() {
+            return Err(invalid("Program or Preview references a missing input"));
+        }
+        if !(100..=10000).contains(&self.duration_ms) {
+            return Err(invalid("Transition duration must be 100–10000 ms"));
+        }
+        for a in &self.buses {
+            valid_audio(a)?;
+        }
+        for overlay in &self.overlays {
+            valid_text(&overlay.title, 96)?;
+            if overlay.subtitle.len() > 160 || overlay.subtitle.chars().any(char::is_control) {
+                return Err(invalid(
+                    "Subtitle is too long or contains control characters",
+                ));
+            }
+        }
+        let p = &self.preferences;
+        if !matches!(
+            (p.width, p.height),
+            (1280, 720) | (1920, 1080) | (2560, 1440) | (3840, 2160)
+        ) {
+            return Err(invalid("Choose a supported 16:9 canvas size"));
+        }
+        if Rate::new(p.rate.numerator, p.rate.denominator)? != p.rate {
+            return Err(invalid("Frame rate must be reduced"));
+        }
+        if !p.ui_scale.is_finite() || !(0.8..=1.5).contains(&p.ui_scale) {
+            return Err(invalid("UI scale must be 0.8–1.5"));
+        }
+        valid_text(&self.workspace.name, 64)?;
+        if self.workspace.dock_json.len() > 65536 {
+            return Err(invalid("Workspace layout exceeds 64 KiB"));
+        }
+        Ok(())
+    }
+}
+fn valid_text(s: &str, max: usize) -> Result<()> {
+    if s.trim().is_empty() || s.len() > max || s.chars().any(char::is_control) {
+        Err(invalid(
+            "Text is empty, too long, or contains control characters",
+        ))
+    } else {
+        Ok(())
+    }
+}
+fn valid_audio(a: &AudioChannel) -> Result<()> {
+    if !a.gain_db.is_finite() || !(-60.0..=12.0).contains(&a.gain_db) {
+        Err(invalid("Gain must be finite and between -60 and +12 dB"))
+    } else {
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum TransitionKind {
+    Fade,
+    Wipe,
+}
+#[derive(Debug, Clone, PartialEq)]
+pub struct TransitionState {
+    pub from: InputId,
+    pub to: InputId,
+    pub kind: TransitionKind,
+    pub start_ms: u64,
+    pub duration_ms: u32,
+    pub progress: f32,
+    pub manual: bool,
+}
+#[derive(Debug, Clone)]
+pub enum Command {
+    SelectPreview(InputId),
+    Cut,
+    Transition(TransitionKind),
+    SetManualProgress(f32),
+    CancelTransition,
+    SetDuration(u32),
+    FadeBlack,
+    AddInput { name: String, kind: InputKind },
+    RemoveInput(InputId),
+    UpdateInput(InputState),
+    SetBus(usize, AudioChannel),
+    SetOverlay(usize, OverlayState),
+    SetPreferences(Preferences),
+    SetWorkspace(WorkspaceState),
+    RenameProject(String),
+}
+#[derive(Debug, Clone, Serialize)]
+pub struct CommandDefinition {
+    pub id: &'static str,
+    pub version: u32,
+    pub label: &'static str,
+    pub category: &'static str,
+    pub shortcut: &'static str,
+    pub scope: &'static str,
+    pub idempotent: bool,
+    pub live: bool,
+}
+impl Command {
+    pub fn definition(&self) -> CommandDefinition {
+        let (id, label, category, shortcut, idempotent, live) = match self {
+            Self::SelectPreview(_) => (
+                "preview.select",
+                "Select Preview",
+                "Switcher",
+                "1–7",
+                true,
+                false,
+            ),
+            Self::Cut => ("program.cut", "Cut", "Switcher", "Space", false, true),
+            Self::Transition(_) => (
+                "program.transition",
+                "Transition",
+                "Switcher",
+                "Enter",
+                false,
+                true,
+            ),
+            Self::SetManualProgress(_) => ("program.manual", "T-Bar", "Switcher", "", true, true),
+            Self::CancelTransition => (
+                "program.cancel",
+                "Cancel transition",
+                "Switcher",
+                "Esc",
+                true,
+                true,
+            ),
+            Self::SetDuration(_) => ("program.duration", "Duration", "Switcher", "", true, false),
+            Self::FadeBlack => (
+                "program.fadeBlack",
+                "Fade to black / restore",
+                "Switcher",
+                "B",
+                false,
+                true,
+            ),
+            Self::AddInput { .. } => (
+                "input.add",
+                "Add synthetic input",
+                "Inputs",
+                "Ctrl+I",
+                false,
+                false,
+            ),
+            Self::RemoveInput(_) => ("input.remove", "Remove input", "Inputs", "", false, false),
+            Self::UpdateInput(_) => ("input.update", "Edit input", "Inputs", "", true, false),
+            Self::SetBus(..) => (
+                "audio.bus.set",
+                "Set bus controls",
+                "Audio",
+                "",
+                true,
+                false,
+            ),
+            Self::SetOverlay(..) => (
+                "overlay.set",
+                "Set overlay",
+                "Graphics",
+                "F1–F4",
+                true,
+                true,
+            ),
+            Self::SetPreferences(_) => (
+                "project.preferences",
+                "Preferences",
+                "Project",
+                "",
+                true,
+                false,
+            ),
+            Self::SetWorkspace(_) => ("workspace.set", "Workspace", "View", "", true, false),
+            Self::RenameProject(_) => (
+                "project.rename",
+                "Rename project",
+                "Project",
+                "",
+                true,
+                false,
+            ),
+        };
+        CommandDefinition {
+            id,
+            version: 1,
+            label,
+            category,
+            shortcut,
+            scope: "local-demo",
+            idempotent,
+            live,
+        }
+    }
+}
+#[derive(Debug, Clone, Serialize)]
+pub struct CommandResult {
+    pub command: &'static str,
+    pub revision: u64,
+    pub affected: Vec<InputId>,
+}
+pub struct Engine {
+    project: ProjectState,
+    transition: Option<TransitionState>,
+    black: f32,
+    black_ramp: Option<(u64, f32, f32)>,
+    last_ms: u64,
+}
+impl Default for Engine {
+    fn default() -> Self {
+        Self {
+            project: ProjectState::demo(),
+            transition: None,
+            black: 0.0,
+            black_ramp: None,
+            last_ms: 0,
+        }
+    }
+}
+impl Engine {
+    pub fn from_project(project: ProjectState) -> Result<Self> {
+        project.validate()?;
+        Ok(Self {
+            project,
+            transition: None,
+            black: 0.0,
+            black_ramp: None,
+            last_ms: 0,
+        })
+    }
+    pub fn project(&self) -> &ProjectState {
+        &self.project
+    }
+    pub fn transition(&self) -> Option<&TransitionState> {
+        self.transition.as_ref()
+    }
+    pub fn black_level(&self) -> f32 {
+        self.black
+    }
+    pub fn enabled(&self, command: &Command) -> Result<()> {
+        match command {
+            Command::Cut
+            | Command::Transition(_)
+            | Command::SelectPreview(_)
+            | Command::AddInput { .. }
+            | Command::RemoveInput(_)
+            | Command::UpdateInput(_)
+                if self.transition.is_some() =>
+            {
+                Err(invalid("Finish or cancel the active transition first"))
+            }
+            Command::Transition(_) if self.project.preview == self.project.program => {
+                Err(invalid("Select a different Preview input"))
+            }
+            Command::SetManualProgress(_)
+                if self.transition.as_ref().is_some_and(|t| !t.manual) =>
+            {
+                Err(invalid("Automatic transition is running"))
+            }
+            Command::RemoveInput(id)
+                if *id == self.project.program || *id == self.project.preview =>
+            {
+                Err(invalid(
+                    "Take this input out of Program and Preview before removing it",
+                ))
+            }
+            Command::RemoveInput(_) if self.project.inputs.len() <= 2 => {
+                Err(invalid("Keep at least two inputs"))
+            }
+            _ => Ok(()),
+        }
+    }
+    pub fn execute(&mut self, command: Command, now: u64) -> Result<CommandResult> {
+        self.enabled(&command)?;
+        let id = command.definition().id;
+        let mut next = self.project.clone();
+        let mut transition = self.transition.clone();
+        let mut black_ramp = self.black_ramp;
+        let mut affected = Vec::new();
+        match command {
+            Command::SelectPreview(id) => {
+                if next.input(id).is_none() {
+                    return Err(invalid("Input not found"));
+                }
+                next.preview = id;
+                affected.push(id);
+            }
+            Command::Cut => {
+                std::mem::swap(&mut next.program, &mut next.preview);
+                affected.extend([next.program, next.preview]);
+            }
+            Command::Transition(kind) => {
+                transition = Some(TransitionState {
+                    from: next.program,
+                    to: next.preview,
+                    kind,
+                    start_ms: now,
+                    duration_ms: next.duration_ms,
+                    progress: 0.0,
+                    manual: false,
+                });
+            }
+            Command::SetManualProgress(p) => {
+                if !p.is_finite() || !(0.0..=1.0).contains(&p) {
+                    return Err(invalid("T-Bar position must be between 0 and 1"));
+                }
+                if next.program == next.preview {
+                    return Err(invalid("Select a different Preview input"));
+                }
+                if p == 0.0 {
+                    transition = None;
+                } else if p == 1.0 {
+                    std::mem::swap(&mut next.program, &mut next.preview);
+                    transition = None;
+                } else {
+                    transition = Some(TransitionState {
+                        from: next.program,
+                        to: next.preview,
+                        kind: TransitionKind::Fade,
+                        start_ms: now,
+                        duration_ms: next.duration_ms,
+                        progress: p,
+                        manual: true,
+                    });
+                }
+            }
+            Command::CancelTransition => {
+                transition = None;
+            }
+            Command::SetDuration(d) => {
+                next.duration_ms = d;
+            }
+            Command::FadeBlack => {
+                let target = if black_ramp.is_some_and(|(_, _, t)| t > 0.0) || self.black > 0.5 {
+                    0.0
+                } else {
+                    1.0
+                };
+                black_ramp = Some((now, self.black, target));
+            }
+            Command::AddInput { name, kind } => {
+                let id = next
+                    .inputs
+                    .iter()
+                    .map(|i| i.id.0)
+                    .max()
+                    .and_then(|i| i.checked_add(1))
+                    .ok_or_else(|| invalid("Input ID limit reached"))?;
+                next.inputs.push(InputState {
+                    id: InputId(id),
+                    name,
+                    kind,
+                    color: [37, 160, 183],
+                    online: true,
+                    audio: AudioChannel {
+                        muted: true,
+                        ..Default::default()
+                    },
+                });
+                affected.push(InputId(id));
+            }
+            Command::RemoveInput(id) => {
+                if next.input(id).is_none() {
+                    return Err(invalid("Input not found"));
+                }
+                next.inputs.retain(|i| i.id != id);
+                affected.push(id);
+            }
+            Command::UpdateInput(input) => {
+                let old = next
+                    .inputs
+                    .iter_mut()
+                    .find(|i| i.id == input.id)
+                    .ok_or_else(|| invalid("Input not found"))?;
+                affected.push(input.id);
+                *old = input;
+            }
+            Command::SetBus(i, a) => {
+                *next
+                    .buses
+                    .get_mut(i)
+                    .ok_or_else(|| invalid("Bus not found"))? = a;
+            }
+            Command::SetOverlay(i, o) => {
+                *next
+                    .overlays
+                    .get_mut(i)
+                    .ok_or_else(|| invalid("Overlay slot not found"))? = o;
+            }
+            Command::SetPreferences(p) => {
+                next.preferences = p;
+            }
+            Command::SetWorkspace(w) => {
+                next.workspace = w;
+            }
+            Command::RenameProject(name) => {
+                next.name = name;
+            }
+        }
+        next.revision = next
+            .revision
+            .checked_add(1)
+            .ok_or_else(|| invalid("State revision limit reached"))?;
+        next.validate()?;
+        self.project = next;
+        self.transition = transition;
+        self.black_ramp = black_ramp;
+        Ok(CommandResult {
+            command: id,
+            revision: self.project.revision,
+            affected,
+        })
+    }
+    pub fn tick(&mut self, now: u64) {
+        let now = now.max(self.last_ms);
+        self.last_ms = now;
+        let mut completed = false;
+        if let Some(t) = &mut self.transition {
+            if !t.manual {
+                t.progress =
+                    (now.saturating_sub(t.start_ms) as f32 / t.duration_ms.max(1) as f32).min(1.0);
+                completed = t.progress >= 1.0;
+            }
+        }
+        if completed {
+            if let Some(t) = self.transition.take() {
+                self.project.program = t.to;
+                self.project.preview = t.from;
+                self.project.revision = self.project.revision.saturating_add(1);
+            }
+        }
+        if let Some((start, from, to)) = self.black_ramp {
+            let p = (now.saturating_sub(start) as f32 / self.project.duration_ms.max(1) as f32)
+                .min(1.0);
+            self.black = from + (to - from) * p;
+            if p >= 1.0 {
+                self.black_ramp = None;
+            }
+        }
+    }
+}

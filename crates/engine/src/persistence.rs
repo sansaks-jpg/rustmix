@@ -1,0 +1,60 @@
+//! Validated same-filesystem atomic replacement, two backups, recovery journal.
+use crate::{Error, ProjectState, Result, invalid};
+use std::{
+    fs::{self, File},
+    io::{Read, Write},
+    path::{Path, PathBuf},
+};
+const MAX_FILE: u64 = 1_048_576;
+pub fn backup_path(path: &Path, slot: usize) -> PathBuf {
+    let mut name = path.as_os_str().to_owned();
+    name.push(format!(".bak{slot}"));
+    PathBuf::from(name)
+}
+pub fn load(path: &Path) -> Result<ProjectState> {
+    let mut bytes = Vec::new();
+    File::open(path)?
+        .take(MAX_FILE + 1)
+        .read_to_end(&mut bytes)?;
+    if bytes.len() as u64 > MAX_FILE {
+        return Err(invalid("Project exceeds 1 MiB limit"));
+    }
+    let p: ProjectState = serde_json::from_slice(&bytes)?;
+    p.validate()?;
+    Ok(p)
+}
+fn atomic_bytes(path: &Path, bytes: &[u8]) -> Result<()> {
+    let parent = path
+        .parent()
+        .filter(|p| !p.as_os_str().is_empty())
+        .unwrap_or(Path::new("."));
+    let mut temp = tempfile::NamedTempFile::new_in(parent)?;
+    temp.write_all(bytes)?;
+    temp.as_file().sync_all()?;
+    temp.persist(path).map_err(|e| Error::Io(e.error))?;
+    Ok(())
+}
+pub fn save(path: &Path, project: &ProjectState) -> Result<()> {
+    project.validate()?;
+    let bytes = serde_json::to_vec_pretty(project)?;
+    if bytes.len() as u64 > MAX_FILE {
+        return Err(invalid("Project exceeds size limit"));
+    }
+    let roundtrip: ProjectState = serde_json::from_slice(&bytes)?;
+    roundtrip.validate()?;
+    if path.exists() {
+        let previous = load(path)?;
+        let old = serde_json::to_vec_pretty(&previous)?;
+        let first = backup_path(path, 1);
+        if first.exists() {
+            let older = load(&first)?;
+            atomic_bytes(&backup_path(path, 2), &serde_json::to_vec_pretty(&older)?)?;
+        }
+        atomic_bytes(&first, &old)?;
+    }
+    let journal = backup_path(path, 0);
+    atomic_bytes(&journal, &bytes)?;
+    atomic_bytes(path, &bytes)?;
+    // Keep the validated journal for explicit operator recovery; no silent restore.
+    Ok(())
+}

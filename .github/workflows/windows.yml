@@ -1,0 +1,54 @@
+name: Windows native UI
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  windows:
+    runs-on: windows-2022
+    timeout-minutes: 45
+    env:
+      CARGO_TERM_COLOR: never
+      RUST_BACKTRACE: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.94.1
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - name: Formatting
+        run: cargo fmt --all -- --check
+      - name: Check workspace
+        run: cargo check --workspace --locked
+      - name: Clippy (warnings are errors)
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
+      - name: Unit, integration and widget tests
+        run: cargo test --workspace --all-targets --locked
+      - name: Build release on GitHub only
+        run: cargo build --release --workspace --locked
+      - name: Native launch, keyboard and fader smoke, GPU screenshots, reopen
+        shell: pwsh
+        run: ./scripts/ci-native-smoke.ps1
+      - name: Upload native evidence (including failures)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rustmix-ui-evidence
+          path: artifacts/
+          if-no-files-found: warn
+      - name: Package Windows executable
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path dist -Force | Out-Null
+          Copy-Item -LiteralPath target/release/rustmix.exe -Destination dist/
+          Copy-Item -LiteralPath README.md,ATTRIBUTION.md,LICENSE-MIT -Destination dist/
+          cargo metadata --locked --format-version 1 | Out-File -Encoding utf8 dist/dependency-manifest.json
+          Get-FileHash -Algorithm SHA256 dist/rustmix.exe | Format-List | Out-File dist/SHA256.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rustmix-windows-x64
+          path: dist/
+          if-no-files-found: error
