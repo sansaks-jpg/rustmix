@@ -393,11 +393,28 @@ mod tests {
         let _ = ctx.run_ui(raw, |ui| app.frame_ui(ui));
     }
     fn click(app: &mut RustMixApp, ctx: &egui::Context, id: &str, size: [f32; 2]) {
-        let pos = app
-            .automation
-            .get(id)
-            .expect("Visible operator control")
-            .center();
+        // A newly shown Window has an initial sizing pass. Use fresh stable
+        // bounds before delivering one click, rather than targeting that pass.
+        let mut previous: Option<egui::Rect> = None;
+        let mut stable = None;
+        for _ in 0..6 {
+            frame(app, ctx, vec![], size);
+            let bounds = *app.automation.get(id).expect("Visible operator control");
+            if previous.is_some_and(|old| {
+                old.center().distance(bounds.center()) < 0.5
+                    && (old.size() - bounds.size()).length() < 0.5
+            }) {
+                stable = Some(bounds);
+                break;
+            }
+            previous = Some(bounds);
+        }
+        let bounds = stable.expect("Operator control must settle within six frames");
+        assert!(
+            ctx.viewport_rect().contains_rect(bounds),
+            "Click target is outside viewport: {id} {bounds:?}"
+        );
+        let pos = bounds.center();
         for pressed in [true, false] {
             frame(
                 app,
@@ -661,32 +678,7 @@ mod tests {
         app.add_name = "Test grid".into();
         app.add_kind = InputKind::Grid;
         frame(&mut app, &ctx, vec![], size);
-        let add = app.automation.get("dialog.add.confirm").unwrap().center();
-        frame(
-            &mut app,
-            &ctx,
-            vec![
-                egui::Event::PointerMoved(add),
-                egui::Event::PointerButton {
-                    pos: add,
-                    button: egui::PointerButton::Primary,
-                    pressed: true,
-                    modifiers: egui::Modifiers::NONE,
-                },
-            ],
-            size,
-        );
-        frame(
-            &mut app,
-            &ctx,
-            vec![egui::Event::PointerButton {
-                pos: add,
-                button: egui::PointerButton::Primary,
-                pressed: false,
-                modifiers: egui::Modifiers::NONE,
-            }],
-            size,
-        );
+        click(&mut app, &ctx, "dialog.add.confirm", size);
         assert_eq!(app.engine.project().inputs.len(), 8);
         assert!(
             app.engine
@@ -703,36 +695,7 @@ mod tests {
         frame(&mut app, &ctx, vec![], size);
         assert_eq!(app.engine.project().preferences.ui_scale, 1.0);
         assert_eq!(app.engine.project().workspace.name, "Production");
-        let apply = app
-            .automation
-            .get("dialog.settings.apply")
-            .unwrap()
-            .center();
-        frame(
-            &mut app,
-            &ctx,
-            vec![
-                egui::Event::PointerMoved(apply),
-                egui::Event::PointerButton {
-                    pos: apply,
-                    button: egui::PointerButton::Primary,
-                    pressed: true,
-                    modifiers: egui::Modifiers::NONE,
-                },
-            ],
-            size,
-        );
-        frame(
-            &mut app,
-            &ctx,
-            vec![egui::Event::PointerButton {
-                pos: apply,
-                button: egui::PointerButton::Primary,
-                pressed: false,
-                modifiers: egui::Modifiers::NONE,
-            }],
-            size,
-        );
+        click(&mut app, &ctx, "dialog.settings.apply", size);
         assert_eq!(app.engine.project().preferences.ui_scale, 1.2);
         assert_eq!(app.engine.project().workspace.name, "Audio focus");
         assert_eq!(app.engine.project().program, InputId(1));
