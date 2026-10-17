@@ -181,6 +181,9 @@ fn direct_take_is_explicit_atomic_and_rejects_busy_or_missing_input() {
     e.execute(Command::TakeInput(InputId(7)), 0).unwrap();
     assert_eq!(e.project().program, InputId(7));
     assert_eq!(e.project().preview, InputId(1));
+    let cue = e.project().clone();
+    assert!(e.execute(Command::TakeInput(InputId(7)), 0).is_err());
+    assert_eq!(&cue, e.project());
     e.execute(Command::Transition(TransitionKind::Fade), 1)
         .unwrap();
     assert!(e.execute(Command::TakeInput(InputId(2)), 1).is_err());

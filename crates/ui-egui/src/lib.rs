@@ -628,7 +628,7 @@ impl RustMixApp {
         ui.horizontal(|ui| {
             ui.label(
                 RichText::new(format!(
-                    "{}p{}",
+                    "{}p{} target",
                     p.preferences.height,
                     p.preferences.rate.label()
                 ))

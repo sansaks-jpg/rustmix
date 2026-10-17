@@ -509,6 +509,9 @@ impl Engine {
     }
     pub fn enabled(&self, command: &Command) -> Result<()> {
         match command {
+            Command::TakeInput(id) if *id == self.project.program => {
+                Err(invalid("This input is already on Program"))
+            }
             Command::Cut
             | Command::TakeInput(_)
             | Command::Transition(_)

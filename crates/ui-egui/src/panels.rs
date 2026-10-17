@@ -124,8 +124,12 @@ impl RustMixApp {
             .x
             .max(16.0)
             .min((available.y - 30.0).max(9.0) * 16.0 / 9.0);
-        let (rect, _) =
-            ui.allocate_exact_size(Vec2::new(width, width * 9.0 / 16.0), Sense::hover());
+        let (letterbox, _) = ui.allocate_exact_size(
+            Vec2::new(available.x.max(width), width * 9.0 / 16.0),
+            Sense::hover(),
+        );
+        ui.painter().rect_filled(letterbox, 0.0, Color32::BLACK);
+        let rect = Rect::from_center_size(letterbox.center(), Vec2::new(width, width * 9.0 / 16.0));
         self.automation.insert(
             format!("monitor.{}", if program { "program" } else { "preview" }),
             rect,
@@ -230,7 +234,8 @@ impl RustMixApp {
         ui.horizontal(|ui| {
             ui.label(
                 RichText::new(format!(
-                    "SYNTHETIC  ·  {}×{}  ·  {}p",
+                    "DEMO {}  ·  canvas {}×{} / {}p target",
+                    if program { "640×360" } else { "384×216" },
                     p.preferences.width,
                     p.preferences.height,
                     p.preferences.rate.label()
