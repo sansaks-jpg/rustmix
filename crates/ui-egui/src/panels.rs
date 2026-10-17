@@ -732,7 +732,9 @@ impl RustMixApp {
                     self.automation.insert("switcher.tbar".into(), tbar_rect);
                     let tbar =
                         tbar.on_hover_text("Manual T-Bar · drag vertically to blend PVW → PGM");
-                    if can_tbar && (tbar.dragged() || tbar.clicked()) {
+                    if can_tbar
+                        && (tbar.is_pointer_button_down_on() || tbar.dragged() || tbar.clicked())
+                    {
                         if let Some(pos) = tbar.interact_pointer_pos() {
                             progress = ((pos.y - cyl_rect.top()) / cyl_rect.height().max(1.0))
                                 .clamp(0.0, 1.0);
@@ -828,7 +830,13 @@ impl RustMixApp {
                         .hint_text("Search"),
                 );
                 self.automation.insert("inputs.filter".into(), filter.rect);
-                if !self.input_filter.is_empty() && ui.small_button("Clear").clicked() {
+            }
+            if self.category.is_some() || !self.input_filter.is_empty() {
+                let clear = ui.small_button("Clear");
+                self.automation
+                    .insert("inputs.filter.clear".into(), clear.rect);
+                if clear.clicked() {
+                    self.category = None;
                     self.input_filter.clear();
                 }
             }
