@@ -394,15 +394,17 @@ impl RustMixApp {
                             "Manual crossfade · drag to take Preview; return to zero to cancel",
                         );
                     self.automation.insert("switcher.tbar".into(), r.rect);
-                    if !ui.input(|i| i.pointer.primary_down()) {
-                        self.tbar_latched = false;
-                    }
                     if r.changed() && !self.tbar_latched {
                         self.actions
                             .push(Action::Engine(Command::SetManualProgress(manual)));
                         if manual >= 1.0 {
                             self.tbar_latched = true;
                         }
+                    }
+                    // egui reports the final slider value on the release frame too.
+                    // Keep the completion latch through that value before rearming.
+                    if !ui.input(|i| i.pointer.primary_down()) {
+                        self.tbar_latched = false;
                     }
                     ui.label(
                         RichText::new(format!(
