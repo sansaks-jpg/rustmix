@@ -171,3 +171,18 @@ fn stale_source_properties_cannot_reset_audio_routes() {
     e.execute(Command::UpdateInput(properties), 1).unwrap();
     assert_eq!(e.project().inputs[0].audio, audio);
 }
+
+#[test]
+fn direct_take_is_explicit_atomic_and_rejects_busy_or_missing_input() {
+    let mut e = Engine::default();
+    let before = e.project().clone();
+    assert!(e.execute(Command::TakeInput(InputId(900)), 0).is_err());
+    assert_eq!(&before, e.project());
+    e.execute(Command::TakeInput(InputId(7)), 0).unwrap();
+    assert_eq!(e.project().program, InputId(7));
+    assert_eq!(e.project().preview, InputId(1));
+    e.execute(Command::Transition(TransitionKind::Fade), 1)
+        .unwrap();
+    assert!(e.execute(Command::TakeInput(InputId(2)), 1).is_err());
+    assert_eq!(e.project().program, InputId(7));
+}

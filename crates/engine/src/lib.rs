@@ -326,6 +326,7 @@ pub struct TransitionState {
 pub enum Command {
     SelectPreview(InputId),
     Cut,
+    TakeInput(InputId),
     Transition(TransitionKind),
     SetManualProgress(f32),
     CancelTransition,
@@ -364,6 +365,14 @@ impl Command {
                 false,
             ),
             Self::Cut => ("program.cut", "Cut", "Switcher", "Space", false, true),
+            Self::TakeInput(_) => (
+                "program.takeInput",
+                "Take input directly",
+                "Switcher",
+                "",
+                false,
+                true,
+            ),
             Self::Transition(_) => (
                 "program.transition",
                 "Transition",
@@ -501,6 +510,7 @@ impl Engine {
     pub fn enabled(&self, command: &Command) -> Result<()> {
         match command {
             Command::Cut
+            | Command::TakeInput(_)
             | Command::Transition(_)
             | Command::SelectPreview(_)
             | Command::AddInput { .. }
@@ -548,6 +558,14 @@ impl Engine {
             }
             Command::Cut => {
                 std::mem::swap(&mut next.program, &mut next.preview);
+                affected.extend([next.program, next.preview]);
+            }
+            Command::TakeInput(target) => {
+                if next.input(target).is_none() {
+                    return Err(invalid("Input not found"));
+                }
+                next.preview = next.program;
+                next.program = target;
                 affected.extend([next.program, next.preview]);
             }
             Command::Transition(kind) => {

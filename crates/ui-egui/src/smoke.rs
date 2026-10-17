@@ -335,7 +335,7 @@ mod tests {
         }
         let layout = serde_json::to_string(&app.dock).unwrap();
         let restored: DockState<Panel> = serde_json::from_str(&layout).unwrap();
-        assert_eq!(restored.iter_all_tabs().count(), 4);
+        assert_eq!(restored.iter_all_tabs().count(), 3);
         assert!(workspace::decode(&layout).is_ok());
         let mut hostile: serde_json::Value = serde_json::from_str(&layout).unwrap();
         hostile["focused_surface"] = serde_json::json!(999);
@@ -369,6 +369,12 @@ mod tests {
             ],
             [1600.0, 900.0],
         );
+        frame(
+            &mut app,
+            &ctx,
+            vec![egui::Event::PointerMoved(from + egui::vec2(15.0, 0.0))],
+            [1600.0, 900.0],
+        );
         for _ in 0..25 {
             frame(
                 &mut app,
@@ -399,7 +405,7 @@ mod tests {
         let encoded = serde_json::to_string(&app.dock).unwrap();
         assert_eq!(
             workspace::decode(&encoded).unwrap().iter_all_tabs().count(),
-            4
+            3
         );
     }
 }

@@ -59,7 +59,7 @@ pub(crate) fn decode(json: &str) -> Result<DockState<Panel>> {
                 }
                 for tab in tabs {
                     let name = tab.as_str().ok_or_else(bad)?;
-                    if !matches!(name, "Switcher" | "Inputs" | "Audio" | "Overlays")
+                    if !matches!(name, "Inputs" | "Audio" | "Overlays")
                         || !seen.insert(name.to_owned())
                     {
                         return Err(bad());
@@ -91,7 +91,7 @@ pub(crate) fn decode(json: &str) -> Result<DockState<Panel>> {
             return Err(bad());
         }
     }
-    if seen.len() != 4 {
+    if seen.len() != 3 {
         return Err(bad());
     }
     if let Some(focus) = value.get("focused_surface").and_then(Value::as_u64)

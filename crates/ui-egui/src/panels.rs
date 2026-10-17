@@ -11,7 +11,16 @@ impl RustMixApp {
         let p = self.engine.project();
         self.textures.retain(|id, _| p.input(*id).is_some());
         for input in &p.inputs {
-            match render::source(input, 384, 216, self.now) {
+            match render::source(
+                input,
+                384,
+                216,
+                if self.demo_paused {
+                    self.paused_at
+                } else {
+                    self.now
+                },
+            ) {
                 Ok(pixels) => {
                     let image = egui::ColorImage::from_rgba_unmultiplied(
                         [384, 216],
@@ -42,7 +51,11 @@ impl RustMixApp {
             self.engine.black_level(),
             640,
             360,
-            self.now,
+            if self.demo_paused {
+                self.paused_at
+            } else {
+                self.now
+            },
         ) {
             Ok(pixels) => {
                 let image = egui::ColorImage::from_rgba_unmultiplied(
@@ -74,27 +87,38 @@ impl RustMixApp {
             ui.colored_label(RED, "Source missing");
             return;
         };
-        let color = if program { RED } else { TEAL };
-        let label = if program { "PROGRAM" } else { "PREVIEW" };
-        ui.horizontal(|ui| {
-            ui.label(RichText::new(label).strong().color(color).size(14.0));
-            ui.label(RichText::new(format!("{:02}  {}", id.0, input.name)).strong());
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                ui.label(
-                    RichText::new(if input.online {
-                        if program {
-                            "ON PROGRAM · DEMO"
-                        } else {
-                            "READY"
-                        }
-                    } else {
-                        "OFFLINE · BLACK"
-                    })
-                    .color(if input.online { color } else { RED })
-                    .small(),
-                );
+        let color = if program { PROGRAM } else { PREVIEW };
+        egui::Frame::new()
+            .fill(color)
+            .inner_margin(4.0)
+            .show(ui, |ui| {
+                ui.set_min_width((ui.available_width() - 1.0).max(20.0));
+                ui.horizontal(|ui| {
+                    ui.add(
+                        egui::Label::new(
+                            RichText::new(format!("{}  {}", id.0, input.name))
+                                .strong()
+                                .color(Color32::WHITE),
+                        )
+                        .truncate(),
+                    );
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        ui.label(
+                            RichText::new(if input.online {
+                                if program {
+                                    "PROGRAM · DEMO"
+                                } else {
+                                    "PREVIEW"
+                                }
+                            } else {
+                                "OFFLINE · BLACK"
+                            })
+                            .strong()
+                            .color(Color32::WHITE),
+                        );
+                    });
+                });
             });
-        });
         let available = ui.available_size();
         let width = available
             .x
@@ -239,124 +263,141 @@ impl RustMixApp {
     }
     fn switcher_content(&mut self, ui: &mut egui::Ui) {
         let available = ui.available_size();
-        let center = 160.0;
-        let side = ((available.x - center - 40.0) / 2.0).max(200.0);
+        let center = 110.0;
+        let side = ((available.x - center - 100.0) / 2.0).max(200.0);
         ui.horizontal_top(|ui| {
+            ui.add_space(15.0);
             ui.allocate_ui_with_layout(
                 egui::vec2(side, available.y),
                 egui::Layout::top_down(egui::Align::Min),
                 |ui| self.monitor(ui, false),
             );
-            ui.separator();
+            ui.add_space(20.0);
             ui.allocate_ui_with_layout(
                 egui::vec2(center, available.y),
                 egui::Layout::top_down(egui::Align::Min),
                 |ui| {
                     ui.set_width(center);
-                    ui.add_space(9.0);
-                    ui.label(RichText::new("TRANSITION").small().color(DIM));
-                    ui.add_space(10.0);
-                    self.command_button(
-                        ui,
-                        "switcher.cut",
-                        "CUT   [Space]",
-                        Command::Cut,
-                        Some(Color32::from_rgb(40, 112, 118)),
-                    );
-                    ui.add_space(5.0);
-                    self.command_button(
-                        ui,
-                        "switcher.fade",
-                        "FADE  [Enter]",
-                        Command::Transition(TransitionKind::Fade),
-                        None,
-                    );
+                    for (id, label, command) in [
+                        ("switcher.quickPlay", "Quick Play", Command::Cut),
+                        ("switcher.cut", "Cut", Command::Cut),
+                        (
+                            "switcher.fade",
+                            "Fade",
+                            Command::Transition(TransitionKind::Fade),
+                        ),
+                    ] {
+                        self.command_button(ui, id, label, command, None);
+                    }
+                    ui.add_enabled(
+                        false,
+                        egui::Button::new("Merge").min_size(egui::vec2(center, 28.0)),
+                    )
+                    .on_disabled_hover_text("Merge transition is not implemented");
                     self.command_button(
                         ui,
                         "switcher.wipe",
-                        "WIPE",
+                        "Wipe",
                         Command::Transition(TransitionKind::Wipe),
                         None,
                     );
-                    ui.add_space(9.0);
                     let mut duration = self.engine.project().duration_ms;
                     egui::ComboBox::from_id_salt("switcher.duration")
+                        .width(center - 16.0)
                         .selected_text(format!("{duration} ms"))
-                        .width(119.0)
                         .show_ui(ui, |ui| {
-                            for ms in [250, 500, 1000, 1500, 2000, 3000] {
+                            for value in [250, 500, 1000, 1500, 2000, 3000] {
                                 if ui
-                                    .selectable_value(&mut duration, ms, format!("{ms} ms"))
+                                    .selectable_value(&mut duration, value, format!("{value} ms"))
                                     .changed()
                                 {
-                                    self.actions.push(Action::Engine(Command::SetDuration(ms)));
+                                    self.actions
+                                        .push(Action::Engine(Command::SetDuration(value)));
                                 }
                             }
                         });
-                    ui.add_space(8.0);
-                    ui.separator();
-                    ui.label(RichText::new("T-BAR / MANUAL").small().color(DIM));
+                    self.command_button(
+                        ui,
+                        "switcher.ftb",
+                        if self.engine.black_level() > 0.5 {
+                            "Restore"
+                        } else {
+                            "FTB"
+                        },
+                        Command::FadeBlack,
+                        None,
+                    );
+                    ui.add_space(4.0);
+                    for row in 0..2 {
+                        ui.horizontal(|ui| {
+                            ui.spacing_mut().item_spacing.x = 3.0;
+                            for col in 0..4 {
+                                let slot = row * 4 + col;
+                                if let Some(o) = self.engine.project().overlays.get(slot).cloned() {
+                                    let mut next = o.clone();
+                                    let r = ui.add(
+                                        egui::Button::new((slot + 1).to_string())
+                                            .selected(o.enabled)
+                                            .min_size(egui::vec2(23.0, 22.0)),
+                                    );
+                                    self.automation
+                                        .insert(format!("overlay.{}.toggle", slot + 1), r.rect);
+                                    if r.clicked() {
+                                        next.enabled = !next.enabled;
+                                        self.actions
+                                            .push(Action::Engine(Command::SetOverlay(slot, next)));
+                                    }
+                                } else {
+                                    ui.add_enabled(
+                                        false,
+                                        egui::Button::new((slot + 1).to_string())
+                                            .min_size(egui::vec2(23.0, 22.0)),
+                                    )
+                                    .on_disabled_hover_text(
+                                        "This milestone provides four overlay slots",
+                                    );
+                                }
+                            }
+                        });
+                    }
+                    ui.add_space(6.0);
                     let progress = self.engine.transition().map_or(0.0, |t| t.progress);
                     let auto = self.engine.transition().is_some_and(|t| !t.manual);
                     let mut manual = progress;
-                    let response = ui.add_enabled(
+                    let r = ui.add_enabled(
                         !auto,
-                        egui::Slider::new(&mut manual, 0.0..=1.0)
-                            .show_value(false)
-                            .text("T-Bar"),
+                        egui::Slider::new(&mut manual, 0.0..=1.0).show_value(false),
                     );
-                    if response.changed() {
+                    self.automation.insert("switcher.tbar".into(), r.rect);
+                    if !ui.input(|i| i.pointer.primary_down()) {
+                        self.tbar_latched = false;
+                    }
+                    if r.changed() && !self.tbar_latched {
                         self.actions
                             .push(Action::Engine(Command::SetManualProgress(manual)));
+                        if manual >= 1.0 {
+                            self.tbar_latched = true;
+                        }
                     }
                     ui.label(
                         RichText::new(format!(
-                            "{:03.0}%  {}",
+                            "{:03.0}% {}",
                             progress * 100.0,
-                            if auto {
-                                "AUTO"
-                            } else if progress > 0.0 {
-                                "MANUAL"
-                            } else {
-                                "READY"
-                            }
+                            if auto { "AUTO" } else { "T-BAR" }
                         ))
                         .monospace()
-                        .color(TEAL),
+                        .small(),
                     );
                     self.command_button(
                         ui,
                         "switcher.cancel",
-                        "Cancel / return",
+                        "Cancel",
                         Command::CancelTransition,
                         None,
                     );
-                    ui.add_space(9.0);
-                    ui.separator();
-                    let is_black = self.engine.black_level() > 0.5;
-                    self.command_button(
-                        ui,
-                        "switcher.ftb",
-                        if is_black {
-                            "RESTORE  [B]"
-                        } else {
-                            "FADE TO BLACK"
-                        },
-                        Command::FadeBlack,
-                        if is_black {
-                            Some(Color32::from_rgb(123, 51, 59))
-                        } else {
-                            None
-                        },
-                    );
-                    ui.label(
-                        RichText::new("Monitor output only\nNo external broadcast")
-                            .small()
-                            .color(DIM),
-                    );
                 },
             );
-            ui.separator();
+            ui.add_space(20.0);
             ui.allocate_ui_with_layout(
                 egui::vec2(side, available.y),
                 egui::Layout::top_down(egui::Align::Min),
@@ -366,18 +407,45 @@ impl RustMixApp {
     }
     pub(crate) fn inputs(&mut self, ui: &mut egui::Ui) {
         ui.horizontal(|ui| {
-            if ui.button(RichText::new("+ Add").color(TEAL)).clicked() {
-                self.actions.push(Action::Add);
+            if ui
+                .selectable_label(self.category.is_none(), "All")
+                .clicked()
+            {
+                self.category = None;
+            }
+            for (kind, color) in InputKind::ALL.into_iter().zip([
+                Color32::from_rgb(145, 0, 0),
+                PROGRAM,
+                PREVIEW,
+                Color32::from_rgb(132, 29, 145),
+                Color32::from_rgb(0, 144, 229),
+                Color32::from_rgb(30, 30, 95),
+                Color32::from_rgb(30, 131, 116),
+            ]) {
+                if ui
+                    .add(
+                        egui::Button::new(" ")
+                            .fill(color)
+                            .stroke(Stroke::new(
+                                if self.category == Some(kind) {
+                                    2.0
+                                } else {
+                                    0.5
+                                },
+                                Color32::GRAY,
+                            ))
+                            .min_size(egui::vec2(20.0, 19.0)),
+                    )
+                    .on_hover_text(kind.label())
+                    .clicked()
+                {
+                    self.category = Some(kind);
+                }
             }
             ui.add(
                 egui::TextEdit::singleline(&mut self.input_filter)
-                    .hint_text("Filter inputs…")
-                    .desired_width(145.0),
-            );
-            ui.label(
-                RichText::new(format!("{} SOURCES", self.engine.project().inputs.len()))
-                    .small()
-                    .color(DIM),
+                    .hint_text("Search inputs")
+                    .desired_width(130.0),
             );
         });
         self.source_tiles(ui, false);
@@ -386,7 +454,7 @@ impl RustMixApp {
         let inputs = self.engine.project().inputs.clone();
         let program = self.engine.project().program;
         let preview = self.engine.project().preview;
-        let target = if large { 300.0 } else { 190.0 };
+        let target = if large { 300.0 } else { 205.0 };
         let columns = ((ui.available_width() + 8.0) / (target + 8.0))
             .floor()
             .max(1.0) as usize;
@@ -396,7 +464,9 @@ impl RustMixApp {
         let filter = self.input_filter.to_lowercase();
         let filtered: Vec<_> = inputs
             .into_iter()
-            .filter(|i| i.name.to_lowercase().contains(&filter))
+            .filter(|i| {
+                i.name.to_lowercase().contains(&filter) && self.category.is_none_or(|k| k == i.kind)
+            })
             .collect();
         egui::ScrollArea::vertical().id_salt("inputs.scroll").show(ui,|ui| {
             if filtered.is_empty(){ui.label("No inputs match the filter.");}
@@ -405,13 +475,15 @@ impl RustMixApp {
                     for input in row {
                         ui.push_id(("input",input.id.0),|ui| {
                             ui.allocate_ui_with_layout(egui::vec2(tile_width,tile_width*9.0/16.0+62.0),egui::Layout::top_down(egui::Align::Min),|ui| {
-                                let color=if input.id==program{RED}else if input.id==preview{TEAL}else{Color32::from_rgb(53,64,77)};
-                                egui::Frame::new().fill(Color32::from_rgb(24,30,38)).stroke(Stroke::new(1.0,color)).inner_margin(5.0).show(ui,|ui| {
-                                    ui.set_width((tile_width-12.0).max(60.0));
+                                let color=if input.id==program{PROGRAM}else if input.id==preview{PREVIEW}else{Color32::from_rgb(53,64,77)};
+                                egui::Frame::new().fill(Color32::from_rgb(20,25,29)).stroke(Stroke::new(1.0,color)).inner_margin(1.0).show(ui,|ui| {
+                                    ui.set_width((tile_width-4.0).max(60.0));
                                     let state=if input.id==program{"PGM"}else if input.id==preview{"PVW"}else{"IN"};
-                                    ui.horizontal(|ui| {
-                                        ui.add_sized([ui.available_width()-35.0,17.0],egui::Label::new(RichText::new(format!("{:02}  {}",input.id.0,input.name)).strong()).truncate());
-                                        ui.label(RichText::new(state).small().color(color));
+                                    egui::Frame::new().fill(color).inner_margin(2.0).show(ui,|ui| {
+                                        ui.horizontal(|ui| {
+                                            ui.add_sized([ui.available_width()-35.0,16.0],egui::Label::new(RichText::new(format!("{}  {}",input.id.0,input.name)).strong().color(Color32::WHITE)).truncate());
+                                            ui.label(RichText::new(state).small().color(Color32::WHITE));
+                                        });
                                     });
                                     let size=egui::vec2(ui.available_width(),ui.available_width()*9.0/16.0);
                                     let response=if let Some(t)=self.textures.get(&input.id){ui.add(egui::Image::new(t).fit_to_exact_size(size).sense(Sense::click()))}else{ui.allocate_response(size,Sense::click())};
@@ -423,12 +495,24 @@ impl RustMixApp {
                                         self.command_button(ui,"input.remove","Remove input",Command::RemoveInput(input.id),None);
                                     });
                                     ui.horizontal(|ui| {
-                                        ui.label(RichText::new(if input.online{input.kind.label()}else{"OFFLINE / BLACK"}).small().color(if input.online{DIM}else{RED}));
-                                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center),|ui| {
-                                            if ui.small_button("Edit").on_hover_text("Input properties and rename").clicked(){self.actions.push(Action::Properties(input.id));}
-                                            ui.label(RichText::new(if input.audio.muted{"M"}else{"AUD"}).small().color(if input.audio.muted{DIM}else{TEAL}));
-                                        });
+                                        ui.spacing_mut().item_spacing.x=2.0;
+                                        for slot in 0..4 {
+                                            if let Some(mut overlay)=self.engine.project().overlays.get(slot).cloned() {
+                                                let selected=overlay.enabled&&overlay.title==input.name;
+                                                if ui.add(egui::Button::new(RichText::new((slot+1).to_string()).size(10.0)).selected(selected).min_size(egui::vec2(20.0,18.0))).on_hover_text("Use this input name as the lower-third title in this overlay slot").clicked(){overlay.enabled=!selected;overlay.title=input.name.clone();overlay.subtitle=input.kind.label().into();self.actions.push(Action::Engine(Command::SetOverlay(slot,overlay)));}
+                                            }
+                                        }
+                                        if ui.small_button("PVW").clicked(){self.actions.push(Action::Engine(Command::SelectPreview(input.id)));}
+                                        let take=Command::TakeInput(input.id);
+                                        if ui.add_enabled(self.engine.enabled(&take).is_ok(),egui::Button::new(RichText::new("Cut").size(10.0))).on_hover_text("Explicitly take this source directly to Program").clicked(){self.actions.push(Action::Engine(take));}
                                     });
+                                    ui.horizontal(|ui| {
+                                        ui.spacing_mut().item_spacing.x=2.0;
+                                        for slot in 5..=8 {ui.add_enabled(false,egui::Button::new(RichText::new(slot.to_string()).size(10.0)).min_size(egui::vec2(20.0,17.0))).on_disabled_hover_text("Four overlay slots are implemented");}
+                                        if ui.add(egui::Button::new(RichText::new("Audio").size(10.0)).selected(!input.audio.muted)).on_hover_text("Toggle simulated input audio mute").clicked(){let mut a=input.audio.clone();a.muted=!a.muted;self.actions.push(Action::Engine(Command::SetInputAudio(input.id,a)));}
+                                        if ui.small_button("Edit").clicked(){self.actions.push(Action::Properties(input.id));}
+                                    });
+
                                 });
                             });
                         });
