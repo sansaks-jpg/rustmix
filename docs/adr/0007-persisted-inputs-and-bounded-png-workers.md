@@ -1,6 +1,6 @@
 # ADR 0007: persisted input configuration and bounded PNG workers
 
-Status: implemented, hosted acceptance pending (UI-010).
+Status: experimental functional acceptance recorded for UI-010 and included in UI-012 run39111788801. Schema4 extends this design in ADR0011; new changes require UI-013 acceptance.
 
 The UI previously kept decoded PNGs and effects only in an egui map. Saving a
 project lost both, Cancel could leave effects active, Number did not affect

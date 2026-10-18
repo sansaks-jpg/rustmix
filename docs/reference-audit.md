@@ -2,7 +2,7 @@
 
 Tanggal: 2026-10-18. **Kesimpulan: belum semua fitur sesuai.** Audit ini mencakup seluruh 30 area inventaris, 40 tipe input, 20 efek transisi, 16 kanal overlay/stinger, dan 9 tujuan audio. Jumlah ini adalah cakupan pemeriksaan, bukan jumlah fitur yang sudah tersedia.
 
-Snapshot sumber: `rustmix-reference/vmix`, studi versi 29.0.0.48. Katalog memuat 777 nama fungsi publik; RustMix belum memiliki endpoint/protokol yang kompatibel. Engine Rust yang memiliki perintah internal tidak sama dengan implementasi 777 fungsi tersebut. Referensi Rust sendiri adalah model domain/API dengan backend tertentu dinyatakan unavailable, sehingga daftar enum tidak dipakai sebagai bukti perangkat/codec berjalan.
+Snapshot sumber: `rustmix-reference/vmix`, studi versi 29.0.0.48. Katalog memuat 777 nama shortcut, bukan 777 fungsi HTTP. Catatan trace T11 mengoreksi ringkasan awal: sejumlah nama shortcut ditolak endpoint, sedangkan Cut/Fade diterima tanpa konstanta shortcut terpisah. RustMix belum memiliki endpoint/protokol kompatibel. Referensi Rust sendiri adalah model domain/API dengan backend tertentu dinyatakan unavailable, sehingga daftar enum tidak dipakai sebagai bukti perangkat/codec berjalan.
 
 Status: `experimental` = sebagian alur prototipe berjalan; `stub` = hanya simulasi/kendali; `not_started` = belum ada backend/alur kerja. Tidak ada area di bawah yang diklaim setara penuh atau production-ready.
 
@@ -13,7 +13,7 @@ Status: `experimental` = sebagian alur prototipe berjalan; `stub` = hanya simula
 | 1 | Preview / Program | experimental | Independent Preview, Program, explicit Cut/Take and source exchange | Synthetic/PNG reference raster only; no qualified broadcast output | [kode](../crates/engine/src/lib.rs) / [uji](../crates/engine/tests/workflow.rs) |
 | 2 | Transitions | experimental | Four independent saved slots and 12 CPU effects | 8 observed effects and stingers absent; no vendor-pixel parity or GPU parity | [kode](../crates/engine/src/render.rs) / [uji](../crates/engine/tests/transitions.rs) |
 | 3 | Inputs | experimental | Seven own generators plus bounded external PNG | 40 observed wire types are not 40 working backends; video/capture/network/browser absent | [kode](../crates/ui-egui/src/media.rs) / [uji](../crates/engine/tests/inputs.rs) |
-| 4 | Overlays | experimental | Four Program title panels and staged text/position edits | Not 8 standard source overlays plus 8 stingers; no channel fade/duration/border/key-fill | [kode](../crates/engine/src/lib.rs) / [uji](../crates/ui-egui/src/smoke.rs) |
+| 4 | Overlays | experimental | Four Program title panels and staged text/position edits | Title/enabled/position only; misleading advanced scratch controls removed; no source overlays/stingers, per-channel effects/timing/alpha/transforms. | [kode](../crates/engine/src/lib.rs) / [uji](../crates/ui-egui/src/smoke.rs) |
 | 5 | Multiview | experimental | In-app Split and full source grid layouts | No two independent multiview outputs or all five observed layout contracts | [kode](../crates/ui-egui/src/panels.rs) / [uji](../crates/ui-egui/src/smoke.rs) |
 | 6 | Titles / GT graphics | experimental | Original title/subtitle panels and generated graphics | No GT/XAML compatibility, animation templates, ticker or editable production clock | [kode](../crates/ui-egui/src/panels.rs) / [uji](../crates/ui-egui/src/smoke.rs) |
 | 7 | Audio mixer / matrix | stub | Gain/mute/solo and Master/A/B meter-control simulation | No sample blocks, device audio, nine destinations, DSP, mix-minus or AV sync | [kode](../crates/engine/src/audio.rs) / [uji](../crates/engine/tests/workflow.rs) |
@@ -23,8 +23,8 @@ Status: `experimental` = sebagian alur prototipe berjalan; `stub` = hanya simula
 | 11 | Replay | not_started | None | No replay storage, camera channels, events, marks, speed control or exports | [kode](../Cargo.toml) |
 | 12 | PTZ camera control | not_started | None | No VISCA/vendor/UVC PTZ provider, movement or presets | [kode](../Cargo.toml) |
 | 13 | Shortcuts / MIDI / surfaces | experimental | Saved keyboard action/key/modifier mappings with validation and repeat/focus guards | No MIDI, activators, controllers, voice or 19 input trigger events | [kode](../crates/engine/src/shortcuts.rs) / [uji](../crates/ui-egui/src/smoke.rs) |
-| 14 | Presets / sessions | experimental | Own schema 3, migration, atomic saves, backups and checkpoints | No .vmix import/export or media packaging; physical fault/power-loss qualification absent | [kode](../crates/engine/src/persistence.rs) / [uji](../crates/engine/tests/inputs.rs) |
-| 15 | Settings | experimental | Validated project preferences, layout and keyboard drafts | 256 observed properties are not implemented; theme/color/display and advanced fields include unavailable/scaffold controls | [kode](../crates/ui-egui/src/dialogs.rs) / [uji](../crates/ui-egui/src/smoke.rs) |
+| 14 | Presets / sessions | experimental | Own schema4 with schema1/2/3 migration, atomic settings/saves, backups and checkpoints | UI-013 verification pending; no .vmix interoperability, media packaging or power-loss qualification. | [kode](../crates/engine/src/persistence.rs) / [uji](../crates/engine/tests/inputs.rs) |
+| 15 | Settings | experimental | Validated preferences, categories/theme/colors and one atomic name/preferences apply; unavailable scaffolds explicitly read-only | 256 observed properties are not implemented; theme/color/display and advanced fields include unavailable/scaffold controls | [kode](../crates/ui-egui/src/dialogs.rs) / [uji](../crates/ui-egui/src/smoke.rs) |
 | 16 | HTTP / TCP / WebSocket API | not_started | Headless typed Rust commands only | No HTTP listener, XML state document, public function dispatcher, TCP or WebSocket protocol | [kode](../Cargo.toml) |
 | 17 | Scripting | not_started | None | No scripts, timers, runtime sandbox or script permissions | [kode](../Cargo.toml) |
 | 18 | Data sources | not_started | None | No database/CSV/JSON/browser/social connector or live title binding | [kode](../Cargo.toml) |
@@ -148,24 +148,32 @@ Status: `experimental` = sebagian alur prototipe berjalan; `stub` = hanya simula
 
 ## Kontrak alur UI yang diperiksa terpisah
 
+UI-013 adalah kandidat sumber; uji hosted masih berjalan. Bukti runtime di bawah tetap baseline UI-012 sampai hasil baru diterima.
+
 | Alur | Status | Perilaku aktual | Batas terhadap temuan |
 |---|---|---|---|
 | Basic / Advanced presentation | experimental | Independent persisted UI mode; Basic retains both monitors, Quick Play, input selection/cut/overlays 1-4, Add Input, audio mixer and lock. Does not change Program or multiview choice. | Hosted widget/native Basic correction passed; overlays/audio/inputs retain the general prototype limitations. Global-mode restore has source coverage only; native save/reopen verifies project configuration. The existing lock suppresses production keys; a complete pointer/layout lock contract is unverified. |
 | Named input playlist | experimental | 1-16 saved lists, at most 128 items, independent effects/hold times, reorder, loop/manual/selected start/clear-on-start, start/stop/next/previous and offline alarms. | Explicit synthetic/PNG holds only; no file-duration inference, video end events, pause/seek or media playback engine. |
 | Keyboard bindings / palette | experimental | Validated persisted logical key/modifier/action mappings, focus/repeat guards and quick action palette. | At most 64 bindings and the implemented engine action subset; no 777-function dispatcher, MIDI or control surfaces. |
 | Four transition slots | experimental | Each saved slot has a real CPU effect and duration; in-flight transition pins its configuration. | 12 of 20 observed effects; no stingers/GPU equivalence or vendor-pixel parity. |
-| Manual T-bar | experimental | Engine-owned manual transition, endpoint latch and defined source exchange. | CPU raster only; no external controller calibration, routing modes or hardware qualification. |
+| Manual T-bar | experimental | First slot selects manual effect/duration; gesture pins effect/duration/start, reverses and commits endpoint once. | UI-013 regression pending; CPU raster only, no hardware controller qualification. |
 | Input Settings transactions | experimental | Staged persisted PNG/generator effects, Cancel discard, bounded loading/relink, duplicate and source lifecycle. | No ten-layer transform/crop/rotation animation graph, full color tools or real video/device properties. |
-| Input category filter | stub | Colored chips currently filter generator kinds. | Reference categories are arbitrary per-input group assignments; six colors/custom categories and category editor are absent. |
-| Input search | experimental | Inline case-insensitive input number/name filter and clear action. | No reference-style search modal, shortcut integration or arbitrary category search. |
-| Theme and Preview/Program colors | stub | Original static dark palette. | No configurable theme variables or persisted per-role colors; Appearance scaffolding is not a working theme engine. |
-| Fullscreen Program outputs | stub | Fullscreen button expands the application window; menu stores a selected slot in UI memory. | No independent Program-only monitor window, two routed fullscreen outputs, display selection or hotplug handling. |
-| Audio Mixer pane toggle | stub | Docked audio pane, right-side focus shortcut and saved workspace. | Focus is not collapse/show; reference Audio Mixer pane toggle and independent monitoring destinations are absent. |
-| Settings categories and fields | stub | Project preferences/layout/key mapping have validated draft application. | The 256 observed properties are not implemented. Several advanced/display/output fields are scaffold or unavailable; OK/Cancel geometry is not backend proof. |
+| Input category filter | experimental | Schema4 stable per-input category assignment, six standard plus sixteen editable custom definitions, context-menu assignment and real category filters. | UI-013 hosted acceptance pending; no vendor pixel/protocol parity claim. |
+| Input search | experimental | Staged Input Search dialog with OK/Cancel, case-insensitive title/type/number filtering and no implicit switching. | UI-013 hosted acceptance pending; at most48 query characters, no remote search protocol. |
+| Theme and Preview/Program colors | experimental | Original persisted Dark/Light appearance and RGB Preview/Program roles; colors reach monitor headers and source selection. | UI-013 hosted acceptance pending; operator/media cards retain dark surfaces, vendor theme list/pixel parity and physical DPI are unqualified. |
+| Fullscreen Program outputs | stub | Fullscreen expands the application window; routed-output menu explicitly says unavailable. | No independent Program-only monitor window, two routed fullscreen outputs, display selection or hotplug handling. |
+| Audio Mixer pane toggle | experimental | Actual Audio Mixer hide/show with complete previous dock restoration; saves retain the complete layout. | UI-013 hosted acceptance pending; changes to the temporary hidden layout are not persisted; no physical monitoring/audio backend. |
+| Settings categories and fields | experimental | Atomic name/preferences apply, staged categories/theme/keys, explicit read-only unavailable display/output scaffolds. | UI-013 hosted acceptance pending. Most of256 declared reference properties have no backend and cannot be configured. |
 
-## Katalog seluruh fungsi publik
+## Koreksi bukti referensi
 
-Semua 777 identifier dari laporan referensi dicatat per kelompok di `public_function_contract.groups` dalam [data audit](reference-audit.json). Seluruhnya berstatus `not_started` untuk kontrak protokol karena belum ada dispatcher HTTP/XML/TCP/WebSocket. Beberapa perintah Rust internal mempunyai kegunaan serupa, tetapi tidak disamakan dengan fungsi/protokol referensi. Pemeriksa menghitung nama unik dan mencocokkan hash himpunan nama, bukan hanya membaca angka 777.
+- **T9:** wire overlay hanya1–8, dokumen state16 termasuk8 stinger. Off mengosongkan assignment; Out mempertahankannya. Efek raster Out belum dibuktikan dari state XML.
+- **T10:** respons kontrol adalah state sebelum aksi; request baca terpisah membuktikan hasil.
+- **T11:** 777 nama adalah kosakata shortcut, bukan seluruh nama HTTP yang diterima. SetTransitionEffect/Duration ditolak di wire; Cut/Fade diterima. Tidak ada target palsu777/777 HTTP dalam gate.
+- Nama20 efek dan40 input/256 properti adalah inventaris, bukan bukti algoritma, codec atau SDK berfungsi. Delapan efek yang geometrinya belum ditentukan tidak diisi alias.
+- Clear Overlays tetap berlaku saat playlist mulai, mengikuti panduan publik yang sudah tercatat pada ADR0009.
+
+Semua777 identifier dicatat di `shortcut_function_inventory.groups` dalam [data audit](reference-audit.json). Pemeriksa menghitung nama unik/hash. Gate protokol terpisah membutuhkan `wire_contract_qualified`; hitungan shortcut tidak dipakai sebagai denominator HTTP. Lihat [review seluruh dokumen](reference-review.md).
 
 ## Bukti dan keputusan penerimaan
 

@@ -1,6 +1,6 @@
 # ADR 0008: bounded Program producer and measured resource use
 
-Status: implemented, hosted verification pending (UI-011).
+Status: functional worker tests and hosted measurements completed; cadence qualification failed in UI-011/UI-012. See ui-progress.md. This is not production qualification.
 
 The UI requested a repaint every 33 ms and previously rendered Program inside
 that callback. Choosing 60p could not make that path independently produce 60

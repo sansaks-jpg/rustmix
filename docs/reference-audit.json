@@ -1,5 +1,5 @@
 {
-  "schema": 1,
+  "schema": 2,
   "date": "2026-10-18",
   "task": "UI-012-reference-audit",
   "all_features_match": false,
@@ -10,10 +10,12 @@
     "feature_map_sha256": "b3e385517b978b93748672c3edb8151bafd18b13c67b1857848487fcebb60d4b",
     "catalogue_sha256": "379cfd07783db092af185e9b0ea9c655e1a4edcee1a24624372d1fbe0797dc50",
     "observed_shortcut_functions": 777,
-    "parsed_unique_public_function_names": 777,
     "protocol_compatible_functions": 0,
-    "protocol_reason": "No HTTP/XML/TCP/WebSocket endpoint exists in RustMix",
-    "function_names_sha256": "804ae58059d823e96dffef86c9c2053c6fad5f746ccf5228ecc89643af4a99da"
+    "protocol_reason": "No HTTP/XML/TCP/WebSocket endpoint exists; the 777 shortcut names are not a wire-function denominator",
+    "function_names_sha256": "804ae58059d823e96dffef86c9c2053c6fad5f746ccf5228ecc89643af4a99da",
+    "catalogue_kind": "Shortcut metadata vocabulary; not the accepted HTTP vocabulary (trace-log T11)",
+    "parsed_unique_shortcut_function_names": 777,
+    "wire_contract_qualified": false
   },
   "runtime_evidence": {
     "run": "https://github.com/sansaks-jpg/rustmix/actions/runs/39111788801",
@@ -111,7 +113,7 @@
         "crates/ui-egui/src/smoke.rs"
       ],
       "scope": "Four Program title panels and staged text/position edits",
-      "gap": "Not 8 standard source overlays plus 8 stingers; no channel fade/duration/border/key-fill"
+      "gap": "Title/enabled/position only; misleading advanced scratch controls removed; no source overlays/stingers, per-channel effects/timing/alpha/transforms."
     },
     {
       "id": 5,
@@ -246,8 +248,8 @@
       "test_files": [
         "crates/engine/tests/inputs.rs"
       ],
-      "scope": "Own schema 3, migration, atomic saves, backups and checkpoints",
-      "gap": "No .vmix import/export or media packaging; physical fault/power-loss qualification absent"
+      "scope": "Own schema4 with schema1/2/3 migration, atomic settings/saves, backups and checkpoints",
+      "gap": "UI-013 verification pending; no .vmix interoperability, media packaging or power-loss qualification."
     },
     {
       "id": 15,
@@ -260,7 +262,7 @@
       "test_files": [
         "crates/ui-egui/src/smoke.rs"
       ],
-      "scope": "Validated project preferences, layout and keyboard drafts",
+      "scope": "Validated preferences, categories/theme/colors and one atomic name/preferences apply; unavailable scaffolds explicitly read-only",
       "gap": "256 observed properties are not implemented; theme/color/display and advanced fields include unavailable/scaffold controls"
     },
     {
@@ -1048,12 +1050,111 @@
     "Reference enums/catalogues prove an exposed name or contract, not a working source/encoder/plugin backend",
     "Reference Rust crates are a domain/API study and explicitly declare unavailable vendor backends; they are not a proven broadcast engine",
     "A green functional CI run does not make all reference features present or qualify performance",
-    "No proprietary assets, extracted binary code or unapproved runtime dependency is imported"
+    "No proprietary assets, extracted binary code or unapproved runtime dependency is imported",
+    "Latest trace-log corrections override earlier reference summaries; shortcut names, accepted HTTP functions and state models are distinct evidence sets"
   ],
-  "public_function_contract": {
-    "status": "not_started",
-    "conformance": "missing",
-    "scope": "Every identifier below lacks a compatible HTTP/XML/TCP/WebSocket dispatcher. Related internal Rust actions are not protocol or exact behavior equivalence.",
+  "ui_workflows": [
+    {
+      "id": "basic",
+      "name": "Basic / Advanced presentation",
+      "status": "experimental",
+      "conformance": "partial",
+      "scope": "Independent persisted UI mode; Basic retains both monitors, Quick Play, input selection/cut/overlays 1-4, Add Input, audio mixer and lock. Does not change Program or multiview choice.",
+      "gap": "Hosted widget/native Basic correction passed; overlays/audio/inputs retain the general prototype limitations. Global-mode restore has source coverage only; native save/reopen verifies project configuration. The existing lock suppresses production keys; a complete pointer/layout lock contract is unverified."
+    },
+    {
+      "id": "playlist",
+      "name": "Named input playlist",
+      "status": "experimental",
+      "conformance": "partial",
+      "scope": "1-16 saved lists, at most 128 items, independent effects/hold times, reorder, loop/manual/selected start/clear-on-start, start/stop/next/previous and offline alarms.",
+      "gap": "Explicit synthetic/PNG holds only; no file-duration inference, video end events, pause/seek or media playback engine."
+    },
+    {
+      "id": "shortcuts",
+      "name": "Keyboard bindings / palette",
+      "status": "experimental",
+      "conformance": "partial",
+      "scope": "Validated persisted logical key/modifier/action mappings, focus/repeat guards and quick action palette.",
+      "gap": "At most 64 bindings and the implemented engine action subset; no 777-function dispatcher, MIDI or control surfaces."
+    },
+    {
+      "id": "slots",
+      "name": "Four transition slots",
+      "status": "experimental",
+      "conformance": "partial",
+      "scope": "Each saved slot has a real CPU effect and duration; in-flight transition pins its configuration.",
+      "gap": "12 of 20 observed effects; no stingers/GPU equivalence or vendor-pixel parity."
+    },
+    {
+      "id": "tbar",
+      "name": "Manual T-bar",
+      "status": "experimental",
+      "conformance": "partial",
+      "scope": "First slot selects manual effect/duration; gesture pins effect/duration/start, reverses and commits endpoint once.",
+      "gap": "UI-013 regression pending; CPU raster only, no hardware controller qualification."
+    },
+    {
+      "id": "properties",
+      "name": "Input Settings transactions",
+      "status": "experimental",
+      "conformance": "partial",
+      "scope": "Staged persisted PNG/generator effects, Cancel discard, bounded loading/relink, duplicate and source lifecycle.",
+      "gap": "No ten-layer transform/crop/rotation animation graph, full color tools or real video/device properties."
+    },
+    {
+      "id": "categories",
+      "name": "Input category filter",
+      "status": "experimental",
+      "conformance": "partial",
+      "scope": "Schema4 stable per-input category assignment, six standard plus sixteen editable custom definitions, context-menu assignment and real category filters.",
+      "gap": "UI-013 hosted acceptance pending; no vendor pixel/protocol parity claim."
+    },
+    {
+      "id": "search",
+      "name": "Input search",
+      "status": "experimental",
+      "conformance": "partial",
+      "scope": "Staged Input Search dialog with OK/Cancel, case-insensitive title/type/number filtering and no implicit switching.",
+      "gap": "UI-013 hosted acceptance pending; at most48 query characters, no remote search protocol."
+    },
+    {
+      "id": "theme",
+      "name": "Theme and Preview/Program colors",
+      "status": "experimental",
+      "conformance": "partial",
+      "scope": "Original persisted Dark/Light appearance and RGB Preview/Program roles; colors reach monitor headers and source selection.",
+      "gap": "UI-013 hosted acceptance pending; operator/media cards retain dark surfaces, vendor theme list/pixel parity and physical DPI are unqualified."
+    },
+    {
+      "id": "fullscreen",
+      "name": "Fullscreen Program outputs",
+      "status": "stub",
+      "conformance": "partial",
+      "scope": "Fullscreen expands the application window; routed-output menu explicitly says unavailable.",
+      "gap": "No independent Program-only monitor window, two routed fullscreen outputs, display selection or hotplug handling."
+    },
+    {
+      "id": "audio_panel",
+      "name": "Audio Mixer pane toggle",
+      "status": "experimental",
+      "conformance": "partial",
+      "scope": "Actual Audio Mixer hide/show with complete previous dock restoration; saves retain the complete layout.",
+      "gap": "UI-013 hosted acceptance pending; changes to the temporary hidden layout are not persisted; no physical monitoring/audio backend."
+    },
+    {
+      "id": "settings",
+      "name": "Settings categories and fields",
+      "status": "experimental",
+      "conformance": "partial",
+      "scope": "Atomic name/preferences apply, staged categories/theme/keys, explicit read-only unavailable display/output scaffolds.",
+      "gap": "UI-013 hosted acceptance pending. Most of256 declared reference properties have no backend and cannot be configured."
+    }
+  ],
+  "shortcut_function_inventory": {
+    "status": "experimental",
+    "conformance": "partial",
+    "scope": "777 observed shortcut identifiers; configurable RustMix bindings implement a limited typed-action subset. T11 proves this vocabulary differs from HTTP; it is not a 777-function API compatibility target.",
     "groups": [
       {
         "name": "Layer / position / scale / crop / effects (per-input)",
@@ -2008,102 +2109,27 @@
       }
     ]
   },
-  "ui_workflows": [
-    {
-      "id": "basic",
-      "name": "Basic / Advanced presentation",
-      "status": "experimental",
-      "conformance": "partial",
-      "scope": "Independent persisted UI mode; Basic retains both monitors, Quick Play, input selection/cut/overlays 1-4, Add Input, audio mixer and lock. Does not change Program or multiview choice.",
-      "gap": "Hosted widget/native Basic correction passed; overlays/audio/inputs retain the general prototype limitations. Global-mode restore has source coverage only; native save/reopen verifies project configuration. The existing lock suppresses production keys; a complete pointer/layout lock contract is unverified."
-    },
-    {
-      "id": "playlist",
-      "name": "Named input playlist",
-      "status": "experimental",
-      "conformance": "partial",
-      "scope": "1-16 saved lists, at most 128 items, independent effects/hold times, reorder, loop/manual/selected start/clear-on-start, start/stop/next/previous and offline alarms.",
-      "gap": "Explicit synthetic/PNG holds only; no file-duration inference, video end events, pause/seek or media playback engine."
-    },
-    {
-      "id": "shortcuts",
-      "name": "Keyboard bindings / palette",
-      "status": "experimental",
-      "conformance": "partial",
-      "scope": "Validated persisted logical key/modifier/action mappings, focus/repeat guards and quick action palette.",
-      "gap": "At most 64 bindings and the implemented engine action subset; no 777-function dispatcher, MIDI or control surfaces."
-    },
-    {
-      "id": "slots",
-      "name": "Four transition slots",
-      "status": "experimental",
-      "conformance": "partial",
-      "scope": "Each saved slot has a real CPU effect and duration; in-flight transition pins its configuration.",
-      "gap": "12 of 20 observed effects; no stingers/GPU equivalence or vendor-pixel parity."
-    },
-    {
-      "id": "tbar",
-      "name": "Manual T-bar",
-      "status": "experimental",
-      "conformance": "partial",
-      "scope": "Engine-owned manual transition, endpoint latch and defined source exchange.",
-      "gap": "CPU raster only; no external controller calibration, routing modes or hardware qualification."
-    },
-    {
-      "id": "properties",
-      "name": "Input Settings transactions",
-      "status": "experimental",
-      "conformance": "partial",
-      "scope": "Staged persisted PNG/generator effects, Cancel discard, bounded loading/relink, duplicate and source lifecycle.",
-      "gap": "No ten-layer transform/crop/rotation animation graph, full color tools or real video/device properties."
-    },
-    {
-      "id": "categories",
-      "name": "Input category filter",
-      "status": "stub",
-      "conformance": "partial",
-      "scope": "Colored chips currently filter generator kinds.",
-      "gap": "Reference categories are arbitrary per-input group assignments; six colors/custom categories and category editor are absent."
-    },
-    {
-      "id": "search",
-      "name": "Input search",
-      "status": "experimental",
-      "conformance": "partial",
-      "scope": "Inline case-insensitive input number/name filter and clear action.",
-      "gap": "No reference-style search modal, shortcut integration or arbitrary category search."
-    },
-    {
-      "id": "theme",
-      "name": "Theme and Preview/Program colors",
-      "status": "stub",
-      "conformance": "partial",
-      "scope": "Original static dark palette.",
-      "gap": "No configurable theme variables or persisted per-role colors; Appearance scaffolding is not a working theme engine."
-    },
-    {
-      "id": "fullscreen",
-      "name": "Fullscreen Program outputs",
-      "status": "stub",
-      "conformance": "partial",
-      "scope": "Fullscreen button expands the application window; menu stores a selected slot in UI memory.",
-      "gap": "No independent Program-only monitor window, two routed fullscreen outputs, display selection or hotplug handling."
-    },
-    {
-      "id": "audio_panel",
-      "name": "Audio Mixer pane toggle",
-      "status": "stub",
-      "conformance": "partial",
-      "scope": "Docked audio pane, right-side focus shortcut and saved workspace.",
-      "gap": "Focus is not collapse/show; reference Audio Mixer pane toggle and independent monitoring destinations are absent."
-    },
-    {
-      "id": "settings",
-      "name": "Settings categories and fields",
-      "status": "stub",
-      "conformance": "partial",
-      "scope": "Project preferences/layout/key mapping have validated draft application.",
-      "gap": "The 256 observed properties are not implemented. Several advanced/display/output fields are scaffold or unavailable; OK/Cancel geometry is not backend proof."
-    }
-  ]
+  "wire_observations": {
+    "authority": "evidence/trace-log.md T9/T10/T11, superseding older SPEC/api-report summaries",
+    "standard_wire_overlay_channels": [
+      1,
+      8
+    ],
+    "state_overlay_and_stinger_channels": [
+      1,
+      16
+    ],
+    "off_clears_assignment": true,
+    "out_retains_assignment": true,
+    "out_raster_effect": "Unknown from state-only observations",
+    "control_response": "Pre-action state; subsequent read is needed",
+    "shortcut_vocabulary_equals_http": false,
+    "exact_effect_geometry": "Names do not establish sampling, projection or pixel algorithms",
+    "physical_output_number_mapping": "Unknown for accepted SetOutput2/3/4 spellings"
+  },
+  "source_candidate": {
+    "revision": "d893b3f",
+    "run": "https://github.com/sansaks-jpg/rustmix/actions/runs/39115630407",
+    "status": "pending hosted verification; runtime_evidence below is the previous accepted baseline"
+  }
 }

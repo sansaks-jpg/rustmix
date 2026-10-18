@@ -109,6 +109,8 @@ Rebuilt `crates/ui-egui` (`lib.rs`, `panels.rs`, `dialogs.rs`, and `smoke.rs`) f
    - **`Overlay Settings` (`Overlay Settings.png`):** Single-pane layout with top `Number`/`Type`/`Effect`/`Effect Duration`/`Duration`/`Stinger Input`/`Alpha` rows, middle 2-column area with left white `Picture In Picture Location` sliders (`Zoom`, `Zoom X`, `Zoom Y`, `Pan X`, `Pan Y`, `Rotate Z` + `Reset` + `Border`) and right maroon (`#7a0000`) 16:9 interactive box preview.
    - **`Recording Setup` (`Recording Setup.png`), `Streaming Settings` (`Streaming Setup.png`), `MultiCorder` (`Multicoder.png`), `PlayList` (`Playlist.png`), and `Shortcuts` (`Shortcut.png`):** Implemented as interactive windows reachable from the bottom production toolbar and captured by the native CI smoke harness (`DIALOG_SHOTS` expanded to 15 captures).
 
+> **Historical claims below are superseded/rejected by UI-009 audit.** No real GPU media compositor, recording or streaming backend was established. Counter simulations and selectable labels are not working outputs. Use the current feature matrix/reference audit for shipped scope.
+
 ## UI-008 — Modernized Broadcast UI, Procedural Vector Icons & Functional GPU/Output Pipelines (2026-10-18)
 
 Following visual inspection of the native GPU screenshots from [run 39054073068](https://github.com/sansaks-jpg/rustmix/actions/runs/39054073068) (commit `1b57198`) and the owner's direction to modernize the UI/icons while making all video, recording, streaming, and automation features genuinely functional:
@@ -300,3 +302,9 @@ types, 20 effects, 16 overlay/stinger channels, 9 audio destinations, 12 UI cont
 public function identifiers. Normal inventory consistency passes; the strict full-match command
 rejects this state. Missing backends and partial contracts remain explicit in
 [reference-audit.md](reference-audit.md). No merge, release or external live output was performed.
+
+## UI-013 — second full documentation review / source candidate (2026-10-18)
+
+Read all17 supplied reference documents and28 existing project documents; no inaccessible files. New trace-log precedence corrects the earlier audit:777 names are shortcut metadata, not a proven HTTP denominator. Off clears, Out retains; wire overlay channels1–8 differ from state16; control response is pre-action. All reference scripts remain unexecuted. See reference-review.md.
+
+Implemented source candidate: schema4 category/theme persistence and migration1/2/3, atomic name/preferences apply, first-slot/pinned T-Bar, real category filters/assignment/search dialog, audio pane hide/restore, and capacity-one worker snapshots. Misleading advanced overlay/output/Display scratch controls and fake Web Controller/routing notices are replaced with explicit unavailable/read-only behavior. No new dependencies/backends or vendor assets. New engine/widget/worker tests and seven native process/capture checks require hosted verification. No local compile/test/launch.

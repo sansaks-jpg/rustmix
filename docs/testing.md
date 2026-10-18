@@ -1,8 +1,8 @@
 # Verification
 
-## UI-012 pending acceptance
+## Current UI-013 verification candidate
 
-No Rust compilation, Rust tests, release build or native launch has been run locally for this patch.
+No Rust compilation, Rust tests, release build or native launch has been run locally. UI-012 baseline was accepted in run39111788801; new UI-013 category/search/theme/atomic-settings/T-Bar/snapshot tests and seven native processes require a new exact-code run.
 Permitted local checks: `cargo fmt --all -- --check`, `./scripts/check-repository.ps1` (metadata,
 dependency layering and asset inventory only), and `git diff --check` / source review.
 

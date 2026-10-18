@@ -1,6 +1,6 @@
 # ADR 0003 — Bounded operator configuration
 
-2026-10-17 · UI-004 · implementation selected; hosted verification pending.
+2026-10-17 · UI-004 · historical implementation accepted by subsequent hosted widget/native gates; see ui-progress.md for exact revisions. UI-013 changes require their own acceptance.
 
 The supplied main-window, Add Input, Input Settings and Settings references were observed locally. Retain the generic switcher workflow and original RustMix design. Avoid putting configuration into the live transition area.
 
