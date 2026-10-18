@@ -1470,10 +1470,10 @@ impl RustMixApp {
                 .show(&mut body_ui, |ui| {
                     ui.horizontal(|ui| {
                         ui.label("Title panel");
-                        for i in 0..4 {
+                        for i in 0..8 {
                             let row=ui.selectable_label(slot==i,format!("{}",i+1));
                             self.automation.insert(format!("dialog.overlay.slot.{}",i+1),row.rect);
-                            if row.clicked() && let Some(committed)=self.engine.project().overlays.get(i).cloned(){slot=i;draft=committed;}
+                            if row.clicked() && let Some(committed)=self.engine.project().overlays.standard(i).cloned(){slot=i;draft=committed;}
                         }
                     });
                     let enabled=ui.checkbox(&mut draft.enabled,"Show on Program");
@@ -1488,7 +1488,7 @@ impl RustMixApp {
                     self.automation.insert("dialog.overlay.title".into(),title.rect);
                     ui.label("Subtitle");let subtitle=ui.add(egui::TextEdit::singleline(&mut draft.subtitle).char_limit(160));
                     self.automation.insert("dialog.overlay.subtitle".into(),subtitle.rect);
-                    ui.label("Source overlays, stingers, channel effects/timing, alpha, free transforms and borders are unavailable. Only the title-panel fields above apply.");
+                    ui.label("Source overlays, channel effects/timing, alpha, free transforms and borders are unavailable. Only the title-panel fields above apply; stinger channels 9–16 are configured on the engine and do not composite a clip yet.");
                     let w=ui.available_width().min(420.0);
                     let (frame,_)=ui.allocate_exact_size(Vec2::new(w,w*9.0/16.0),Sense::hover());
                     ui.painter().rect_filled(frame,0.0,Color32::from_rgb(18,23,30));

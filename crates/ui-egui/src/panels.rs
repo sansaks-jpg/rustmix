@@ -565,7 +565,7 @@ impl RustMixApp {
             }
         }
         if program {
-            for (i, o) in p.overlays.iter().enumerate() {
+            for (i, o) in p.overlays.standard.iter().enumerate() {
                 if o.enabled {
                     let panel = overlay_panel_rect(rect, o.position, i);
                     let text_rect = Rect::from_min_size(
@@ -888,47 +888,39 @@ impl RustMixApp {
                         black.then_some(RED),
                     );
 
-                    // 4x2 Overlay number buttons (1..4, 5..8)
+                    // 4x2 Overlay number buttons (1..4, 5..8); all eight are live.
                     let cell_w = ((center - 6.0) / 4.0).floor();
-                    ui.horizontal(|ui| {
-                        ui.spacing_mut().item_spacing.x = 2.0;
-                        ui.spacing_mut().button_padding = egui::vec2(2.0, 1.0);
-                        for slot in 0..4 {
-                            let active = self
-                                .engine
-                                .project()
-                                .overlays
-                                .get(slot)
-                                .is_some_and(|o| o.enabled);
-                            let btn = ui.add(
-                                egui::Button::new(
-                                    RichText::new(format!("{}", slot + 1)).size(10.5).strong(),
-                                )
-                                .selected(active)
-                                .min_size(egui::vec2(cell_w, 20.0)),
-                            );
-                            if btn.clicked()
-                                && let Some(mut o) =
-                                    self.engine.project().overlays.get(slot).cloned()
-                            {
-                                o.enabled = !o.enabled;
-                                self.actions
-                                    .push(Action::Engine(Command::SetOverlay(slot, o)));
+                    for row in 0..2 {
+                        ui.horizontal(|ui| {
+                            ui.spacing_mut().item_spacing.x = 2.0;
+                            ui.spacing_mut().button_padding = egui::vec2(2.0, 1.0);
+                            for slot in (row * 4)..(row * 4 + 4) {
+                                let active = self
+                                    .engine
+                                    .project()
+                                    .overlays
+                                    .standard(slot)
+                                    .is_some_and(|o| o.enabled);
+                                let btn = ui.add(
+                                    egui::Button::new(
+                                        RichText::new(format!("{}", slot + 1)).size(10.5).strong(),
+                                    )
+                                    .selected(active)
+                                    .min_size(egui::vec2(cell_w, 20.0)),
+                                );
+                                self.automation
+                                    .insert(format!("switcher.overlay.{}", slot + 1), btn.rect);
+                                if btn.clicked()
+                                    && let Some(mut o) =
+                                        self.engine.project().overlays.standard(slot).cloned()
+                                {
+                                    o.enabled = !o.enabled;
+                                    self.actions
+                                        .push(Action::Engine(Command::SetOverlay(slot, o)));
+                                }
                             }
-                        }
-                    });
-                    ui.horizontal(|ui| {
-                        ui.spacing_mut().item_spacing.x = 2.0;
-                        ui.spacing_mut().button_padding = egui::vec2(2.0, 1.0);
-                        for slot in 5..=8 {
-                            let _ = ui.add(
-                                egui::Button::new(
-                                    RichText::new(format!("{slot}")).size(10.5).color(DIM),
-                                )
-                                .min_size(egui::vec2(cell_w, 20.0)),
-                            );
-                        }
-                    });
+                        });
+                    }
 
                     // Horizontal manual transition: left is Preview 0%, right 100%.
                     ui.add_space(2.0);
@@ -1262,7 +1254,7 @@ impl RustMixApp {
                                                             .engine
                                                             .project()
                                                             .overlays
-                                                            .get(slot)
+                                                            .standard(slot)
                                                             .cloned()
                                                         {
                                                             let selected = overlay.enabled
@@ -1364,15 +1356,46 @@ impl RustMixApp {
                                                     ui.spacing_mut().item_spacing.x = 0.0;
                                                     ui.spacing_mut().button_padding =
                                                         egui::vec2(2.0, 1.0);
-                                                    for slot in 5..=8 {
-                                                        let _ = ui.add(
-                                                            egui::Button::new(
-                                                                RichText::new(format!("{slot}"))
-                                                                    .size(10.5)
-                                                                    .color(DIM),
-                                                            )
-                                                            .min_size(egui::vec2(cell_w, 20.0)),
-                                                        );
+                                                    for slot in 4..8 {
+                                                        if let Some(mut overlay) = self
+                                                            .engine
+                                                            .project()
+                                                            .overlays
+                                                            .standard(slot)
+                                                            .cloned()
+                                                        {
+                                                            let selected = overlay.enabled
+                                                                && overlay.title == input.name;
+                                                            let button = ui.add(
+                                                                egui::Button::new(
+                                                                    RichText::new(
+                                                                        (slot + 1).to_string(),
+                                                                    )
+                                                                    .size(10.5),
+                                                                )
+                                                                .selected(selected)
+                                                                .min_size(egui::vec2(cell_w, 20.0)),
+                                                            );
+                                                            self.automation.insert(
+                                                                format!(
+                                                                    "input.{}.overlay.{}",
+                                                                    input.id.0,
+                                                                    slot + 1
+                                                                ),
+                                                                button.rect,
+                                                            );
+                                                            if button.clicked() {
+                                                                overlay.enabled = !selected;
+                                                                overlay.title = input.name.clone();
+                                                                overlay.subtitle =
+                                                                    input.kind.label().into();
+                                                                self.actions.push(Action::Engine(
+                                                                    Command::SetOverlay(
+                                                                        slot, overlay,
+                                                                    ),
+                                                                ));
+                                                            }
+                                                        }
                                                     }
                                                     let audio_w = cell_w * 1.5;
                                                     let icon_w =
@@ -1729,11 +1752,18 @@ impl RustMixApp {
     }
 
     pub(crate) fn overlays(&mut self, ui: &mut egui::Ui) {
-        let overlays = self.engine.project().overlays.clone();
+        let overlays = self.engine.project().overlays.standard.clone();
         egui::ScrollArea::vertical()
             .id_salt("graphics.scroll")
             .show(ui, |ui| {
-                ui.label(RichText::new("OVERLAY CHANNELS (1–4)").small().color(DIM));
+                ui.label(RichText::new("OVERLAY CHANNELS (1–8)").small().color(DIM));
+                ui.label(
+                    RichText::new(
+                        "Stinger channels 9–16 are configured on the engine; clip compositing is not implemented yet.",
+                    )
+                    .small()
+                    .color(DIM),
+                );
                 for (i, mut overlay) in overlays.into_iter().enumerate() {
                     ui.push_id(i, |ui| {
                         let before = overlay.clone();

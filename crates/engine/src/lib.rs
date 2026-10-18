@@ -2,6 +2,8 @@
 pub mod audio;
 pub mod input;
 pub use input::{ImageFit, InputConfig};
+pub mod overlays;
+pub use overlays::{ActiveStinger, OverlayBank, OverlayChannelKind, StingerChannel};
 pub mod persistence;
 pub mod playback;
 pub mod preferences;
@@ -174,6 +176,9 @@ pub struct WorkspaceState {
     pub name: String,
     pub dock_json: String,
 }
+/// Current project schema. Schema 5 replaced the four-overlay array with the
+/// sixteen-channel production bank; 1–4 load through the persistence migration.
+pub const SCHEMA: u32 = 5;
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ProjectState {
     pub schema: u32,
@@ -188,7 +193,7 @@ pub struct ProjectState {
     #[serde(default = "default_playlists")]
     pub playlists: Vec<Playlist>,
     pub buses: [AudioChannel; 3],
-    pub overlays: [OverlayState; 4],
+    pub overlays: OverlayBank,
     pub preferences: Preferences,
     pub workspace: WorkspaceState,
 }
@@ -232,7 +237,7 @@ impl ProjectState {
             })
             .collect();
         Self {
-            schema: 4,
+            schema: SCHEMA,
             name: "Studio / Demo production".into(),
             revision: 0,
             inputs,
@@ -242,16 +247,7 @@ impl ProjectState {
             transition_slots: default_transition_slots(),
             playlists: default_playlists(),
             buses: std::array::from_fn(|_| AudioChannel::default()),
-            overlays: std::array::from_fn(|i| OverlayState {
-                enabled: false,
-                title: if i == 0 {
-                    "RUSTMIX / STUDIO".into()
-                } else {
-                    format!("Overlay {}", i + 1)
-                },
-                subtitle: "Independent live production • Synthetic demo".into(),
-                position: Position::LowerLeft,
-            }),
+            overlays: OverlayBank::demo(),
             preferences: Preferences {
                 width: 1920,
                 height: 1080,
@@ -284,10 +280,10 @@ impl ProjectState {
             .map_or(0, |index| index + 1)
     }
     pub fn validate(&self) -> Result<()> {
-        if self.schema != 4 {
-            return Err(invalid(
-                "Unsupported project version; this application supports schema 4",
-            ));
+        if self.schema != SCHEMA {
+            return Err(invalid(&format!(
+                "Unsupported project version; this application supports schema {SCHEMA}",
+            )));
         }
         valid_text(&self.name, 120)?;
         if !(2..=32).contains(&self.inputs.len()) {
@@ -324,14 +320,7 @@ impl ProjectState {
         for a in &self.buses {
             valid_audio(a)?;
         }
-        for overlay in &self.overlays {
-            valid_text(&overlay.title, 96)?;
-            if overlay.subtitle.len() > 160 || overlay.subtitle.chars().any(char::is_control) {
-                return Err(invalid(
-                    "Subtitle is too long or contains control characters",
-                ));
-            }
-        }
+        self.overlays.validate(&self.inputs)?;
         let p = &self.preferences;
         if !matches!(
             (p.width, p.height),
@@ -472,6 +461,9 @@ pub enum Command {
     SetInputAudio(InputId, AudioChannel),
     SetBus(usize, AudioChannel),
     SetOverlay(usize, OverlayState),
+    SetStinger(usize, StingerChannel),
+    TriggerStinger(usize),
+    StopStinger,
     SetPreferences(Preferences),
     ApplySettings {
         name: String,
@@ -655,7 +647,31 @@ impl Command {
                 "overlay.set",
                 "Set overlay",
                 "Graphics",
-                "F1–F4",
+                "F1–F8",
+                true,
+                true,
+            ),
+            Self::SetStinger(..) => (
+                "overlay.stinger.set",
+                "Configure stinger",
+                "Graphics",
+                "",
+                true,
+                false,
+            ),
+            Self::TriggerStinger(_) => (
+                "overlay.stinger.trigger",
+                "Trigger stinger",
+                "Graphics",
+                "",
+                false,
+                true,
+            ),
+            Self::StopStinger => (
+                "overlay.stinger.stop",
+                "Stop stinger",
+                "Graphics",
+                "",
                 true,
                 true,
             ),
@@ -720,6 +736,7 @@ pub struct CommandResult {
 pub struct Engine {
     project: ProjectState,
     transition: Option<TransitionState>,
+    stinger: Option<ActiveStinger>,
     black: f32,
     black_ramp: Option<(u64, f32, f32)>,
     last_ms: u64,
@@ -739,6 +756,7 @@ impl Default for Engine {
         Self {
             project,
             transition: None,
+            stinger: None,
             black: 0.0,
             black_ramp: None,
             last_ms: 0,
@@ -763,6 +781,7 @@ impl Engine {
         Ok(Self {
             project,
             transition: None,
+            stinger: None,
             black: 0.0,
             black_ramp: None,
             last_ms: now,
@@ -815,6 +834,9 @@ impl Engine {
     }
     pub fn transition(&self) -> Option<&TransitionState> {
         self.transition.as_ref()
+    }
+    pub fn stinger(&self) -> Option<&ActiveStinger> {
+        self.stinger.as_ref()
     }
     pub fn black_level(&self) -> f32 {
         self.black
@@ -957,6 +979,34 @@ impl Engine {
             {
                 Err(invalid("Stop the playlist before removing its inputs"))
             }
+            Command::SetOverlay(slot, _) if *slot >= overlays::STANDARD_CHANNELS => {
+                Err(invalid("Overlay channel not found"))
+            }
+            Command::SetStinger(slot, _) if *slot >= overlays::STINGER_CHANNELS => {
+                Err(invalid("Stinger channel not found"))
+            }
+            Command::SetStinger(_, config) if config.cut_point_ms > overlays::MAX_CUT_POINT_MS => {
+                Err(invalid("Stinger cut point must be 0–60000 ms"))
+            }
+            Command::SetStinger(_, config)
+                if config
+                    .stinger_input
+                    .is_some_and(|id| self.project.input(id).is_none()) =>
+            {
+                Err(invalid("Stinger input not found"))
+            }
+            Command::TriggerStinger(slot) if *slot >= overlays::STINGER_CHANNELS => {
+                Err(invalid("Stinger channel not found"))
+            }
+            Command::TriggerStinger(slot)
+                if self
+                    .project
+                    .overlays
+                    .stinger(*slot)
+                    .is_some_and(|s| s.stinger_input.is_none()) =>
+            {
+                Err(invalid("Configure a stinger input first"))
+            }
             _ => Ok(()),
         }
     }
@@ -965,6 +1015,7 @@ impl Engine {
         let id = command.definition().id;
         let mut next = self.project.clone();
         let mut transition = self.transition.clone();
+        let mut stinger = self.stinger.clone();
         let mut black_ramp = self.black_ramp;
         let mut playlist_run = self.playlist_run.clone();
         let mut playlist_alarm = self.playlist_alarm.clone();
@@ -1054,7 +1105,7 @@ impl Engine {
                     .ok_or_else(|| invalid("Playlist not found"))?;
                 let index = if list.begin_selected { selected } else { 0 };
                 if list.clear_overlays {
-                    for overlay in &mut next.overlays {
+                    for overlay in &mut next.overlays.standard {
                         overlay.enabled = false;
                     }
                 }
@@ -1236,8 +1287,40 @@ impl Engine {
             Command::SetOverlay(i, o) => {
                 *next
                     .overlays
-                    .get_mut(i)
-                    .ok_or_else(|| invalid("Overlay slot not found"))? = o;
+                    .standard_mut(i)
+                    .ok_or_else(|| invalid("Overlay channel not found"))? = o;
+            }
+            Command::SetStinger(i, config) => {
+                *next
+                    .overlays
+                    .stinger_mut(i)
+                    .ok_or_else(|| invalid("Stinger channel not found"))? = config;
+            }
+            Command::TriggerStinger(i) => {
+                let config = *next
+                    .overlays
+                    .stinger(i)
+                    .ok_or_else(|| invalid("Stinger channel not found"))?;
+                let input = config
+                    .stinger_input
+                    .ok_or_else(|| invalid("Configure a stinger input first"))?;
+                let mut active = ActiveStinger {
+                    slot: i,
+                    input,
+                    from: next.program,
+                    to: next.preview,
+                    cut_point_ms: config.cut_point_ms,
+                    start_ms: now,
+                    exchanged: false,
+                };
+                if active.advance(now) {
+                    next.program = active.to;
+                    next.preview = active.from;
+                }
+                stinger = Some(active);
+            }
+            Command::StopStinger => {
+                stinger = None;
             }
             Command::SetPreferences(p) => {
                 next.preferences = p;
@@ -1296,6 +1379,7 @@ impl Engine {
             _ => {}
         }
         self.transition = transition;
+        self.stinger = stinger;
         self.black_ramp = black_ramp;
         self.playlist_run = playlist_run;
         self.playlist_alarm = playlist_alarm;
@@ -1309,6 +1393,13 @@ impl Engine {
         let now = now.max(self.last_ms);
         self.tick_playback(now);
         self.last_ms = now;
+        if let Some(active) = &mut self.stinger
+            && active.advance(now)
+        {
+            self.project.program = active.to;
+            self.project.preview = active.from;
+            self.project.revision = self.project.revision.saturating_add(1);
+        }
         let mut completed = false;
         if let Some(t) = &mut self.transition
             && !t.manual

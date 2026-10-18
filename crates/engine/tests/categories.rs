@@ -74,7 +74,7 @@ fn malformed_categories_are_rejected_atomically() {
 }
 
 #[test]
-fn schema_four_roundtrip_and_all_legacy_migrations_preserve_backups() {
+fn schema_five_roundtrip_and_all_legacy_migrations_preserve_backups() {
     let directory = tempfile::tempdir().unwrap();
     let path = directory.path().join("categories.json");
     let mut engine = Engine::default();
@@ -98,7 +98,7 @@ fn schema_four_roundtrip_and_all_legacy_migrations_preserve_backups() {
         let original = serde_json::to_vec(&value).unwrap();
         std::fs::write(&path, &original).unwrap();
         let migrated = persistence::load(&path).unwrap();
-        assert_eq!(migrated.schema, 4);
+        assert_eq!(migrated.schema, 5);
         assert_eq!(migrated.preferences.categories, default_categories());
         assert_eq!(migrated.preferences.ui_theme, UiTheme::Dark);
         assert_eq!(migrated.preferences.preview_color, [234, 128, 24]);

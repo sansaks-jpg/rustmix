@@ -17,7 +17,7 @@ fn complete_operator_workflow_survives_save_and_restart() {
     assert_eq!(e.transition().unwrap().progress, 0.5);
     e.tick(1000);
     assert_eq!(e.project().program, InputId(3));
-    let mut overlay = e.project().overlays[0].clone();
+    let mut overlay = e.project().overlays.standard[0].clone();
     overlay.enabled = true;
     e.execute(Command::SetOverlay(0, overlay), 1000).unwrap();
     let mut audio = e.project().buses[0].clone();
@@ -28,7 +28,7 @@ fn complete_operator_workflow_survives_save_and_restart() {
     persistence::save(&path, e.project()).unwrap();
     let restored = persistence::load(&path).unwrap();
     assert_eq!(&restored, e.project());
-    assert!(restored.overlays[0].enabled);
+    assert!(restored.overlays.standard[0].enabled);
     assert_eq!(restored.buses[0].gain_db, -9.0);
 }
 

@@ -37,7 +37,10 @@ pub fn default_key_bindings() -> Vec<ShortcutBinding> {
         ("Escape".to_owned(), ShortcutAction::CancelTransition),
     ];
     bindings.extend((1..=7).map(|n| (n.to_string(), ShortcutAction::PreviewNumber(n))));
-    bindings.extend((0..4).map(|n| (format!("F{}", n + 1), ShortcutAction::ToggleOverlay(n))));
+    bindings.extend(
+        (0..crate::overlays::STANDARD_CHANNELS)
+            .map(|n| (format!("F{}", n + 1), ShortcutAction::ToggleOverlay(n))),
+    );
     bindings
         .into_iter()
         .map(|(key, action)| ShortcutBinding {
@@ -89,7 +92,7 @@ pub(crate) fn validate(project: &ProjectState) -> Result<()> {
             ShortcutAction::PreviewNumber(number) if !(1..=32).contains(&number) => {
                 return Err(invalid("Shortcut input number must be 1–32"));
             }
-            ShortcutAction::ToggleOverlay(slot) if slot >= 4 => {
+            ShortcutAction::ToggleOverlay(slot) if slot >= crate::overlays::STANDARD_CHANNELS => {
                 return Err(invalid("Shortcut overlay slot is missing"));
             }
             _ => {}
@@ -108,7 +111,7 @@ impl Engine {
                 let mut overlay = self
                     .project
                     .overlays
-                    .get(slot)
+                    .standard(slot)
                     .cloned()
                     .ok_or_else(|| invalid("Shortcut overlay is missing"))?;
                 overlay.enabled = !overlay.enabled;

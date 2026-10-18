@@ -11,9 +11,9 @@ Status: `experimental` = sebagian alur prototipe berjalan; `stub` = hanya simula
 | # | Area referensi | Status RustMix | Yang benar-benar ada | Kekurangan terhadap temuan | Bukti sumber / pengujian |
 |---|---|---|---|---|---|
 | 1 | Preview / Program | experimental | Independent Preview, Program, explicit Cut/Take and source exchange | Synthetic/PNG reference raster only; no qualified broadcast output | [kode](../crates/engine/src/lib.rs) / [uji](../crates/engine/tests/workflow.rs) |
-| 2 | Transitions | experimental | Four independent saved slots and 12 CPU effects | 8 observed effects and stingers absent; no vendor-pixel parity or GPU parity | [kode](../crates/engine/src/render.rs) / [uji](../crates/engine/tests/transitions.rs) |
+| 2 | Transitions | experimental | Four independent saved slots and 12 CPU effects | 8 observed effects; stinger channels only exchange Program/Preview at their cut point (no raster); no vendor-pixel parity or GPU parity | [kode](../crates/engine/src/render.rs) / [uji](../crates/engine/tests/transitions.rs) |
 | 3 | Inputs | experimental | Seven own generators plus bounded external PNG | 40 observed wire types are not 40 working backends; video/capture/network/browser absent | [kode](../crates/ui-egui/src/media.rs) / [uji](../crates/engine/tests/inputs.rs) |
-| 4 | Overlays | experimental | Four Program title panels and staged text/position edits | Title/enabled/position only; misleading advanced scratch controls removed; no source overlays/stingers, per-channel effects/timing/alpha/transforms. | [kode](../crates/engine/src/lib.rs) / [uji](../crates/ui-egui/src/smoke.rs) |
+| 4 | Overlays | experimental | Eight Program title-panel channels inside a 16-channel overlay/stinger bank, staged text/position edits, F1–F8 defaults and a verified 4→5 schema migration | Title/enabled/position only for the eight title panels; no source overlays, per-channel effects/timing/alpha/transforms. Stinger channels 9–16 hold model/trigger/cut-point state and exchange buses but render no clip. | [kode](../crates/engine/src/overlays.rs) / [uji](../crates/engine/tests/overlays.rs) |
 | 5 | Multiview | experimental | In-app Split and full source grid layouts | No two independent multiview outputs or all five observed layout contracts | [kode](../crates/ui-egui/src/panels.rs) / [uji](../crates/ui-egui/src/smoke.rs) |
 | 6 | Titles / GT graphics | experimental | Original title/subtitle panels and generated graphics | No GT/XAML compatibility, animation templates, ticker or editable production clock | [kode](../crates/ui-egui/src/panels.rs) / [uji](../crates/ui-egui/src/smoke.rs) |
 | 7 | Audio mixer / matrix | stub | Gain/mute/solo and Master/A/B meter-control simulation | No sample blocks, device audio, nine destinations, DSP, mix-minus or AV sync | [kode](../crates/engine/src/audio.rs) / [uji](../crates/engine/tests/workflow.rs) |
@@ -115,22 +115,22 @@ Status: `experimental` = sebagian alur prototipe berjalan; `stub` = hanya simula
 
 | Temuan | Status | Batas aktual |
 |---|---|---|
-| 1 | experimental | Title panel only |
-| 2 | experimental | Title panel only |
-| 3 | experimental | Title panel only |
-| 4 | experimental | Title panel only |
-| 5 | not_started | No source overlay/stinger implementation |
-| 6 | not_started | No source overlay/stinger implementation |
-| 7 | not_started | No source overlay/stinger implementation |
-| 8 | not_started | No source overlay/stinger implementation |
-| 9 | not_started | No source overlay/stinger implementation |
-| 10 | not_started | No source overlay/stinger implementation |
-| 11 | not_started | No source overlay/stinger implementation |
-| 12 | not_started | No source overlay/stinger implementation |
-| 13 | not_started | No source overlay/stinger implementation |
-| 14 | not_started | No source overlay/stinger implementation |
-| 15 | not_started | No source overlay/stinger implementation |
-| 16 | not_started | No source overlay/stinger implementation |
+| 1 | experimental | Title-panel channel: 16-channel bank, Program render, UI, F-key and persistence are real; no source overlay, per-channel effects, timing or alpha |
+| 2 | experimental | Title-panel channel: 16-channel bank, Program render, UI, F-key and persistence are real; no source overlay, per-channel effects, timing or alpha |
+| 3 | experimental | Title-panel channel: 16-channel bank, Program render, UI, F-key and persistence are real; no source overlay, per-channel effects, timing or alpha |
+| 4 | experimental | Title-panel channel: 16-channel bank, Program render, UI, F-key and persistence are real; no source overlay, per-channel effects, timing or alpha |
+| 5 | experimental | Title-panel channel: 16-channel bank, Program render, UI, F-key and persistence are real; no source overlay, per-channel effects, timing or alpha |
+| 6 | experimental | Title-panel channel: 16-channel bank, Program render, UI, F-key and persistence are real; no source overlay, per-channel effects, timing or alpha |
+| 7 | experimental | Title-panel channel: 16-channel bank, Program render, UI, F-key and persistence are real; no source overlay, per-channel effects, timing or alpha |
+| 8 | experimental | Title-panel channel: 16-channel bank, Program render, UI, F-key and persistence are real; no source overlay, per-channel effects, timing or alpha |
+| 9 | stub | Model, SetStinger/Trigger/Stop commands and cut-point Program/Preview exchange only; no stinger clip compositing, timing raster or effects |
+| 10 | stub | Model, SetStinger/Trigger/Stop commands and cut-point Program/Preview exchange only; no stinger clip compositing, timing raster or effects |
+| 11 | stub | Model, SetStinger/Trigger/Stop commands and cut-point Program/Preview exchange only; no stinger clip compositing, timing raster or effects |
+| 12 | stub | Model, SetStinger/Trigger/Stop commands and cut-point Program/Preview exchange only; no stinger clip compositing, timing raster or effects |
+| 13 | stub | Model, SetStinger/Trigger/Stop commands and cut-point Program/Preview exchange only; no stinger clip compositing, timing raster or effects |
+| 14 | stub | Model, SetStinger/Trigger/Stop commands and cut-point Program/Preview exchange only; no stinger clip compositing, timing raster or effects |
+| 15 | stub | Model, SetStinger/Trigger/Stop commands and cut-point Program/Preview exchange only; no stinger clip compositing, timing raster or effects |
+| 16 | stub | Model, SetStinger/Trigger/Stop commands and cut-point Program/Preview exchange only; no stinger clip compositing, timing raster or effects |
 
 ## 9 tujuan audio
 
@@ -186,7 +186,7 @@ Semua777 identifier dicatat di `shortcut_function_inventory.groups` dalam [data 
 ## Urutan pekerjaan berikutnya
 
 1. Jadikan jalur picture-and-sound nyata: sumber audio 48 kHz, routing/impulse/mix-minus; video/file input berlisensi jelas, timestamp dan pengukuran default 30 fps.
-2. Bangun 8 kanal overlay sumber dan 8 stinger dengan waktu cut/alpha yang diuji; lengkapi efek yang belum ada dan graph layer/crop/rotation.
+2. Model 16 kanal (8 title panel + 8 stinger) dengan bank/command/migrasi sudah terpasang; berikutnya bangun overlay sumber nyata dan raster stinger dengan waktu cut/alpha yang diuji; lengkapi efek yang belum ada dan graph layer/crop/rotation.
 3. Tambahkan output/encoder terisolasi, recording yang dapat dipulihkan dan stream ke server lokal; lakukan kajian lisensi sebelum runtime codec/SDK.
 4. Tambahkan API/CLI/control schemas, kategori input, tema/warna, MIDI/triggers dan otomasi yang benar-benar dieksekusi.
 5. Integrasi kamera/network/PTZ/tally/guests/NDI/OMT/VST3 hanya diterima setelah backend, izin lisensi dan perangkat yang diperlukan diuji. Tidak ada streaming publik atau lisensi berbayar yang diasumsikan disetujui.

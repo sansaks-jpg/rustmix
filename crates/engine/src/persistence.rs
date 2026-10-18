@@ -1,5 +1,8 @@
 //! Validated same-filesystem atomic replacement, two backups, recovery journal.
-use crate::{Error, ProjectState, Result, invalid};
+use crate::{
+    Error, OverlayState, ProjectState, Result, SCHEMA, invalid,
+    overlays::{OverlayBank, STANDARD_CHANNELS},
+};
 use std::{
     fs::File,
     io::{Read, Write},
@@ -22,16 +25,43 @@ fn read_bytes(path: &Path) -> Result<Vec<u8>> {
     Ok(bytes)
 }
 fn decode(bytes: &[u8]) -> Result<ProjectState> {
-    let mut p: ProjectState = serde_json::from_slice(bytes)?;
+    let mut value: serde_json::Value = serde_json::from_slice(bytes)?;
+    let schema = value
+        .get("schema")
+        .and_then(serde_json::Value::as_u64)
+        .ok_or_else(|| invalid("Project schema is missing"))?;
+    if !(1..=u64::from(SCHEMA)).contains(&schema) {
+        return Err(invalid(&format!(
+            "Unsupported project version; this application supports schema {SCHEMA}",
+        )));
+    }
+    if let Some(raw) = value.get_mut("overlays")
+        && let Some(panels) = raw.as_array()
+    {
+        // Schemas 1–4 stored four title panels. Expand them into the schema-5
+        // sixteen-channel bank while keeping every authored title, subtitle and
+        // position; channels 5–8 keep their fresh defaults and stingers idle.
+        let legacy: Vec<OverlayState> =
+            serde_json::from_value(serde_json::Value::Array(panels.clone()))?;
+        let mut bank = OverlayBank::demo();
+        for (slot, panel) in legacy.into_iter().take(STANDARD_CHANNELS).enumerate() {
+            if let Some(target) = bank.standard.get_mut(slot) {
+                *target = panel;
+            }
+        }
+        *raw = serde_json::to_value(bank)?;
+    }
+    let Some(object) = value.as_object_mut() else {
+        return Err(invalid("Project JSON must be an object"));
+    };
+    object.insert("schema".into(), SCHEMA.into());
+    let mut p: ProjectState = serde_json::from_value(value)?;
     // Older descriptors retain source IDs, routing and layout. New production
     // configuration defaults to idle, with no playlist started during migration.
-    if matches!(p.schema, 1 | 2) {
+    if matches!(schema, 1 | 2) {
         for slot in &mut p.transition_slots {
             slot.duration_ms = p.duration_ms;
         }
-    }
-    if matches!(p.schema, 1..=3) {
-        p.schema = 4;
     }
     p.validate()?;
     Ok(p)

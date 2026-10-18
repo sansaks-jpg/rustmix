@@ -882,112 +882,112 @@
       "kind": "standard",
       "status": "experimental",
       "conformance": "partial",
-      "scope": "Title panel only"
+      "scope": "Title-panel channel: 16-channel bank, Program render, UI, F-key and persistence are real; no source overlay, per-channel effects, timing or alpha"
     },
     {
       "channel": 2,
       "kind": "standard",
       "status": "experimental",
       "conformance": "partial",
-      "scope": "Title panel only"
+      "scope": "Title-panel channel: 16-channel bank, Program render, UI, F-key and persistence are real; no source overlay, per-channel effects, timing or alpha"
     },
     {
       "channel": 3,
       "kind": "standard",
       "status": "experimental",
       "conformance": "partial",
-      "scope": "Title panel only"
+      "scope": "Title-panel channel: 16-channel bank, Program render, UI, F-key and persistence are real; no source overlay, per-channel effects, timing or alpha"
     },
     {
       "channel": 4,
       "kind": "standard",
       "status": "experimental",
       "conformance": "partial",
-      "scope": "Title panel only"
+      "scope": "Title-panel channel: 16-channel bank, Program render, UI, F-key and persistence are real; no source overlay, per-channel effects, timing or alpha"
     },
     {
       "channel": 5,
       "kind": "standard",
-      "status": "not_started",
-      "conformance": "missing",
-      "scope": "No source overlay/stinger implementation"
+      "status": "experimental",
+      "conformance": "partial",
+      "scope": "Title-panel channel: 16-channel bank, Program render, UI, F-key and persistence are real; no source overlay, per-channel effects, timing or alpha"
     },
     {
       "channel": 6,
       "kind": "standard",
-      "status": "not_started",
-      "conformance": "missing",
-      "scope": "No source overlay/stinger implementation"
+      "status": "experimental",
+      "conformance": "partial",
+      "scope": "Title-panel channel: 16-channel bank, Program render, UI, F-key and persistence are real; no source overlay, per-channel effects, timing or alpha"
     },
     {
       "channel": 7,
       "kind": "standard",
-      "status": "not_started",
-      "conformance": "missing",
-      "scope": "No source overlay/stinger implementation"
+      "status": "experimental",
+      "conformance": "partial",
+      "scope": "Title-panel channel: 16-channel bank, Program render, UI, F-key and persistence are real; no source overlay, per-channel effects, timing or alpha"
     },
     {
       "channel": 8,
       "kind": "standard",
-      "status": "not_started",
-      "conformance": "missing",
-      "scope": "No source overlay/stinger implementation"
+      "status": "experimental",
+      "conformance": "partial",
+      "scope": "Title-panel channel: 16-channel bank, Program render, UI, F-key and persistence are real; no source overlay, per-channel effects, timing or alpha"
     },
     {
       "channel": 9,
       "kind": "stinger",
-      "status": "not_started",
-      "conformance": "missing",
-      "scope": "No source overlay/stinger implementation"
+      "status": "stub",
+      "conformance": "partial",
+      "scope": "Model, SetStinger/Trigger/Stop commands and cut-point Program/Preview exchange only; no stinger clip compositing, timing raster or effects"
     },
     {
       "channel": 10,
       "kind": "stinger",
-      "status": "not_started",
-      "conformance": "missing",
-      "scope": "No source overlay/stinger implementation"
+      "status": "stub",
+      "conformance": "partial",
+      "scope": "Model, SetStinger/Trigger/Stop commands and cut-point Program/Preview exchange only; no stinger clip compositing, timing raster or effects"
     },
     {
       "channel": 11,
       "kind": "stinger",
-      "status": "not_started",
-      "conformance": "missing",
-      "scope": "No source overlay/stinger implementation"
+      "status": "stub",
+      "conformance": "partial",
+      "scope": "Model, SetStinger/Trigger/Stop commands and cut-point Program/Preview exchange only; no stinger clip compositing, timing raster or effects"
     },
     {
       "channel": 12,
       "kind": "stinger",
-      "status": "not_started",
-      "conformance": "missing",
-      "scope": "No source overlay/stinger implementation"
+      "status": "stub",
+      "conformance": "partial",
+      "scope": "Model, SetStinger/Trigger/Stop commands and cut-point Program/Preview exchange only; no stinger clip compositing, timing raster or effects"
     },
     {
       "channel": 13,
       "kind": "stinger",
-      "status": "not_started",
-      "conformance": "missing",
-      "scope": "No source overlay/stinger implementation"
+      "status": "stub",
+      "conformance": "partial",
+      "scope": "Model, SetStinger/Trigger/Stop commands and cut-point Program/Preview exchange only; no stinger clip compositing, timing raster or effects"
     },
     {
       "channel": 14,
       "kind": "stinger",
-      "status": "not_started",
-      "conformance": "missing",
-      "scope": "No source overlay/stinger implementation"
+      "status": "stub",
+      "conformance": "partial",
+      "scope": "Model, SetStinger/Trigger/Stop commands and cut-point Program/Preview exchange only; no stinger clip compositing, timing raster or effects"
     },
     {
       "channel": 15,
       "kind": "stinger",
-      "status": "not_started",
-      "conformance": "missing",
-      "scope": "No source overlay/stinger implementation"
+      "status": "stub",
+      "conformance": "partial",
+      "scope": "Model, SetStinger/Trigger/Stop commands and cut-point Program/Preview exchange only; no stinger clip compositing, timing raster or effects"
     },
     {
       "channel": 16,
       "kind": "stinger",
-      "status": "not_started",
-      "conformance": "missing",
-      "scope": "No source overlay/stinger implementation"
+      "status": "stub",
+      "conformance": "partial",
+      "scope": "Model, SetStinger/Trigger/Stop commands and cut-point Program/Preview exchange only; no stinger clip compositing, timing raster or effects"
     }
   ],
   "audio_destinations": [

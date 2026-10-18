@@ -177,7 +177,7 @@ struct CompositeKey {
     to: u64,
     transition: Option<(TransitionKind, u32)>,
     black: u32,
-    overlays: [OverlayState; 4],
+    overlays: OverlayBank,
 }
 #[derive(Default)]
 pub(crate) struct ProgramRenderer {
@@ -295,7 +295,7 @@ impl ProgramRenderer {
         self.surfaces.retain(|id, _| active.contains(id));
         if transition.is_none()
             && engine.black_level() == 0.0
-            && !project.overlays.iter().any(|o| o.enabled)
+            && !project.overlays.standard.iter().any(|o| o.enabled)
         {
             self.composite = None;
             return Ok(from);

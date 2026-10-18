@@ -177,7 +177,7 @@ pub fn program_from_sources(
     {
         return Err(invalid("Invalid source surface or compositor state"));
     }
-    if t.is_none() && black == 0.0 && !p.overlays.iter().any(|o| o.enabled) {
+    if t.is_none() && black == 0.0 && !p.overlays.standard.iter().any(|o| o.enabled) {
         return Ok(from.to_vec());
     }
     let mut out = Vec::with_capacity(size);
@@ -284,7 +284,7 @@ pub fn program_from_sources(
                     }
                 };
             }
-            for (i, o) in p.overlays.iter().enumerate() {
+            for (i, o) in p.overlays.standard.iter().enumerate() {
                 if o.enabled {
                     let u = x as f32 / w as f32;
                     let v = y as f32 / h as f32;

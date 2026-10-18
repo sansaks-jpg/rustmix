@@ -79,7 +79,7 @@ impl RustMixApp {
             ShortcutAction::CancelTransition,
         ];
         actions.extend((0..4).map(ShortcutAction::TransitionSlot));
-        actions.extend((0..4).map(ShortcutAction::ToggleOverlay));
+        actions.extend((0..8).map(ShortcutAction::ToggleOverlay));
         actions.extend((1..=7).map(ShortcutAction::PreviewNumber));
         actions.extend(
             self.engine

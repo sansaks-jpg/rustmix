@@ -873,7 +873,7 @@ impl RustMixApp {
         let p = self.engine.project();
         if p.program != InputId(3)
             || p.preview != InputId(2)
-            || !p.overlays.first().is_some_and(|o| o.enabled)
+            || !p.overlays.standard.first().is_some_and(|o| o.enabled)
             || !p.buses.first().is_some_and(|b| b.gain_db < -1.0)
             || p.workspace.dock_json.is_empty()
         {
@@ -1433,7 +1433,15 @@ mod tests {
         );
         assert_eq!(app.engine.project().program, InputId(3));
         frame(&mut app, &ctx, key(egui::Key::F1), [1600.0, 900.0]);
-        assert!(app.engine.project().overlays[0].enabled);
+        assert!(app.engine.project().overlays.standard[0].enabled);
+        frame(&mut app, &ctx, key(egui::Key::F5), [1600.0, 900.0]);
+        assert!(app.engine.project().overlays.standard[4].enabled);
+        assert!(!app.engine.project().overlays.standard[3].enabled);
+        // The source-tile strip row 2 (channels 5–8) is live, not a stub.
+        click(&mut app, &ctx, "input.3.overlay.5", [1600.0, 900.0]);
+        let tile_overlay = app.engine.project().overlays.standard[4].clone();
+        assert!(tile_overlay.enabled);
+        assert_eq!(tile_overlay.title, "Camera C");
         let original_monitor_height = app.automation.get("monitor.preview").unwrap().height();
         for size in [[1920.0, 1080.0], [1600.0, 900.0], [1100.0, 700.0]] {
             frame(&mut app, &ctx, vec![], size);
@@ -1881,7 +1889,7 @@ mod tests {
             Some(Position::TopLeft)
         );
         assert_eq!(
-            app.engine.project().overlays[0].position,
+            app.engine.project().overlays.standard[0].position,
             Position::LowerLeft
         );
         assert_eq!(app.engine.project().revision, before);
@@ -1904,7 +1912,7 @@ mod tests {
         assert!(app.overlay_settings.is_none());
         assert_eq!(app.engine.project().revision, before);
         assert_eq!(
-            app.engine.project().overlays[0].position,
+            app.engine.project().overlays.standard[0].position,
             Position::LowerLeft
         );
 
@@ -1914,9 +1922,9 @@ mod tests {
         click(&mut app, &ctx, "dialog.overlay.position.LowerRight", size);
         click(&mut app, &ctx, "dialog.overlay.apply", size);
         let project = app.engine.project();
-        assert!(project.overlays[1].enabled);
-        assert_eq!(project.overlays[1].position, Position::LowerRight);
-        assert_eq!(project.overlays[0].position, Position::LowerLeft);
+        assert!(project.overlays.standard[1].enabled);
+        assert_eq!(project.overlays.standard[1].position, Position::LowerRight);
+        assert_eq!(project.overlays.standard[0].position, Position::LowerLeft);
         assert!(project.revision > before);
         assert!(app.overlay_settings.is_none());
 

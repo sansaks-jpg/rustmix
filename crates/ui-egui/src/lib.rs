@@ -1297,7 +1297,7 @@ impl RustMixApp {
                 self.settings_layout = None;
             }
             Action::OverlaySettings(slot) => {
-                if let Some(overlay) = self.engine.project().overlays.get(slot).cloned() {
+                if let Some(overlay) = self.engine.project().overlays.standard(slot).cloned() {
                     self.overlay_settings = Some((slot, overlay));
                 }
             }

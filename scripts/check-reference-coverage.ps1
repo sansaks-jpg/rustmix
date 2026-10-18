@@ -61,8 +61,11 @@ $effectBlock = [regex]::Match($core, '(?s)pub enum TransitionKind \{(.*?)\n\}').
 $engineEffects = @([regex]::Matches($effectBlock, '(?m)^\s*(\w+),\s*$') | ForEach-Object { $_.Groups[1].Value })
 $ledgerEffects = @($audit.transitions | Where-Object { $null -ne $_.engine_variant } | ForEach-Object { $_.engine_variant })
 if ($engineEffects.Count -eq 0 -or @(Compare-Object $engineEffects $ledgerEffects).Count -ne 0) { throw 'Transition inventory does not match the actual engine enum' }
-$overlayCount = [int][regex]::Match($core, 'pub overlays: \[OverlayState; (\d+)\]').Groups[1].Value
-if ($overlayCount -ne @($audit.overlay_channels | Where-Object { $_.status -ne 'not_started' }).Count) { throw 'Overlay scope exceeds the actual engine bank' }
+$overlays = Get-Content -LiteralPath (Join-Path $workspaceRoot 'crates/engine/src/overlays.rs') -Raw
+$standardChannels = [int][regex]::Match($overlays, 'pub const STANDARD_CHANNELS: usize = (\d+);').Groups[1].Value
+$stingerChannels = [int][regex]::Match($overlays, 'pub const STINGER_CHANNELS: usize = (\d+);').Groups[1].Value
+$overlayChannels = $standardChannels + $stingerChannels
+if ($overlayChannels -ne @($audit.overlay_channels | Where-Object { $_.status -ne 'not_started' }).Count) { throw 'Overlay scope exceeds the actual engine bank' }
 $busCount = [int][regex]::Match($core, 'pub buses: \[AudioChannel; (\d+)\]').Groups[1].Value
 if ($busCount -ne @($audit.audio_destinations | Where-Object { $_.status -ne 'not_started' }).Count) { throw 'Audio scope exceeds the actual engine bank' }
 $allRows = @($audit.areas) + @($audit.input_types) + @($audit.transitions) + @($audit.overlay_channels) + @($audit.audio_destinations) + @($audit.ui_workflows) + @($audit.shortcut_function_inventory)
@@ -71,5 +74,5 @@ $fullMatch = ($unmatched -eq 0 -and $audit.reference.wire_contract_qualified -eq
     $audit.runtime_evidence.cadence_qualified -eq $true -and $audit.runtime_evidence.hardware_qualified -eq $true)
 if ($audit.all_features_match -ne $fullMatch) { throw 'The all-features-match claim is inconsistent with its evidence and gaps' }
 Write-Output "Reference inventory verified: 30 areas, 40 input types, 20 effects, 16 overlay/stinger channels, 9 audio destinations, 12 UI workflows, 777 unique shortcut function names in 29 groups."
-Write-Output "Actual engine scope: $($engineEffects.Count) effects, $overlayCount title panels, $busCount simulated audio buses. Full reference match: $fullMatch."
+Write-Output "Actual engine scope: $($engineEffects.Count) effects, $standardChannels title-panel channels and $stingerChannels modelled stinger channels, $busCount simulated audio buses. Full reference match: $fullMatch."
 if ($RequireFullMatch -and -not $fullMatch) { throw 'Full reference acceptance FAILED: missing/partial features, protocol, hardware and cadence qualification remain.' }

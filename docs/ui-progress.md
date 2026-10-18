@@ -333,3 +333,38 @@ Also removed a duplicated `dialog_busy` term and the dead `position_label` helpe
 headless runs only: `cargo test --workspace` green (engine 8/7/8/8/2/11 tests, UI 45 tests), `cargo
 fmt` clean, `cargo clippy --workspace --all-targets` warning-free. No hosted screenshot review or
 native launch happened in this run.
+
+## 2026-10-18 - reference Task 1.1 port: 16-channel overlay bank and stingers (local headless run)
+
+Ported the reference Task 1.1 model into `crates/engine` and `crates/ui-egui`: project schema 5
+replaces the fixed `overlays: [OverlayState; 4]` array with `OverlayBank { standard[8], stingers[8] }`
+in the new `overlays` module. Standard channels are the previous title panels; stinger channels 9–16
+carry a configured input, a bounded cut point and a display-underneath flag, with new commands
+`overlay.stinger.set`, `overlay.stinger.trigger` and `overlay.stinger.stop`. A trigger captures
+Program/Preview and exchanges them exactly once at the cut point (zero exchanges immediately), a
+re-trigger replaces the in-flight stinger, and the stinger stays trackable until an explicit stop
+because clip end is not observable without a media layer. `Engine::tick` performs the exchange
+before transition completion. Disabled reasons cover missing channels, unconfigured stingers and
+out-of-range cut points; rejected commands leave the project untouched.
+
+Schemas 1–4 migrate through the existing validated decoder: the legacy four-panel array expands
+into the bank with every authored title/subtitle/position preserved, channels 5–8 keep fresh
+defaults, stingers stay idle, and save-time rollback copies still hold the original bytes. Rendering
+paints the eight standard channels only: configuring or triggering a stinger changes no pixels, and
+that limitation is stated in the UI, engine README, feature matrix and reference audit.
+
+UI: the switcher's second overlay row (5–8) is no longer a stub — all eight center buttons are
+live with new `switcher.overlay.{1..8}` automation ids; the source-tile strip row 2 (channels 5–8)
+is live too; the Overlays panel and Overlay Settings dialog now cover channels 1–8; default F-keys
+extend to F1–F8. The reference-coverage guard now
+reads `STANDARD_CHANNELS`/`STINGER_CHANNELS` from `crates/engine/src/overlays.rs`, and the audit
+ledger marks channels 1–8 `experimental` (title panels) and 9–16 `stub` (model/exchange only).
+
+Verified with headless runs only: `cargo test --workspace` green — engine 56 (13 unit, 7 overlays,
+7 categories, 8 inputs, 8 production, 2 transitions, 11 workflow) and UI 45 (including the new F5
+keyboard assertion, the source-tile channel-5 click and the dialog 1–8 flow);
+`cargo fmt --all -- --check` clean;
+`cargo clippy --workspace --all-targets --locked -- -D warnings` clean;
+`pwsh scripts/check-repository.ps1` passes (reference inventory verified; full reference match
+remains **false**). No hosted run, native launch, screenshot inspection or stinger-clip
+implementation happened here; those stay explicitly open in `docs/gaps.md`/the feature matrix.

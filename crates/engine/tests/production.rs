@@ -123,12 +123,12 @@ fn slots_pin_effect_and_duration_until_the_single_commit() {
 fn playlist_holds_after_transition_then_stops_on_last_program() {
     let mut e = Engine::default();
     playlist(&mut e, false, false);
-    let mut overlay = e.project().overlays[0].clone();
+    let mut overlay = e.project().overlays.standard[0].clone();
     overlay.enabled = true;
     e.execute(Command::SetOverlay(0, overlay), 0).unwrap();
     e.execute(Command::StartPlaylist { id: 1, selected: 1 }, 100)
         .unwrap();
-    assert!(!e.project().overlays[0].enabled);
+    assert!(!e.project().overlays.standard[0].enabled);
     assert_eq!(e.playlist_run().unwrap().index, 0); // begin-selected is off
     assert_eq!(e.project().program, InputId(1));
     e.tick(600);
@@ -221,7 +221,7 @@ fn production_configuration_roundtrips_but_automation_never_restarts_on_load() {
         .remove("key_bindings");
     std::fs::write(&path, serde_json::to_vec(&legacy).unwrap()).unwrap();
     let loaded = persistence::load(&path).unwrap();
-    assert_eq!(loaded.schema, 4);
+    assert_eq!(loaded.schema, 5);
     assert!(loaded.playlists[0].items.is_empty());
     assert!(!loaded.preferences.key_bindings.is_empty());
     assert!(
