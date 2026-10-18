@@ -975,10 +975,11 @@ impl Engine {
                 next.playlists.push(Playlist::empty(id, name));
             }
             Command::UpdatePlaylist(list) => {
+                let playlist_id = list.id;
                 *next
                     .playlists
                     .iter_mut()
-                    .find(|p| p.id == list.id)
+                    .find(|p| p.id == playlist_id)
                     .ok_or_else(|| invalid("Playlist not found"))? = list;
             }
             Command::RemovePlaylist(id) => {

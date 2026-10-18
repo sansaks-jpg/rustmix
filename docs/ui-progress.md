@@ -210,3 +210,10 @@ remain required. Camera/video decode, real audio, encoders, recording/streaming,
 3D/stingers/replay, hardware/endurance and complete parity remain open.
 
 See ADR 0009 and docs/reference-feature-comparison.md for design, boundaries and remaining areas.
+
+
+UI-012 first hosted run [39109246651](https://github.com/sansaks-jpg/rustmix/actions/runs/39109246651),
+code `537a678`, passed formatting and the repository guard, then failed compilation with E0382
+in UpdatePlaylist: assignment evaluates its right side before a destination closure reads the
+moved playlist ID. Capture the ID before moving the replacement; no clone or lint suppression.
+Rust tests, native acceptance and build were not reached in that run. Replacement verification follows.
