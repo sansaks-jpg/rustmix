@@ -1008,12 +1008,22 @@ impl RustMixApp {
 
     pub(crate) fn source_tiles(&mut self, ui: &mut egui::Ui, multiview_grid: bool) {
         let p = self.engine.project().clone();
+        // The category predicate lives in the engine (Task 1.2): `All` shows
+        // everything, `Search` is filter-only, concrete values match exactly.
+        let category = InputCategory::from_stored(self.category).unwrap_or(InputCategory::All);
+        let visible: Vec<InputId> = self
+            .engine
+            .project()
+            .visible_inputs(category)
+            .into_iter()
+            .map(|input| input.id)
+            .collect();
         let needle = self.input_filter.trim().to_lowercase();
         let filtered: Vec<_> = p
             .inputs
             .iter()
             .filter(|i| {
-                self.category.is_none_or(|id| i.category == Some(id))
+                visible.contains(&i.id)
                     && (needle.is_empty()
                         || i.name.to_lowercase().contains(&needle)
                         || i.kind.label().to_lowercase().contains(&needle)

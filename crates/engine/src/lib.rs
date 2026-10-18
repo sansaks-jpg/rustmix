@@ -1,5 +1,7 @@
 #![forbid(unsafe_code)]
 pub mod audio;
+pub mod categories;
+pub use categories::{InputCategory, PRESET_CATEGORIES};
 pub mod input;
 pub use input::{ImageFit, InputConfig};
 pub mod overlays;
@@ -272,6 +274,16 @@ impl ProjectState {
     }
     pub fn input(&self, id: InputId) -> Option<&InputState> {
         self.inputs.iter().find(|s| s.id == id)
+    }
+    /// The inputs an operator sees under a category filter (reference Task 1.2
+    /// `State::visible_inputs`): `All` and `Search` show every input, the six
+    /// preset colours and the sixteen custom values match their own
+    /// assignment exactly.
+    pub fn visible_inputs(&self, category: InputCategory) -> Vec<&InputState> {
+        self.inputs
+            .iter()
+            .filter(|input| category.matches(input.category))
+            .collect()
     }
     pub fn input_number(&self, id: InputId) -> usize {
         self.inputs

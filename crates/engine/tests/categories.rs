@@ -159,6 +159,44 @@ fn presentation_changes_leave_an_active_transition_and_automation_running() {
 }
 
 #[test]
+fn typed_category_filter_selects_the_assignment_and_pseudo_values() {
+    let mut engine = Engine::default();
+    engine
+        .execute(Command::SetInputCategory(InputId(3), Some(0)), 0)
+        .unwrap();
+    engine
+        .execute(Command::SetInputCategory(InputId(5), Some(21)), 0)
+        .unwrap();
+
+    let red = engine.project().visible_inputs(InputCategory::Red);
+    assert_eq!(red.len(), 1);
+    assert_eq!(red[0].id, InputId(3));
+
+    let custom = engine.project().visible_inputs(InputCategory::custom(16));
+    assert_eq!(custom.len(), 1);
+    assert_eq!(custom[0].id, InputId(5));
+
+    // The remaining inputs are uncategorised, so a concrete colour is empty.
+    assert!(
+        engine
+            .project()
+            .visible_inputs(InputCategory::Green)
+            .is_empty()
+    );
+
+    let all = engine.project().visible_inputs(InputCategory::All);
+    assert_eq!(all.len(), engine.project().inputs.len());
+    let search = engine.project().visible_inputs(InputCategory::Search);
+    assert_eq!(search.len(), engine.project().inputs.len());
+
+    // The stored id of the newest assignment decodes back to the typed value.
+    assert_eq!(
+        InputCategory::from_stored(engine.project().input(InputId(5)).unwrap().category),
+        Some(InputCategory::custom(16))
+    );
+}
+
+#[test]
 fn combined_settings_apply_validates_name_and_preferences_atomically() {
     let mut engine = Engine::default();
     let before = engine.project().clone();
