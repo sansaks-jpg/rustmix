@@ -103,7 +103,7 @@ impl RustMixApp {
                 s.captured = true;
             }
         }
-        if s.wait < 4 && s.stage != 13 {
+        if s.wait < 4 {
             return Ok(());
         }
         self.validate_monitor_geometry(ctx.viewport_rect().right())?;
@@ -268,17 +268,15 @@ impl RustMixApp {
                 s.stage = 12;
             }
 
-            12 | 13 => {
+            12 => {
                 let current = *self
                     .automation
                     .get("monitor.program.play")
                     .ok_or_else(|| Error::Invalid("Program play control missing".into()))?;
-                if s.stage == 12
-                    && s.transport_target.is_none_or(|previous| {
-                        (previous.min - current.min).length() > 0.5
-                            || (previous.max - current.max).length() > 0.5
-                    })
-                {
+                if s.transport_target.is_none_or(|previous| {
+                    (previous.min - current.min).length() > 0.5
+                        || (previous.max - current.max).length() > 0.5
+                }) {
                     s.transport_target = Some(current);
                     return Ok(());
                 }
@@ -294,11 +292,19 @@ impl RustMixApp {
                     egui::Event::PointerButton {
                         pos,
                         button: egui::PointerButton::Primary,
-                        pressed: s.stage == 12,
+                        pressed: true,
+                        modifiers: egui::Modifiers::NONE,
+                    },
+                    egui::Event::PointerButton {
+                        pos,
+                        button: egui::PointerButton::Primary,
+                        pressed: false,
                         modifiers: egui::Modifiers::NONE,
                     },
                 ];
-                s.stage += 1;
+                // Deliver one click, not a multi-second hold on a slow WARP
+                // runner. egui rejects holds past max_click_duration (0.8s).
+                s.stage = 14;
             }
             14 => {
                 let clock = self

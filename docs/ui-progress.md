@@ -147,3 +147,11 @@ vMix binary extraction, live stream or hardware output was performed. Real
 decode/audio/capture/encoding, GPU media composition, endurance/device loss and
 full vMix feature coverage remain open; no numerical readiness claim is made.
 
+### Hosted verification history for UI-009
+
+- `39086886319` / `5a65bcb`: compilation passed; Clippy rejected an obsolete external-output timestamp field after removal of simulated output starts. The unused field was removed; no warning was suppressed.
+- `39087027130` / `86f2225`: all checks passed, 28 tests (5 engine units, 11 engine workflows, 12 UI tests), release packaging, native switching/save/reopen, 60 stable idle monitor frames and 35 paused Program frames. Actual screenshots at 1100x700, 1600x900 and 1920x1080 were inspected. Native stderr was empty.
+- `39087378270` / `4c8b113`: unit/widget checks passed; the native pause click failed. The harness held the mouse across four frames on a slow software-rendered runner. Pinned egui 0.35.0 source confirms `max_click_duration = 0.8` seconds and rejects longer holds as clicks. The native gesture now acquires stable target bounds and queues one press/release click without changing the product's click threshold or bypassing the widget/engine assertions. Transport widgets also receive explicit stable egui IDs. Diagnostics retain the target and input state on failure.
+- Generator/PNG source selection now rejects unsupported media without replacing source data, names samples as procedural generators, constrains Browse to supported PNGs, preserves Browse cancellation, and removes invented file names/resolution/rate metadata. Unimplemented source/transition starts are disabled with reasons. PNG-to-Program/offline-black and unsupported-file regressions are included.
+- The intermediate `b29f963` workflow was cancelled by the author while queued/running setup, to replace it with the corrected click gesture. Final exact-code acceptance remains pending below.
+
