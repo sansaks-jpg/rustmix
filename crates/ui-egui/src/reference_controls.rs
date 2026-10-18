@@ -128,7 +128,7 @@ impl RustMixApp {
             );
             self.automation
                 .insert("dialog.search.text".into(), entry.rect);
-            if !ctx.wants_keyboard_input() {
+            if !ctx.egui_wants_keyboard_input() {
                 entry.request_focus();
             }
             ui.separator();
@@ -307,7 +307,10 @@ mod tests {
         assert_eq!(app.engine.project().revision, original.revision + 1);
         assert_eq!(app.preview_color(), Color32::from_rgb(80, 100, 200));
         assert_eq!(app.program_color(), Color32::from_rgb(100, 160, 50));
-        assert!(!ctx.style().visuals.dark_mode);
+        assert!(
+            !ctx.style_of(egui::Theme::Light).visuals.dark_mode,
+            "the applied light theme must carry light visuals"
+        );
         assert_eq!(
             app.engine.project().preferences.categories[21].name,
             "Interview"
@@ -319,6 +322,10 @@ mod tests {
         let mut app = RustMixApp::headless();
         let ctx = egui::Context::default();
         app.theme(&ctx);
+        // egui 0.35 serialises the not-laid-out rectangles of a fresh dock as
+        // JSON null, which its own deserialiser rejects; a laid-out frame
+        // replaces them with real geometry so the round trip is meaningful.
+        frame(&mut app, &ctx, vec![]);
         let project = app.engine.project().clone();
         let layout = serde_json::to_string(&app.dock).unwrap();
         app.toggle_audio_pane();

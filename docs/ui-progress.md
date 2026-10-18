@@ -308,3 +308,28 @@ rejects this state. Missing backends and partial contracts remain explicit in
 Read all17 supplied reference documents and28 existing project documents; no inaccessible files. New trace-log precedence corrects the earlier audit:777 names are shortcut metadata, not a proven HTTP denominator. Off clears, Out retains; wire overlay channels1–8 differ from state16; control response is pre-action. All reference scripts remain unexecuted. See reference-review.md.
 
 Implemented source candidate: schema4 category/theme persistence and migration1/2/3, atomic name/preferences apply, first-slot/pinned T-Bar, real category filters/assignment/search dialog, audio pane hide/restore, and capacity-one worker snapshots. Misleading advanced overlay/output/Display scratch controls and fake Web Controller/routing notices are replaced with explicit unavailable/read-only behavior. No new dependencies/backends or vendor assets. New engine/widget/worker tests and seven native process/capture checks require hosted verification. No local compile/test/launch.
+
+## 2026-10-18 - restore a green workspace after egui 0.35 drift (UI-013 follow-up)
+
+The UI crate did not compile at commit d893b3f (strictly pinned egui 0.35 removed
+`Context::wants_keyboard_input()` in favour of `egui_wants_keyboard_input()` and replaced the
+`Context::style()` accessor with per-theme `style_of(Theme)`); the headless UI tests therefore
+could not run at all. Fixed both call sites in `reference_controls.rs`, which surfaced three
+further defects that had been committed with d893b3f:
+
+- Three `ui.button("Close unavailable setup")` debug controls in the Recording Setup, Streaming
+  Settings and MultiCorder dialogs were removed. They existed only so stale wiring could close
+  dialogs and faked operator interactivity ("do not claim a capability without evidence").
+- The Cancel/OK/Close footers of those three dialogs were wrapped inside the disabled, read-only
+  form region behind a scroll area, so the operator-visible OK of Recording Setup could never
+  receive a click (ADR 0003 requires reachable, closable footers outside scroll areas). Footers
+  are now interactive and sit between the scrollable form and the window edge in all three dialogs.
+- The audio pane hide/restore round-trip test now lays out one real frame before serialising:
+  egui 0.35 serialises the not-yet-laid-out dock rectangles as JSON `null`, which its own
+  deserialiser rejects; a laid-out frame replaces them with real geometry so the round trip and
+  the panel-layout validator are both meaningful.
+
+Also removed a duplicated `dialog_busy` term and the dead `position_label` helper. Verified with
+headless runs only: `cargo test --workspace` green (engine 8/7/8/8/2/11 tests, UI 45 tests), `cargo
+fmt` clean, `cargo clippy --workspace --all-targets` warning-free. No hosted screenshot review or
+native launch happened in this run.

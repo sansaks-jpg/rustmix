@@ -2067,7 +2067,6 @@ impl RustMixApp {
             || self.search_open
             || self.properties.is_some()
             || self.settings
-            || self.search_open
             || self.overlay_settings.is_some()
             || self.recording_setup
             || self.streaming_setup

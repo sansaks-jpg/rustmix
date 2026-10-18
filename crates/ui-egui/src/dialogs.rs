@@ -164,14 +164,6 @@ fn sidebar_row(
     .inner
 }
 
-fn position_label(position: Position) -> &'static str {
-    match position {
-        Position::LowerLeft => "Lower left",
-        Position::LowerRight => "Lower right",
-        Position::TopLeft => "Top left",
-    }
-}
-
 const ADD_CATEGORIES: [(&str, InputKind, &str); 20] = [
     (
         "Generators / PNG",
@@ -1743,34 +1735,35 @@ impl RustMixApp {
                         ),
                     );
                 }
-                ui.with_layout(egui::Layout::right_to_left(Align::Center), |ui| {
-                    let cancel = ui.add(
-                        egui::Button::new("Cancel")
-                            .fill(CHIP_BG)
-                            .min_size(Vec2::new(92.0, 29.0)),
-                    );
-                    self.automation
-                        .insert("dialog.recording.cancel".into(), cancel.rect);
-                    if cancel.clicked() {
-                        close_clicked = true;
-                    }
-                    let ok = ui.add(
-                        egui::Button::new(RichText::new("OK").color(Color32::WHITE).strong())
-                            .fill(PROGRAM)
-                            .min_size(Vec2::new(92.0, 29.0)),
-                    );
-                    self.automation
-                        .insert("dialog.recording.ok".into(), ok.rect);
-                    if ok.clicked() {
-                        self.notice = "Recording backend unavailable; no settings were saved".into();
-                        self.warning = false;
-                        close_clicked = true;
-                    }
-                });
             });
             });
             });
-            if ui.button("Close unavailable setup").clicked(){close_clicked=true;}
+            // The footer stays interactive and outside the read-only,
+            // scrollable form region (ADR 0003: dialogs stay operator closable).
+            ui.with_layout(egui::Layout::right_to_left(Align::Center), |ui| {
+                let cancel = ui.add(
+                    egui::Button::new("Cancel")
+                        .fill(CHIP_BG)
+                        .min_size(Vec2::new(92.0, 29.0)),
+                );
+                self.automation
+                    .insert("dialog.recording.cancel".into(), cancel.rect);
+                if cancel.clicked() {
+                    close_clicked = true;
+                }
+                let ok = ui.add(
+                    egui::Button::new(RichText::new("OK").color(Color32::WHITE).strong())
+                        .fill(PROGRAM)
+                        .min_size(Vec2::new(92.0, 29.0)),
+                );
+                self.automation
+                    .insert("dialog.recording.ok".into(), ok.rect);
+                if ok.clicked() {
+                    self.notice = "Recording backend unavailable; no settings were saved".into();
+                    self.warning = false;
+                    close_clicked = true;
+                }
+            });
         });
         if close_clicked || !open {
             self.recording_setup = false;
@@ -1963,36 +1956,37 @@ impl RustMixApp {
                 } else {
                     ui.label(RichText::new("Unavailable: no encoder / network backend").color(DIM));
                 }
-                ui.with_layout(egui::Layout::right_to_left(Align::Center), |ui| {
-                    let close = ui.add(
-                        egui::Button::new("Close")
-                            .fill(CHIP_BG)
-                            .min_size(Vec2::new(92.0, 29.0)),
-                    );
-                    self.automation
-                        .insert("dialog.streaming.close".into(), close.rect);
-                    if close.clicked() {
-                        close_clicked = true;
-                    }
-                    let save = ui.add(
-                        egui::Button::new(
-                            RichText::new("Save and Close").color(Color32::WHITE).strong(),
-                        )
-                        .fill(PROGRAM)
-                        .min_size(Vec2::new(112.0, 29.0)),
-                    );
-                    self.automation
-                        .insert("dialog.streaming.save".into(), save.rect);
-                    if save.clicked() {
-                        self.notice = "Streaming backend unavailable; no settings were saved".into();
-                        self.warning = false;
-                        close_clicked = true;
-                    }
-                });
             });
             });
             });
-            if ui.button("Close unavailable setup").clicked(){close_clicked=true;}
+            // The footer stays interactive and outside the read-only,
+            // scrollable form region (ADR 0003: dialogs stay operator closable).
+            ui.with_layout(egui::Layout::right_to_left(Align::Center), |ui| {
+                let close = ui.add(
+                    egui::Button::new("Close")
+                        .fill(CHIP_BG)
+                        .min_size(Vec2::new(92.0, 29.0)),
+                );
+                self.automation
+                    .insert("dialog.streaming.close".into(), close.rect);
+                if close.clicked() {
+                    close_clicked = true;
+                }
+                let save = ui.add(
+                    egui::Button::new(
+                        RichText::new("Save and Close").color(Color32::WHITE).strong(),
+                    )
+                    .fill(PROGRAM)
+                    .min_size(Vec2::new(112.0, 29.0)),
+                );
+                self.automation
+                    .insert("dialog.streaming.save".into(), save.rect);
+                if save.clicked() {
+                    self.notice = "Streaming backend unavailable; no settings were saved".into();
+                    self.warning = false;
+                    close_clicked = true;
+                }
+            });
         });
         if close_clicked || !open {
             self.streaming_setup = false;
@@ -2179,22 +2173,23 @@ impl RustMixApp {
                     egui::TextEdit::singleline(&mut self.mc_folder),
                 );
                 let _ = ui.add_sized([74.0, 22.0], egui::Button::new("Browse").fill(CHIP_BG));
-                ui.with_layout(egui::Layout::right_to_left(Align::Center), |ui| {
-                    let close = ui.add(
-                        egui::Button::new("Close")
-                            .fill(CHIP_BG)
-                            .min_size(Vec2::new(92.0, 29.0)),
-                    );
-                    self.automation
-                        .insert("dialog.multicorder.close".into(), close.rect);
-                    if close.clicked() {
-                        close_clicked = true;
-                    }
-                });
             });
             });
             });
-            if ui.button("Close unavailable setup").clicked(){close_clicked=true;}
+            // The footer stays interactive and outside the scrollable form
+            // region (ADR 0003: dialogs stay operator closable).
+            ui.with_layout(egui::Layout::right_to_left(Align::Center), |ui| {
+                let close = ui.add(
+                    egui::Button::new("Close")
+                        .fill(CHIP_BG)
+                        .min_size(Vec2::new(92.0, 29.0)),
+                );
+                self.automation
+                    .insert("dialog.multicorder.close".into(), close.rect);
+                if close.clicked() {
+                    close_clicked = true;
+                }
+            });
         });
         if close_clicked || !open {
             self.multicorder_open = false;
