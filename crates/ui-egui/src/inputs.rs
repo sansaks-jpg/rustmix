@@ -343,6 +343,18 @@ impl RustMixApp {
             }
             _ => {} // A closed editor or replaced project cannot receive this image.
         }
+        if let Some(draft) = &self.properties
+            && let Some(fx) = &mut self.properties_fx
+            && fx.custom_rgba.is_none()
+            && fx.media_path.is_some()
+            && let Some(current) = self.input_fx.get(&draft.id)
+            && current.media_path == fx.media_path
+        {
+            fx.custom_rgba = current.custom_rgba.clone();
+            fx.image_size = current.image_size;
+            fx.image_pending = current.image_pending;
+            fx.image_error = current.image_error.clone();
+        }
         self.last_demo_frame = None;
     }
 

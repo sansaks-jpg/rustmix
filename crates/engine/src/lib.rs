@@ -666,6 +666,14 @@ impl Engine {
             Command::RemoveInput(_) if self.project.inputs.len() <= 2 => {
                 Err(invalid("Keep at least two inputs"))
             }
+            Command::AddInput { .. } | Command::AddInputAt { .. } | Command::DuplicateInput(_)
+                if self.project.inputs.len() >= 32 =>
+            {
+                Err(invalid("Maximum 32 inputs reached"))
+            }
+            Command::DuplicateInput(id) if self.project.input(*id).is_none() => {
+                Err(invalid("Input not found"))
+            }
             _ => Ok(()),
         }
     }
@@ -799,6 +807,7 @@ impl Engine {
                 for input in &mut next.inputs {
                     if input.config.pip_source == Some(id) {
                         input.config.pip_source = None;
+                        affected.push(input.id);
                     }
                 }
                 affected.push(id);

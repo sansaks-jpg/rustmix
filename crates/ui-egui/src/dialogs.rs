@@ -421,6 +421,7 @@ impl RustMixApp {
                 "dialog.add",
                 height,
                 |app, ui| {
+                    if app.add_loading { ui.disable(); }
                     ui.spacing_mut().item_spacing.y = 1.0;
                     for (idx, (label, kind, _)) in ADD_CATEGORIES.into_iter().enumerate() {
                         let active = app.add_tab == idx && app.add_kind == kind;
@@ -437,6 +438,7 @@ impl RustMixApp {
                     }
                 },
                 |app, ui| {
+                    if app.add_loading { ui.disable(); }
                     let (_, _, banner_text) = ADD_CATEGORIES.get(app.add_tab).copied().unwrap_or((
                         "Video",
                         InputKind::Grid,
@@ -561,6 +563,7 @@ impl RustMixApp {
             ui.separator();
             ui.horizontal(|ui| {
                 ui.label(RichText::new("Number").size(12.0).color(Color32::WHITE));
+                ui.add_enabled_ui(!self.add_loading, |ui| {
                 egui::ComboBox::from_id_salt("dialog.add.number")
                     .width(54.0)
                     .selected_text(self.add_number.to_string())
@@ -569,6 +572,7 @@ impl RustMixApp {
                             ui.selectable_value(&mut self.add_number, n, n.to_string());
                         }
                     });
+                });
                 if self.add_name.trim().is_empty() {
                     ui.colored_label(PREVIEW, "Enter a non-empty source label.");
                 }
@@ -583,7 +587,7 @@ impl RustMixApp {
                     if cancel.clicked() {
                         close_requested = true;
                     }
-                    let confirm = ui.add(
+                    let confirm = ui.add_enabled(!self.add_loading,
                         egui::Button::new(RichText::new("OK").color(Color32::WHITE).strong())
                             .fill(PROGRAM)
                             .min_size(Vec2::new(92.0, 29.0)),
@@ -633,6 +637,7 @@ impl RustMixApp {
                 "dialog.properties",
                 height,
                 |app, ui| {
+                    if app.properties_loading { ui.disable(); }
                     ui.spacing_mut().item_spacing.y = 1.0;
                     for (idx, (page, label, key)) in [
                         (InputPage::General, "General", "General"),
@@ -683,6 +688,7 @@ impl RustMixApp {
                     }
                 },
                 |app, ui| {
+                    if app.properties_loading { ui.disable(); }
                     egui::Frame::new()
                         .fill(HEADER_DARK)
                         .corner_radius(4.0)
@@ -798,6 +804,7 @@ impl RustMixApp {
                                                         if let Some(fx) = app.properties_fx.as_mut() {
                                                             fx.media_path = None;
                                                             fx.custom_rgba = None;
+                                                            fx.image_size = None;
                                                             fx.image_error = None;
                                                             fx.image_pending = false;
                                                         }
@@ -908,9 +915,9 @@ impl RustMixApp {
                                     }
                                     right_col.add_space(4.0);
                                     if right_col
-                                        .add_sized(
-                                            [240.0, 24.0],
-                                            egui::Button::new("Duplicate Input"),
+                                        .add_enabled(
+                                            app.engine.enabled(&Command::DuplicateInput(id)).is_ok(),
+                                            egui::Button::new("Duplicate Input").min_size(Vec2::new(240.0, 24.0)),
                                         )
                                         .clicked() && app.apply_properties(draft.clone())
                                     {
@@ -1034,7 +1041,7 @@ impl RustMixApp {
                             );
                             ui.checkbox(
                                 &mut draft.online,
-                                "Source online (uncheck to simulate fallback slate)",
+                                "Source online (off = black)",
                             );
                             let p = app.engine.project();
                             let tally = if p.program == id {
@@ -1148,7 +1155,7 @@ impl RustMixApp {
             ui.horizontal(|ui| {
                 if ui
                     .add_enabled(
-                        self.engine.project().inputs.len() > 2,
+                        self.engine.enabled(&Command::RemoveInput(id)).is_ok(),
                         egui::Button::new(RichText::new("Remove…").color(RED))
                             .min_size(Vec2::new(88.0, 29.0)),
                     )
@@ -1167,7 +1174,7 @@ impl RustMixApp {
                     if cancel.clicked() {
                         cancel_clicked = true;
                     }
-                    let apply = ui.add(
+                    let apply = ui.add_enabled(!self.properties_loading,
                         egui::Button::new(RichText::new("OK").color(Color32::WHITE).strong())
                             .fill(PROGRAM)
                             .min_size(Vec2::new(92.0, 29.0)),
@@ -2913,22 +2920,22 @@ impl RustMixApp {
         .show(ctx, |ui| {
             ui.heading(RichText::new("Confirm input removal").color(PREVIEW));
             ui.label(format!(
-                "Remove {label} from this preset? If it is selected on Program or Preview, the engine will reassign that bus only when you confirm."
+                "Remove {label} from this preset? Inputs on Program or Preview are protected; select another input before removing them."
             ));
             ui.add_space(12.0);
             ui.separator();
             ui.horizontal(|ui| {
-                let confirm = ui.add(
+                let confirm = ui.add_enabled(
+                    self.engine.enabled(&Command::RemoveInput(id)).is_ok(),
                     egui::Button::new(RichText::new("Remove input").color(RED).strong())
                         .min_size(Vec2::new(118.0, 29.0)),
                 );
                 self.automation
                     .insert("dialog.remove.confirm".into(), confirm.rect);
-                if confirm.clicked() {
-                    self.actions.push(Action::Engine(Command::RemoveInput(id)));
+                if confirm.clicked() && self.try_execute(Command::RemoveInput(id)).is_some() {
                     self.confirm_remove_input = None;
                     if self.properties.as_ref().is_some_and(|input| input.id == id) {
-                        self.properties = None;
+                        self.close_properties();
                     }
                 }
                 let cancel =

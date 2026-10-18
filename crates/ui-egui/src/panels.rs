@@ -94,9 +94,9 @@ pub(crate) fn process_source_pixels(
     let zoom = fx.zoom.clamp(0.25, 4.0);
     let mut out = Vec::with_capacity((w * h) as usize);
     for y in 0..h {
-        let ny = ((y as f32 / h.max(1) as f32) - 0.5 - fx.pan_y * 0.45) / zoom + 0.5;
+        let ny = (((y as f32 + 0.5) / h.max(1) as f32) - 0.5 - fx.pan_y * 0.45) / zoom + 0.5;
         for x in 0..w {
-            let mut ux = (x as f32 / w.max(1) as f32) - 0.5 - fx.pan_x * 0.45;
+            let mut ux = ((x as f32 + 0.5) / w.max(1) as f32) - 0.5 - fx.pan_x * 0.45;
             if fx.mirror {
                 ux = -ux;
             }
@@ -1972,6 +1972,35 @@ mod processing_tests {
             ..Default::default()
         };
         assert_ne!(process_source_pixels(&edge, 3, 1, &fx, None), edge);
+    }
+    #[test]
+    fn mirror_preserves_every_edge_pixel() {
+        let base = vec![
+            [10, 20, 30, 255],
+            [40, 50, 60, 255],
+            [70, 80, 90, 255],
+            [110, 120, 130, 255],
+            [140, 150, 160, 255],
+            [170, 180, 190, 255],
+        ];
+        let fx = InputFx {
+            config: InputConfig {
+                mirror: true,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        assert_eq!(
+            process_source_pixels(&base, 3, 2, &fx, None),
+            vec![
+                [70, 80, 90, 255],
+                [40, 50, 60, 255],
+                [10, 20, 30, 255],
+                [170, 180, 190, 255],
+                [140, 150, 160, 255],
+                [110, 120, 130, 255]
+            ]
+        );
     }
     #[test]
     fn image_fit_preserves_aspect_and_composites_alpha_over_black() {

@@ -107,7 +107,8 @@ fn removal_clears_persisted_layer_references() {
     let mut input = e.project().inputs[0].clone();
     input.config.pip_source = Some(InputId(7));
     e.execute(Command::UpdateInput(input), 0).unwrap();
-    e.execute(Command::RemoveInput(InputId(7)), 0).unwrap();
+    let removed = e.execute(Command::RemoveInput(InputId(7)), 0).unwrap();
+    assert!(removed.affected.contains(&InputId(1)) && removed.affected.contains(&InputId(7)));
     assert!(e.project().inputs[0].config.pip_source.is_none());
     e.project().validate().unwrap();
 }

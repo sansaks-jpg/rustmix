@@ -1612,6 +1612,8 @@ mod tests {
         click(&mut app, &ctx, "dialog.properties.apply", [1600.0, 900.0]);
         app.execute(Command::DuplicateInput(id));
         let copy = app.engine.project().inputs[2].id;
+        assert_eq!(app.engine.project().input(id).unwrap().config.gain, 0.5);
+        assert!(app.engine.project().input(id).unwrap().config.mirror);
         assert_eq!(
             app.engine.project().input(id).unwrap().config,
             app.engine.project().input(copy).unwrap().config
@@ -1794,5 +1796,79 @@ mod tests {
         assert_eq!(app.engine.project().inputs.len(), 8);
         assert!(!app.add_open);
         assert!(app.input_fx.get(&InputId(8)).unwrap().custom_rgba.is_some());
+    }
+    #[test]
+    fn busy_source_editor_blocks_selection_changes_and_cancel_discards_picker_results() {
+        let mut app = RustMixApp::headless();
+        let ctx = egui::Context::default();
+        app.theme(&ctx);
+        app.dispatch(Action::Add, &ctx);
+        let kind = app.add_kind;
+        let (tx, rx) = mpsc::sync_channel(1);
+        app.image_picker = Some(rx);
+        app.add_loading = true;
+        let token = app.add_token;
+        click(&mut app, &ctx, "dialog.add.kind.Geometry", [1600.0, 900.0]);
+        assert_eq!(app.add_kind, kind);
+        click(&mut app, &ctx, "dialog.add.cancel", [1600.0, 900.0]);
+        tx.send(media::PickerDone {
+            target: media::MediaTarget::AddPreview { token },
+            path: Some("obsolete.png".into()),
+        })
+        .unwrap();
+        finish_media(&mut app);
+        assert!(!app.add_open && !app.add_loading);
+        assert_eq!(app.engine.project().inputs.len(), 7);
+        let id = InputId(1);
+        app.dispatch(Action::Properties(id), &ctx);
+        let (tx, rx) = mpsc::sync_channel(1);
+        app.image_picker = Some(rx);
+        app.properties_loading = true;
+        let token = app.properties_token;
+        click(
+            &mut app,
+            &ctx,
+            "dialog.properties.kind.Bars",
+            [1600.0, 900.0],
+        );
+        assert_eq!(app.properties.as_ref().unwrap().kind, InputKind::Grid);
+        click(&mut app, &ctx, "dialog.properties.cancel", [1600.0, 900.0]);
+        tx.send(media::PickerDone {
+            target: media::MediaTarget::Properties { id, token },
+            path: Some("obsolete.png".into()),
+        })
+        .unwrap();
+        finish_media(&mut app);
+        assert!(app.properties.is_none());
+        assert!(
+            app.engine
+                .project()
+                .input(id)
+                .unwrap()
+                .config
+                .media_path
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn removal_confirmation_rechecks_live_protection_and_closes_editor_after_success() {
+        let mut app = RustMixApp::headless();
+        let ctx = egui::Context::default();
+        app.theme(&ctx);
+        let id = InputId(3);
+        app.dispatch(Action::Properties(id), &ctx);
+        app.dispatch(Action::RequestRemove(id), &ctx);
+        app.execute(Command::TakeInput(id));
+        click(&mut app, &ctx, "dialog.remove.confirm", [1600.0, 900.0]);
+        assert!(app.engine.project().input(id).is_some());
+        assert_eq!(app.confirm_remove_input, Some(id));
+        assert!(app.properties.is_some());
+        app.execute(Command::TakeInput(InputId(1)));
+        app.execute(Command::SelectPreview(InputId(2)));
+        click(&mut app, &ctx, "dialog.remove.confirm", [1600.0, 900.0]);
+        assert!(app.engine.project().input(id).is_none());
+        assert!(app.confirm_remove_input.is_none());
+        assert!(app.properties.is_none() && app.properties_fx.is_none());
     }
 }
