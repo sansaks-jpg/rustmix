@@ -23,6 +23,7 @@ pub(crate) struct Smoke {
     captured: bool,
     bank_baseline: Option<Rect>,
     paused_program: Option<(u64, Vec<u8>, Rect)>,
+    transport_target: Option<Rect>,
 }
 impl Smoke {
     pub(crate) fn is_dialog_stage(&self) -> bool {
@@ -102,7 +103,7 @@ impl RustMixApp {
                 s.captured = true;
             }
         }
-        if s.wait < 4 {
+        if s.wait < 4 && s.stage != 13 {
             return Ok(());
         }
         self.validate_monitor_geometry(ctx.viewport_rect().right())?;
@@ -268,11 +269,26 @@ impl RustMixApp {
             }
 
             12 | 13 => {
-                let pos = self
+                let current = *self
                     .automation
                     .get("monitor.program.play")
-                    .ok_or_else(|| Error::Invalid("Program play control missing".into()))?
-                    .center();
+                    .ok_or_else(|| Error::Invalid("Program play control missing".into()))?;
+                if s.stage == 12
+                    && s.transport_target.is_none_or(|previous| {
+                        (previous.min - current.min).length() > 0.5
+                            || (previous.max - current.max).length() > 0.5
+                    })
+                {
+                    s.transport_target = Some(current);
+                    return Ok(());
+                }
+                let pos = s.transport_target.unwrap_or(current).center();
+                std::fs::write(
+                    format!("artifacts/pause-click-{}.json", s.stage),
+                    serde_json::to_vec_pretty(
+                        &serde_json::json!({"stage":s.stage,"position":format!("{pos:?}"),"current_bounds":format!("{current:?}"),"source":self.engine.project().program.0,"at_ms":self.now}),
+                    )?,
+                )?;
                 s.events = vec![
                     egui::Event::PointerMoved(pos),
                     egui::Event::PointerButton {
@@ -290,6 +306,16 @@ impl RustMixApp {
                     .playback(self.engine.project().program)
                     .ok_or_else(|| Error::Invalid("Program transport missing".into()))?;
                 if !clock.paused() {
+                    std::fs::write(
+                        "artifacts/pause-input-failure.txt",
+                        format!(
+                            "pointer={:?}, target={:?}, source={}, notice={}",
+                            ctx.input(|i| i.pointer.clone()),
+                            s.transport_target,
+                            self.engine.project().program.0,
+                            self.notice
+                        ),
+                    )?;
                     return Err(Error::Invalid(
                         "Native pause control did not pause Program".into(),
                     ));

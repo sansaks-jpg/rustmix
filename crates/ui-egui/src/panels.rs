@@ -530,18 +530,22 @@ impl RustMixApp {
                     ui.spacing_mut().item_spacing.x = 4.0;
                     let is_paused = self.engine.inputs_paused()
                         || self.engine.playback(id).is_some_and(|clock| clock.paused());
-                    let play_btn = vector_icon_button(
-                        ui,
-                        if is_paused {
-                            VectorIcon::Play
-                        } else {
-                            VectorIcon::Pause
-                        },
-                        egui::vec2(20.0, 18.0),
-                        !is_paused,
-                        None,
-                    )
-                    .on_hover_text("Play / Pause source playback");
+                    let play_btn = ui
+                        .push_id(("source.play", program, id.0), |ui| {
+                            vector_icon_button(
+                                ui,
+                                if is_paused {
+                                    VectorIcon::Play
+                                } else {
+                                    VectorIcon::Pause
+                                },
+                                egui::vec2(20.0, 18.0),
+                                !is_paused,
+                                None,
+                            )
+                        })
+                        .inner
+                        .on_hover_text("Play / Pause source playback");
                     self.automation.insert(
                         format!(
                             "monitor.{}.play",
@@ -554,14 +558,18 @@ impl RustMixApp {
                         self.actions
                             .push(Action::Engine(Command::SetInputPaused(id, !paused)));
                     }
-                    let restart_btn = vector_icon_button(
-                        ui,
-                        VectorIcon::Restart,
-                        egui::vec2(20.0, 18.0),
-                        false,
-                        None,
-                    )
-                    .on_hover_text("Restart playback from 00:00:00");
+                    let restart_btn = ui
+                        .push_id(("source.restart", program, id.0), |ui| {
+                            vector_icon_button(
+                                ui,
+                                VectorIcon::Restart,
+                                egui::vec2(20.0, 18.0),
+                                false,
+                                None,
+                            )
+                        })
+                        .inner
+                        .on_hover_text("Restart playback from 00:00:00");
                     self.automation.insert(
                         format!(
                             "monitor.{}.restart",
