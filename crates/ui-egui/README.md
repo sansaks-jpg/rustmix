@@ -1,5 +1,13 @@
 # rustmix-ui
 
+UI-012: `controls` renders the engine-backed named playlist editor and staged keyboard mapping
+settings. Slot menus dispatch persisted effect/duration updates. Playlist Start/Stop/Next/Previous
+use engine commands; empty starts are disabled. Exact modifier/repeat/focus guards protect keys.
+The Program producer returns state plus control generation; painting consumes feedback before new
+actions and never repeatedly submits stale state. Native PNG acceptance now includes real playlist
+widget operations, remapped input selection and persisted configuration on reopen. Hosted execution
+and screenshot inspection for this change remain pending; no new device/output support is claimed.
+
 Native egui frontend with dockable monitors, inputs, simulated audio and Program overlay editing. See docs/ui-architecture.md. All engine changes use typed commands. File dialogs/IO are off the UI thread. UI-only layout and dialog actions use the coordinator dispatcher.
 
 UI-009 allocates a fixed monitor-bank rectangle and clips child layouts to prevent per-frame height feedback. Input/mixer space is reserved when resizing or loading old panel state. The manual T-Bar is horizontal. Monitor transport widgets dispatch typed engine commands; pictures, countdowns, progress and timecode use the same source clock. Input effects and custom PNGs reach Program before transition/FTB. Unsupported output start paths report unavailable rather than counting fictitious frames/bytes.

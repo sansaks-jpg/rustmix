@@ -185,3 +185,28 @@ UI-011 pending: independent bounded Program producer, exact rational deadlines, 
 UI-011 first hosted [run 39092790498](https://github.com/sansaks-jpg/rustmix/actions/runs/39092790498), code `67bd65e`, passed compilation, lint, 58 tests, native switching/pause/input save/reopen and packaging. The new measurements did **not** qualify the requested cadence: 50p=32.04, 59.94p=31.84, 60p=32.15 fps, with skipped deadlines. Windows `park_timeout` was replaced by Rust 1.94's high-resolution `thread::sleep`, bounded to 10 ms without busy spinning; a new profile is required.
 
 The process sampler's raw samples were valid, but PowerShell aggregation of ordered dictionaries returned null summaries. These are not zero-RAM results. Raw-sample reconstruction showed peak working set 92.49 MiB for the cadence process and 137.71 MiB across native checks; maximum private bytes 364.32 MiB. Aggregation now uses explicit numeric values and rejects missing/non-positive summaries. This is hosted process evidence only, excluding dedicated VRAM and endurance. Screenshot review also found stable engine IDs were displayed as user input numbers after insertion; operator labels/search now use actual list positions, with stable IDs retained for commands/automation.
+
+
+## UI-012 — reference findings to engine-owned production controls (2026-10-18)
+
+Source implemented, hosted acceptance pending. Baseline `11a1fb3`. Inspected RustMix docs,
+engine/UI/tests, and the supplied `rustmix-reference/vmix` behavioral feature map/specification,
+playlist/shortcut descriptions and actual playlist screenshot. Public playlist documentation
+clarifies Clear Overlays applies at start. No reference source, vendor binaries or assets copied.
+
+Implemented four persisted transition slots and twelve original CPU effects, named playlists over
+validated input references with per-item effect/time/hold, reorder, selected start, loop/manual,
+clear-on-start, bounded auto progression, explicit stop/next/previous and offline alarms. Added
+editable keyboard bindings with conflict/target/reserved validation and exact modifier/repeat/focus
+guards. Schema 3 migrates 1/2 without altering old backup bytes; active automation never resumes
+on load. The bounded producer acknowledges control generations and actual engine state so UI
+repaints cannot submit stale automatic state on every paint.
+
+Prepared core/pixel/widget/producer regressions and extended native PNG workflow with playlist
+widget operations, Start/Stop, custom X key, dialog capture and second-process configuration reopen.
+Local rustfmt, dependency/asset inventory and diff review are permitted; no Rust test/build or native
+launch was performed. Exact-code hosted compile, Clippy, tests, screenshots and cadence review
+remain required. Camera/video decode, real audio, encoders, recording/streaming, external outputs,
+3D/stingers/replay, hardware/endurance and complete parity remain open.
+
+See ADR 0009 and docs/reference-feature-comparison.md for design, boundaries and remaining areas.

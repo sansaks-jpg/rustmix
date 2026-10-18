@@ -6,7 +6,7 @@ const SIDEBAR: Color32 = Color32::from_rgb(14, 18, 24);
 const HEADER_DARK: Color32 = Color32::from_rgb(20, 26, 34);
 const FORM_BORDER: Color32 = Color32::from_rgb(54, 66, 82);
 
-fn operator_window<'a>(
+pub(super) fn operator_window<'a>(
     ctx: &egui::Context,
     title: impl Into<egui::WidgetText>,
     id: &str,
@@ -1513,30 +1513,7 @@ impl RustMixApp {
                             ui.add_space(6.0);
                             ui.label("Web Controller Address: http://127.0.0.1:8088");
                         }
-                        SettingsPage::Shortcuts => {
-                            ui.label(
-                                RichText::new("Keyboard & Surface Shortcuts")
-                                    .size(13.0)
-                                    .strong()
-                                    .color(FORM_TEXT),
-                            );
-                            egui::Grid::new("settings.shortcuts.grid")
-                                .striped(true)
-                                .spacing([24.0, 6.0])
-                                .show(ui, |ui| {
-                                    for (k, v) in [
-                                        ("1 .. 9", "Select source 1..9 on Preview"),
-                                        ("Space", "CUT Preview to Program"),
-                                        ("Enter", "FADE Preview to Program"),
-                                        ("F1 .. F4", "Toggle overlay 1..4 on Program"),
-                                        ("Ctrl+S / Ctrl+O", "Save / Open preset"),
-                                    ] {
-                                        ui.strong(k);
-                                        ui.label(v);
-                                        ui.end_row();
-                                    }
-                                });
-                        }
+                        SettingsPage::Shortcuts => app.shortcut_settings(ui, &mut draft),
                         _ => {
                             ui.label(
                                 RichText::new(format!("{:?} Configuration", app.settings_page))
@@ -1589,6 +1566,13 @@ impl RustMixApp {
             draft = ProjectState::demo().preferences;
         }
         if apply_clicked {
+            let mut candidate = self.engine.project().clone();
+            candidate.preferences = draft.clone();
+            if let Err(error) = candidate.validate() {
+                self.say(error.to_string(), true);
+                self.settings_draft = Some(draft);
+                return;
+            }
             if !self.settings_name.trim().is_empty()
                 && self.settings_name.trim() != self.engine.project().name
             {
@@ -2599,202 +2583,6 @@ impl RustMixApp {
         }
     }
 
-    pub(crate) fn playlist_dialog(&mut self, ctx: &egui::Context) {
-        if !self.playlist_open {
-            return;
-        }
-        let mut open = self.playlist_open;
-        let mut close_clicked = false;
-        operator_window(
-            ctx,
-            "PlayList",
-            "dialog.playlist",
-            &mut open,
-            Vec2::new(720.0, 460.0),
-        )
-        .show(ctx, |ui| {
-            ui.horizontal(|ui| {
-                if ui
-                    .add_sized(
-                        [105.0, 24.0],
-                        egui::Button::new("New PlayList").fill(CHIP_BG),
-                    )
-                    .clicked()
-                {
-                    self.playlist_items.clear();
-                }
-                if ui
-                    .add_sized(
-                        [110.0, 24.0],
-                        egui::Button::new("Delete PlayList").fill(CHIP_BG),
-                    )
-                    .clicked()
-                {
-                    self.playlist_items.clear();
-                }
-                egui::ComboBox::from_id_salt("playlist.preset_select")
-                    .width(260.0)
-                    .selected_text("Default PlayList")
-                    .show_ui(ui, |ui| {
-                        let _ = ui.selectable_label(true, "Default PlayList");
-                    });
-            });
-            ui.add_space(6.0);
-            let inputs: Vec<(InputId, String)> = self
-                .engine
-                .project()
-                .inputs
-                .iter()
-                .map(|i| {
-                    (
-                        i.id,
-                        format!("{}   {}", self.engine.project().input_number(i.id), i.name),
-                    )
-                })
-                .collect();
-            ui.columns(3, |cols| {
-                if let [left_col, mid_col, right_col, ..] = cols {
-                    light_form_frame(left_col, 6, |ui| {
-                        ui.set_min_height(210.0);
-                        ui.label(RichText::new("Available Inputs").strong().color(FORM_TEXT));
-                        ui.separator();
-                        for (idx, (_, label)) in inputs.iter().enumerate() {
-                            if ui
-                                .selectable_label(self.playlist_selected_avail == idx, label)
-                                .clicked()
-                            {
-                                self.playlist_selected_avail = idx;
-                            }
-                        }
-                    });
-                    mid_col.vertical_centered(|ui| {
-                        ui.add_space(64.0);
-                        if ui
-                            .add_sized([48.0, 28.0], egui::Button::new(">").fill(CHIP_BG))
-                            .clicked()
-                            && let Some((id, _)) = inputs.get(self.playlist_selected_avail)
-                        {
-                            self.playlist_items.push(*id);
-                        }
-                        ui.add_space(8.0);
-                        if ui
-                            .add_sized([48.0, 28.0], egui::Button::new("<").fill(CHIP_BG))
-                            .clicked()
-                            && self.playlist_selected_item < self.playlist_items.len()
-                        {
-                            self.playlist_items.remove(self.playlist_selected_item);
-                        }
-                    });
-                    light_form_frame(right_col, 6, |ui| {
-                        ui.set_min_height(210.0);
-                        ui.label(RichText::new("PlayList Items").strong().color(FORM_TEXT));
-                        ui.separator();
-                        for (idx, item_id) in self.playlist_items.clone().into_iter().enumerate() {
-                            let label = inputs
-                                .iter()
-                                .find(|(id, _)| *id == item_id)
-                                .map(|(_, l)| l.as_str())
-                                .unwrap_or("Input");
-                            if ui
-                                .selectable_label(self.playlist_selected_item == idx, label)
-                                .clicked()
-                            {
-                                self.playlist_selected_item = idx;
-                            }
-                        }
-                    });
-                }
-            });
-            ui.separator();
-            ui.horizontal(|ui| {
-                ui.vertical(|ui| {
-                    ui.horizontal(|ui| {
-                        ui.checkbox(&mut self.playlist_loop, "Loop");
-                        ui.checkbox(
-                            &mut self.playlist_begin_selected,
-                            "Begin From Selected Item",
-                        );
-                    });
-                    ui.horizontal(|ui| {
-                        ui.checkbox(&mut self.playlist_clear_overlays, "Clear Overlays");
-                        ui.checkbox(&mut self.playlist_manual, "Manual");
-                    });
-                });
-                ui.add_space(16.0);
-                let start = ui.add_sized(
-                    [92.0, 44.0],
-                    egui::Button::new(
-                        RichText::new(if self.playlist_running {
-                            "Stop"
-                        } else {
-                            "Start"
-                        })
-                        .size(16.0)
-                        .color(Color32::WHITE),
-                    )
-                    .fill(if self.playlist_running { RED } else { PROGRAM }),
-                );
-                self.automation
-                    .insert("dialog.playlist.start".into(), start.rect);
-                if start.clicked() {
-                    self.playlist_running = !self.playlist_running;
-                    self.playlist_last_step_ms = self.now;
-                    if self.playlist_running
-                        && let Some(&first_id) =
-                            self.playlist_items.get(self.playlist_selected_item)
-                    {
-                        self.actions
-                            .push(Action::Engine(Command::SelectPreview(first_id)));
-                        self.actions
-                            .push(Action::Engine(Command::Transition(TransitionKind::Fade)));
-                    }
-                }
-                if ui
-                    .add_sized([42.0, 26.0], egui::Button::new("|<<").fill(CHIP_BG))
-                    .clicked()
-                    && !self.playlist_items.is_empty()
-                {
-                    self.playlist_selected_item = self.playlist_selected_item.saturating_sub(1);
-                    if let Some(&id) = self.playlist_items.get(self.playlist_selected_item) {
-                        self.actions
-                            .push(Action::Engine(Command::SelectPreview(id)));
-                        self.actions
-                            .push(Action::Engine(Command::Transition(TransitionKind::Fade)));
-                    }
-                }
-                if ui
-                    .add_sized([42.0, 26.0], egui::Button::new(">>|").fill(CHIP_BG))
-                    .clicked()
-                    && !self.playlist_items.is_empty()
-                {
-                    self.playlist_selected_item =
-                        (self.playlist_selected_item + 1) % self.playlist_items.len();
-                    if let Some(&id) = self.playlist_items.get(self.playlist_selected_item) {
-                        self.actions
-                            .push(Action::Engine(Command::SelectPreview(id)));
-                        self.actions
-                            .push(Action::Engine(Command::Transition(TransitionKind::Fade)));
-                    }
-                }
-                ui.with_layout(egui::Layout::right_to_left(Align::Center), |ui| {
-                    let close = ui.add(
-                        egui::Button::new("Close")
-                            .fill(CHIP_BG)
-                            .min_size(Vec2::new(92.0, 29.0)),
-                    );
-                    self.automation
-                        .insert("dialog.playlist.close".into(), close.rect);
-                    if close.clicked() {
-                        close_clicked = true;
-                    }
-                });
-            });
-        });
-        if close_clicked || !open {
-            self.playlist_open = false;
-        }
-    }
-
     pub(crate) fn shortcuts_dialog(&mut self, ctx: &egui::Context) {
         if !self.shortcuts_open {
             return;
@@ -2809,37 +2597,25 @@ impl RustMixApp {
             Vec2::new(620.0, 440.0),
         )
         .show(ctx, |ui| {
-            let tiles: [(&str, Action); 12] = [
-                ("Cut\n[Space]", Action::Engine(Command::Cut)),
-                (
-                    "Fade\n[Enter]",
-                    Action::Engine(Command::Transition(TransitionKind::Fade)),
-                ),
-                (
-                    "Merge\n[Unavailable]",
-                    Action::Unavailable("Merge is not implemented; choose Fade or Wipe"),
-                ),
-                (
-                    "Wipe\n[Current duration]",
-                    Action::Engine(Command::Transition(TransitionKind::Wipe)),
-                ),
-                ("FTB\n[Fade to Black]", Action::Engine(Command::FadeBlack)),
-                ("Overlay 1\n[Settings]", Action::OverlaySettings(0)),
-                ("Overlay 2\n[Settings]", Action::OverlaySettings(1)),
-                (
-                    "Preview 1\n[Key 1]",
-                    Action::Engine(Command::SelectPreview(InputId(1))),
-                ),
-                (
-                    "Preview 2\n[Key 2]",
-                    Action::Engine(Command::SelectPreview(InputId(2))),
-                ),
-                (
-                    "Preview 3\n[Key 3]",
-                    Action::Engine(Command::SelectPreview(InputId(3))),
-                ),
-                ("Record\n[Toggle]", Action::ToggleRecordSim),
-                ("Stream\n[Toggle]", Action::ToggleStreamSim),
+            let hint = |action| self.engine.project().preferences.key_bindings.iter()
+                .find(|binding| binding.action == action).map_or_else(|| "Unbound".into(), ShortcutBinding::label);
+            let transition = |index: usize| self.engine.project().transition_slots.get(index)
+                .map_or_else(|| "Missing slot".into(), |slot| format!("{}\n[Slot {} · {} ms]", slot.kind.label(), index+1, slot.duration_ms));
+            let preview = |number| self.engine.shortcut_command(&ShortcutAction::PreviewNumber(number))
+                .map(Action::Engine).unwrap_or(Action::Unavailable("Input number is unavailable"));
+            let tiles: [(String, Action); 12] = [
+                (format!("Cut\n[{}]", hint(ShortcutAction::Cut)), Action::Engine(Command::Cut)),
+                (transition(0), Action::Engine(Command::RunTransitionSlot(0))),
+                (transition(1), Action::Engine(Command::RunTransitionSlot(1))),
+                (transition(2), Action::Engine(Command::RunTransitionSlot(2))),
+                (format!("FTB\n[{}]", hint(ShortcutAction::FadeBlack)), Action::Engine(Command::FadeBlack)),
+                ("Overlay 1\n[Settings]".into(), Action::OverlaySettings(0)),
+                ("Overlay 2\n[Settings]".into(), Action::OverlaySettings(1)),
+                ("Preview 1\n[Input number]".into(), preview(1)),
+                ("Preview 2\n[Input number]".into(), preview(2)),
+                ("Preview 3\n[Input number]".into(), preview(3)),
+                ("Record\n[Unavailable]".into(), Action::ToggleRecordSim),
+                ("Stream\n[Unavailable]".into(), Action::ToggleStreamSim),
             ];
             egui::Grid::new("shortcuts_button_grid")
                 .num_columns(3)
@@ -2877,15 +2653,15 @@ impl RustMixApp {
                     .add_sized([78.0, 29.0], egui::Button::new("Add").fill(CHIP_BG))
                     .clicked()
                 {
-                    self.actions
-                        .push(Action::SettingsAt(SettingsPage::Shortcuts));
+                    self.shortcuts_open = false;
+                    self.actions.push(Action::SettingsAt(SettingsPage::Shortcuts));
                 }
                 if ui
                     .add_sized([84.0, 29.0], egui::Button::new("Settings").fill(CHIP_BG))
                     .clicked()
                 {
-                    self.actions
-                        .push(Action::SettingsAt(SettingsPage::Shortcuts));
+                    self.shortcuts_open = false;
+                    self.actions.push(Action::SettingsAt(SettingsPage::Shortcuts));
                 }
                 ui.with_layout(egui::Layout::right_to_left(Align::Center), |ui| {
                     let close = ui.add(

@@ -1,5 +1,12 @@
 # rustmix-engine
 
+UI-012: `production` provides persisted transition slots and named playlists over stable input
+IDs, with explicit item hold/effect/duration, manual/loop/selected start and bounded progression.
+Operator switching stops automation; stopping automation preserves an active take. Configuration
+changes validate atomically and offline progression reports an alarm. `shortcuts` validates
+portable key bindings and resolves them to typed commands. Schema 3 migrates 1/2 with idle runtime
+state. Twelve original CPU effects have pixel-vector tests prepared; hosted execution is pending.
+
 Headless synthetic UI domain. `Engine::execute` validates typed commands; `tick` advances pinned transitions using supplied monotonic milliseconds. Project/model, procedural CPU rendering, deterministic simulated meters and bounded atomic project IO are modules with no UI dependencies.
 
 Engine tests run on GitHub Actions. No real audio, media decoding, hardware, GPU types or output encoders are exposed.

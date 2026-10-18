@@ -1,5 +1,27 @@
 # Verification
 
+## UI-012 pending acceptance
+
+No Rust compilation, Rust tests, release build or native launch has been run locally for this patch.
+Permitted local checks: `cargo fmt --all -- --check`, `./scripts/check-repository.ps1` (metadata,
+dependency layering and asset inventory only), and `git diff --check` / source review.
+
+Required exact-patch hosted Windows gates remain the existing workflow: locked workspace check,
+warnings-as-errors Clippy, all-target unit/integration/widget tests, release build and native smoke.
+New test files `engine/tests/production.rs` and `engine/tests/transitions.rs` cover slot pinning,
+independent pixel vectors, playlist clock/options/protection/offline behavior, configuration
+migration/IO and key validation. UI widget tests cover playlist editing and footer bounds,
+modifier/repeat guards and shortcut draft cancellation/invalid application. The producer test
+advances a playlist without a UI and checks generation acknowledgment.
+
+Native `--ui-input-smoke` now adds production configuration through typed commands and actual
+playlist widgets, starts/stops the playlist, uses the custom X key, saves `input-playlist.png`,
+and requires schema-3 configuration in `--ui-input-smoke-reopen`. The cadence sampler must be
+reviewed again because producer state acknowledgment changes the hot path. No timing improvement
+or real-device behavior is claimed from prepared tests or local metadata checks.
+
+## Earlier verification
+
 UI-009 adds engine coverage for independent pause/resume/restart/loop, global pause with live transitions, late-created source origins, malformed surfaces and processed bus blending. Widget coverage checks 90 idle frames at each of four resize steps, horizontal T-Bar endpoint hold/release, actual monitor pause/restart clicks, frozen Program pixels, custom image resizing/sharpen and unavailable outputs. All 32 tests and native acceptance passed on GitHub-hosted Windows in [run 39089212707](https://github.com/sansaks-jpg/rustmix/actions/runs/39089212707), code `3a36cf2`. Screenshots were reviewed at 1100x700, 1600x900 and 1920x1080, including the final Shortcuts/Streaming availability states. No local Rust test/build was performed; physical hardware and endurance qualification remain open.
 
 The final consistency regression also clicks the unavailable Merge/Record/Stream shortcut tiles and Streaming Start, requiring unchanged engine revision and no transition/record/stream activity. Native screenshot review covers the resulting disabled states and labels.

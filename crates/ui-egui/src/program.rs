@@ -26,6 +26,7 @@ impl<T> Latest<T> {
     }
 }
 pub(crate) struct Snapshot {
+    pub generation: u64,
     pub engine: Engine,
     pub sources: HashMap<InputId, InputFx>,
 }
@@ -38,6 +39,8 @@ pub(crate) struct VideoStats {
     pub cached_bytes: usize,
 }
 pub(crate) struct ProgramFrame {
+    pub generation: u64,
+    pub engine: Engine,
     pub timing: FrameTiming,
     pub produced_ns: u64,
     pub rate: Rate,
@@ -105,6 +108,8 @@ impl ProgramWorker {
                                 .is_none_or(|old| !Arc::ptr_eq(old, &pixels));
                             previous_pixels = Some(Arc::clone(&pixels));
                             output.put(Ok(ProgramFrame {
+                                generation: snapshot.generation,
+                                engine: snapshot.engine.clone(),
                                 timing,
                                 produced_ns: u64::try_from(origin.elapsed().as_nanos())
                                     .unwrap_or(u64::MAX),
@@ -334,6 +339,75 @@ mod tests {
     #![allow(clippy::unwrap_used)]
     use super::*;
     #[test]
+    fn playlist_advances_without_ui_and_reports_the_control_generation() {
+        let mut engine = Engine::default();
+        engine.execute(Command::TakeInput(InputId(6)), 0).unwrap();
+        let mut list = engine.project().playlists.first().cloned().unwrap();
+        list.items = [InputId(6), InputId(4)]
+            .into_iter()
+            .map(|input| PlaylistItem {
+                input,
+                hold_ms: 100,
+                transition: TransitionSlot {
+                    kind: TransitionKind::Cut,
+                    duration_ms: 100,
+                },
+            })
+            .collect();
+        engine.execute(Command::UpdatePlaylist(list), 0).unwrap();
+        engine
+            .execute(Command::StartPlaylist { id: 1, selected: 0 }, 0)
+            .unwrap();
+        let worker = ProgramWorker::spawn(
+            Snapshot {
+                generation: 7,
+                engine,
+                sources: HashMap::new(),
+            },
+            Instant::now(),
+            None,
+        );
+        std::thread::sleep(Duration::from_millis(350));
+        let deadline = Instant::now() + Duration::from_secs(2);
+        let final_frame = loop {
+            if let Some(Ok(frame)) = worker.take()
+                && frame.engine.project().program == InputId(4)
+                && frame.engine.playlist_run().is_none()
+            {
+                break Some(frame);
+            }
+            if Instant::now() >= deadline {
+                break None;
+            }
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        .unwrap();
+        assert_eq!(final_frame.generation, 7);
+        let mut engine = final_frame.engine;
+        engine
+            .execute(Command::TakeInput(InputId(6)), 3000)
+            .unwrap();
+        worker.submit(Snapshot {
+            generation: 8,
+            engine,
+            sources: HashMap::new(),
+        });
+        let deadline = Instant::now() + Duration::from_secs(2);
+        loop {
+            if let Some(Ok(frame)) = worker.take()
+                && frame.generation == 8
+            {
+                assert_eq!(frame.engine.project().program, InputId(6));
+                break;
+            }
+            assert!(
+                Instant::now() < deadline,
+                "Producer did not acknowledge the new control state"
+            );
+            std::thread::sleep(Duration::from_millis(10));
+        }
+    }
+    #[test]
     fn latest_slot_replaces_frames_and_static_program_reuses_pixels() {
         let slot = Latest::default();
         for value in 0..10_000 {
@@ -365,6 +439,7 @@ mod tests {
         engine.execute(Command::TakeInput(InputId(6)), 0).unwrap();
         let worker = ProgramWorker::spawn(
             Snapshot {
+                generation: 0,
                 engine,
                 sources: HashMap::new(),
             },

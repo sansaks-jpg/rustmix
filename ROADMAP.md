@@ -1,5 +1,11 @@
 # Roadmap
 
+- UI-012: reference-driven production controls — persisted independent transition slots and
+  twelve CPU effects, named engine playlists with per-item transitions/holds and offline handling,
+  editable keyboard bindings, schema 3 migration and acknowledged producer state. Source
+  implemented; hosted compile/lint/unit/widget/native/reopen/performance review pending.
+  Full capability map: docs/reference-feature-comparison.md. Media/audio/output milestones remain open.
+
 - UI-009: stable bounded monitor bank, horizontal T-Bar, independent headless source transport, consistent processed Program surfaces and truthful output/processing status — tested on hosted Windows: 32 tests plus native screenshot/save/reopen acceptance in [run 39089212707](https://github.com/sansaks-jpg/rustmix/actions/runs/39089212707). Complete vMix feature parity and production engine qualification remain separate uncompleted milestones.
 
 - M0/UI-001: three-package workspace, headless commands, rational rates, synthetic media, project IO and hosted Windows CI — implemented, verification tracked in docs/ui-progress.md.

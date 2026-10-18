@@ -194,6 +194,13 @@ pub fn program_from_sources(
                     .copied()
                     .ok_or_else(|| invalid("Target surface truncated"))?;
                 color = match t.kind {
+                    TransitionKind::Cut => {
+                        if t.progress >= 1.0 {
+                            b
+                        } else {
+                            color
+                        }
+                    }
                     TransitionKind::Fade => blend(color, b, t.progress),
                     TransitionKind::Wipe => {
                         if (x as f32 / w as f32) < t.progress {
@@ -201,6 +208,79 @@ pub fn program_from_sources(
                         } else {
                             color
                         }
+                    }
+                    TransitionKind::WipeReverse => {
+                        if x as f32 / w as f32 >= 1.0 - t.progress {
+                            b
+                        } else {
+                            color
+                        }
+                    }
+                    TransitionKind::VerticalWipe => {
+                        if (y as f32 / h as f32) < t.progress {
+                            b
+                        } else {
+                            color
+                        }
+                    }
+                    TransitionKind::VerticalWipeReverse => {
+                        if y as f32 / h as f32 >= 1.0 - t.progress {
+                            b
+                        } else {
+                            color
+                        }
+                    }
+                    TransitionKind::BarnDoor => {
+                        if ((2 * x + 1) as f32 / w as f32 - 1.0).abs() < t.progress {
+                            b
+                        } else {
+                            color
+                        }
+                    }
+                    TransitionKind::RollerDoor => {
+                        if ((2 * y + 1) as f32 / h as f32 - 1.0).abs() < t.progress {
+                            b
+                        } else {
+                            color
+                        }
+                    }
+                    TransitionKind::Slide
+                    | TransitionKind::SlideReverse
+                    | TransitionKind::VerticalSlide
+                    | TransitionKind::VerticalSlideReverse => {
+                        let vertical = matches!(
+                            t.kind,
+                            TransitionKind::VerticalSlide | TransitionKind::VerticalSlideReverse
+                        );
+                        let reverse = matches!(
+                            t.kind,
+                            TransitionKind::SlideReverse | TransitionKind::VerticalSlideReverse
+                        );
+                        let extent = if vertical { h } else { w };
+                        let coordinate = if vertical { y } else { x };
+                        let shift = (extent as f32 * t.progress).round() as u32;
+                        let boundary = extent.saturating_sub(shift);
+                        let (surface, offset) = if reverse {
+                            if coordinate < shift {
+                                (to, coordinate + boundary)
+                            } else {
+                                (from, coordinate - shift)
+                            }
+                        } else if coordinate < boundary {
+                            (from, coordinate + shift)
+                        } else {
+                            (to, coordinate - boundary)
+                        };
+                        let (sx, sy) = if vertical { (x, offset) } else { (offset, y) };
+                        let sample = u64::from(sy)
+                            .checked_mul(u64::from(w))
+                            .and_then(|n| n.checked_add(u64::from(sx)))
+                            .and_then(|n| usize::try_from(n).ok())
+                            .ok_or_else(|| invalid("Slide pixel offset exceeds surface"))?;
+                        surface
+                            .get(sample)
+                            .copied()
+                            .ok_or_else(|| invalid("Slide surface truncated"))?
                     }
                 };
             }

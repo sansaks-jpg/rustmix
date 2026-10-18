@@ -50,7 +50,7 @@ Invoke-NativeSmoke @('--ui-smoke-reopen','artifacts/smoke.rustmix.json')
 if (-not (Test-Path artifacts/reopen-ok.json)) { throw 'Reopen did not validate the saved production' }
 Invoke-NativeSmoke @('--ui-input-smoke')
 Invoke-NativeSmoke @('--ui-input-smoke-reopen','artifacts/inputs.rustmix.json')
-foreach ($file in @('input-fixture.png','input-workflow.png','input-properties.png','input-reopened.png','input-smoke-ok.json','input-reopen-ok.json','inputs.rustmix.json')) {
+foreach ($file in @('input-fixture.png','input-workflow.png','input-properties.png','input-playlist.png','input-reopened.png','input-smoke-ok.json','input-reopen-ok.json','inputs.rustmix.json')) {
     if (-not (Test-Path (Join-Path artifacts $file))) { throw "Missing PNG workflow evidence: $file" }
 }
 Invoke-NativeSmoke @('--ui-perf')

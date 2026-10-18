@@ -509,6 +509,16 @@ impl RustMixApp {
             || source.config.gain != 0.5
             || source.config.media_path.is_none()
             || !copy.audio.muted
+            || self.engine.playlist_run().is_some()
+            || p.playlists
+                .first()
+                .is_none_or(|list| list.items.len() != 2 || !list.manual)
+            || p.transition_slots.first().is_none_or(|slot| {
+                slot.kind != TransitionKind::SlideReverse || slot.duration_ms != 250
+            })
+            || !p.preferences.key_bindings.iter().any(|binding| {
+                binding.key == "X" && binding.action == ShortcutAction::Preview(InputId(8))
+            })
             || self.last_program_rgba.is_empty()
             || !self
                 .last_program_rgba
@@ -535,6 +545,8 @@ impl RustMixApp {
                     "input-reopened"
                 } else if s.stage == 10 {
                     "input-properties"
+                } else if s.stage == 20 {
+                    "input-playlist"
                 } else {
                     "input-workflow"
                 };
@@ -648,7 +660,7 @@ impl RustMixApp {
                 }
                 self.execute(Command::DuplicateInput(InputId(8)));
                 self.execute(Command::TakeInput(InputId(9)));
-                s.stage = 7;
+                s.stage = 11;
             }
             7 => {
                 self.assert_input_smoke()?;
@@ -680,6 +692,85 @@ impl RustMixApp {
                 self.close_properties();
                 self.saved_revision = self.engine.project().revision;
                 ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+            }
+            11 => {
+                self.execute(Command::SetTransitionSlot(
+                    0,
+                    TransitionSlot {
+                        kind: TransitionKind::SlideReverse,
+                        duration_ms: 250,
+                    },
+                ));
+                let mut preferences = self.engine.project().preferences.clone();
+                preferences.key_bindings.push(ShortcutBinding {
+                    key: "X".into(),
+                    ctrl: false,
+                    shift: false,
+                    alt: false,
+                    action: ShortcutAction::Preview(InputId(8)),
+                });
+                self.execute(Command::SetPreferences(preferences));
+                self.dispatch(Action::PlayList, ctx);
+                s.stage = 12;
+            }
+            12 => {
+                self.native_click(s, "dialog.playlist.available.8")?;
+                s.stage = 13;
+            }
+            13 => {
+                self.native_click(s, "dialog.playlist.add")?;
+                s.stage = 14;
+            }
+            14 => {
+                self.native_click(s, "dialog.playlist.available.9")?;
+                s.stage = 15;
+            }
+            15 => {
+                self.native_click(s, "dialog.playlist.add")?;
+                s.stage = 16;
+            }
+            16 => {
+                self.native_click(s, "dialog.playlist.manual")?;
+                s.stage = 17;
+            }
+            17 => {
+                self.native_click(s, "dialog.playlist.start")?;
+                s.stage = 18;
+            }
+            18 => {
+                if self.engine.playlist_run().is_none() {
+                    return Err(Error::Invalid("Native playlist did not start".into()));
+                }
+                self.native_click(s, "dialog.playlist.start")?;
+                s.stage = 19;
+            }
+            19 => {
+                if self.engine.playlist_run().is_some() {
+                    return Err(Error::Invalid("Native playlist did not stop".into()));
+                }
+                if self.engine.transition().is_some() {
+                    return Ok(());
+                }
+                ctx.send_viewport_cmd(egui::ViewportCommand::Screenshot(egui::UserData::default()));
+                s.captured = false;
+                s.stage = 20;
+            }
+            20 if s.captured => {
+                self.native_click(s, "dialog.playlist.close")?;
+                s.stage = 21;
+            }
+            21 => {
+                self.execute(Command::TakeInput(InputId(9)));
+                s.events = key(egui::Key::X);
+                s.stage = 22;
+            }
+            22 => {
+                if self.engine.project().preview != InputId(8) {
+                    return Err(Error::Invalid(
+                        "Native remapped shortcut did not select its input".into(),
+                    ));
+                }
+                s.stage = 7;
             }
             _ => {}
         }
@@ -774,6 +865,133 @@ impl RustMixApp {
 mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used, clippy::indexing_slicing)]
     use super::*;
+
+    #[test]
+    fn playlist_widgets_commit_order_and_options_and_keep_program_until_start() {
+        let mut app = RustMixApp::headless();
+        let ctx = egui::Context::default();
+        app.theme(&ctx);
+        let size = [1600.0, 900.0];
+        app.dispatch(Action::PlayList, &ctx);
+        click(&mut app, &ctx, "dialog.playlist.add", size);
+        click(&mut app, &ctx, "dialog.playlist.available.3", size);
+        click(&mut app, &ctx, "dialog.playlist.add", size);
+        click(&mut app, &ctx, "dialog.playlist.up", size);
+        click(&mut app, &ctx, "dialog.playlist.manual", size);
+        assert_eq!(
+            app.engine.project().playlists[0]
+                .items
+                .iter()
+                .map(|i| i.input)
+                .collect::<Vec<_>>(),
+            [InputId(3), InputId(1)]
+        );
+        assert!(app.engine.project().playlists[0].manual);
+        assert_eq!(app.engine.project().program, InputId(1));
+        click(&mut app, &ctx, "dialog.playlist.start", size);
+        assert_eq!(app.engine.playlist_run().unwrap().index, 0);
+        assert_eq!(app.engine.transition().unwrap().to, InputId(3));
+        click(&mut app, &ctx, "dialog.playlist.start", size);
+        assert!(app.engine.playlist_run().is_none());
+    }
+
+    #[test]
+    fn playlist_footer_stays_visible_at_small_and_large_viewports() {
+        for size in [[734.0, 466.0], [1100.0, 700.0], [1600.0, 900.0]] {
+            let mut app = RustMixApp::headless();
+            let ctx = egui::Context::default();
+            app.theme(&ctx);
+            app.dispatch(Action::PlayList, &ctx);
+            for _ in 0..5 {
+                frame(&mut app, &ctx, vec![], size);
+            }
+            for id in ["dialog.playlist.start", "dialog.playlist.close"] {
+                assert!(
+                    ctx.viewport_rect().contains_rect(app.automation[id]),
+                    "{id}: {size:?}"
+                );
+            }
+            let revision = app.engine.project().revision;
+            click(&mut app, &ctx, "dialog.playlist.start", size);
+            assert_eq!(app.engine.project().revision, revision);
+            assert!(app.engine.playlist_run().is_none());
+        }
+    }
+
+    #[test]
+    fn remapped_shortcuts_respect_modifiers_repeats_and_dialog_focus() {
+        let mut app = RustMixApp::headless();
+        let ctx = egui::Context::default();
+        app.theme(&ctx);
+        let size = [1600.0, 900.0];
+        let mut preferences = app.engine.project().preferences.clone();
+        preferences.key_bindings = vec![ShortcutBinding {
+            key: "X".into(),
+            ctrl: false,
+            shift: true,
+            alt: false,
+            action: ShortcutAction::Cut,
+        }];
+        app.execute(Command::SetPreferences(preferences));
+        frame(&mut app, &ctx, key(egui::Key::Space), size);
+        frame(&mut app, &ctx, key(egui::Key::X), size);
+        assert_eq!(app.engine.project().program, InputId(1));
+        let events = |repeat| {
+            vec![
+                egui::Event::Key {
+                    key: egui::Key::X,
+                    physical_key: None,
+                    pressed: true,
+                    repeat,
+                    modifiers: egui::Modifiers::SHIFT,
+                },
+                egui::Event::Key {
+                    key: egui::Key::X,
+                    physical_key: None,
+                    pressed: false,
+                    repeat: false,
+                    modifiers: egui::Modifiers::SHIFT,
+                },
+            ]
+        };
+        frame(&mut app, &ctx, events(true), size);
+        assert_eq!(app.engine.project().program, InputId(1));
+        frame(&mut app, &ctx, events(false), size);
+        assert_eq!(app.engine.project().program, InputId(2));
+        app.dispatch(Action::PlayList, &ctx);
+        frame(&mut app, &ctx, events(false), size);
+        assert_eq!(app.engine.project().program, InputId(2));
+    }
+
+    #[test]
+    fn shortcut_settings_cancel_discards_and_invalid_apply_stays_open() {
+        let mut app = RustMixApp::headless();
+        let ctx = egui::Context::default();
+        app.theme(&ctx);
+        let size = [1600.0, 900.0];
+        let before = app.engine.project().preferences.clone();
+        app.dispatch(Action::SettingsAt(SettingsPage::Shortcuts), &ctx);
+        app.settings_draft.as_mut().unwrap().key_bindings.clear();
+        click(&mut app, &ctx, "dialog.settings.cancel", size);
+        assert_eq!(app.engine.project().preferences, before);
+        app.dispatch(Action::SettingsAt(SettingsPage::Shortcuts), &ctx);
+        let draft = app.settings_draft.as_mut().unwrap();
+        draft.key_bindings.push(draft.key_bindings[0].clone());
+        click(&mut app, &ctx, "dialog.settings.apply", size);
+        assert!(app.settings);
+        assert_eq!(app.engine.project().preferences, before);
+        app.settings_draft.as_mut().unwrap().key_bindings = vec![ShortcutBinding {
+            key: "X".into(),
+            ctrl: false,
+            shift: false,
+            alt: false,
+            action: ShortcutAction::Cut,
+        }];
+        click(&mut app, &ctx, "dialog.settings.apply", size);
+        assert!(!app.settings);
+        frame(&mut app, &ctx, key(egui::Key::X), size);
+        assert_eq!(app.engine.project().program, InputId(2));
+    }
     fn frame(app: &mut RustMixApp, ctx: &egui::Context, events: Vec<egui::Event>, size: [f32; 2]) {
         let raw = egui::RawInput {
             screen_rect: Some(egui::Rect::from_min_size(
@@ -1338,7 +1556,7 @@ mod tests {
             frame(&mut app, &ctx, vec![], size);
         }
         let revision = app.engine.project().revision;
-        for index in [2, 10, 11] {
+        for index in [10, 11] {
             click(
                 &mut app,
                 &ctx,

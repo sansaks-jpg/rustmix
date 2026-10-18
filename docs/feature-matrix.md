@@ -1,5 +1,19 @@
 # Feature matrix
 
+## UI-012 current working-tree scope (2026-10-18)
+
+The historical evidence below does not verify this new patch. Local formatting/source/inventory
+checks are distinct from hosted compilation, tests, native capture and performance qualification.
+
+| Feature | Status | Scope | Test evidence | Platform | Hardware tested | Known limitations / failure behavior | Last verified date | Owner/task ID |
+|---|---|---|---|---|---|---|---|---|
+| Transition slots and effects | Experimental, acceptance pending | Four saved effect/duration slots; Cut, Fade, Wipe/Slide normal/reverse horizontal/vertical, Barn Door, Roller Door | Slot pinning and independent endpoint/directional pixel tests prepared, unrun | Rust portable core / Windows UI target | None for this patch | CPU reference raster; no Merge/3D/stingers/GPU parity | Not yet verified | UI-012 · G03 |
+| Named input playlists | Experimental, acceptance pending | Up to 16 lists × 128 references; reorder, item hold/effect/time, manual/loop/selected start, clear overlays on start, Start/Stop/Previous/Next | Core clock/atomic/offline/protection, widget and producer tests prepared; native PNG flow extended | Windows UI target | None for this patch | Explicit hold only; no file decode/seek; offline auto advance stops with alarm; Stop preserves active take | Not yet verified | UI-012 · G01/G04 |
+| Custom keyboard mappings | Experimental, acceptance pending | Persisted keys/modifiers/actions; positional defaults and stable explicit targets | Conflict/reserved/target, modifier/repeat/focus and Settings OK/Cancel tests prepared | Windows UI target | None for this patch | No MIDI, controller, network command endpoint or accessibility certification | Not yet verified | UI-012 · G07 |
+| Project schema 3 / producer feedback | Experimental, acceptance pending | Migrate 1/2, retain old duration/backups; never auto-resume; acknowledge control generations | Migration/save/reopen and worker-generation coverage prepared; native configuration reopen extended | Windows target | None for this patch | Old binaries reject schema 3; exact hosted checks and cadence comparison pending | Not yet verified | UI-012 · G01/G06 |
+
+## Historical accepted scope
+
 Last verified 2026-10-17 · Owner/tasks UI-001 / UI-002 / UI-005. [Accepted evidence](ui-progress.md): hosted Windows run 39025762188, revision db4b7c0 (UI-001/002) and hosted Windows run [39046367904](https://github.com/sansaks-jpg/rustmix/actions/runs/39046367904), revision a19fc03 (UI-005), where formatting, the layer/asset guard, `cargo check --workspace --locked`, Clippy with `-D warnings`, the unit/integration/widget tests, the native smoke harness with GPU readback screenshots and project reopen, and the Windows package all passed. No local build was used. `Experimental` means limited to prototype verification. No row is production-ready. Hosted Hyper-V graphics evidence is not physical device qualification.
 
 | Feature | Status | Scope | Test evidence | Platform | Hardware tested | Known limitations / failure behavior | Last verified date | Owner/task ID |

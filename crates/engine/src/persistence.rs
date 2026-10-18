@@ -23,10 +23,13 @@ fn read_bytes(path: &Path) -> Result<Vec<u8>> {
 }
 fn decode(bytes: &[u8]) -> Result<ProjectState> {
     let mut p: ProjectState = serde_json::from_slice(bytes)?;
-    // Schema 1 had only procedural descriptors. New fields deserialize to
-    // identity processing, and its input IDs, bus state and layout are retained.
-    if p.schema == 1 {
-        p.schema = 2;
+    // Older descriptors retain source IDs, routing and layout. New production
+    // configuration defaults to idle, with no playlist started during migration.
+    if matches!(p.schema, 1 | 2) {
+        p.schema = 3;
+        for slot in &mut p.transition_slots {
+            slot.duration_ms = p.duration_ms;
+        }
     }
     p.validate()?;
     Ok(p)

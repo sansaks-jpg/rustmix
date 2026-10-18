@@ -4,7 +4,14 @@ pub mod input;
 pub use input::{ImageFit, InputConfig};
 pub mod persistence;
 pub mod playback;
+pub mod production;
+pub use production::{
+    Playlist, PlaylistItem, PlaylistRun, TransitionSlot, default_playlists,
+    default_transition_slots,
+};
 pub mod render;
+pub mod shortcuts;
+pub use shortcuts::{ShortcutAction, ShortcutBinding, default_key_bindings};
 pub mod video_clock;
 
 use serde::{Deserialize, Serialize};
@@ -145,6 +152,8 @@ pub struct Preferences {
     pub high_contrast: bool,
     pub ui_scale: f32,
     pub shortcuts: bool,
+    #[serde(default = "default_key_bindings")]
+    pub key_bindings: Vec<ShortcutBinding>,
 }
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct WorkspaceState {
@@ -160,6 +169,10 @@ pub struct ProjectState {
     pub program: InputId,
     pub preview: InputId,
     pub duration_ms: u32,
+    #[serde(default = "default_transition_slots")]
+    pub transition_slots: [TransitionSlot; 4],
+    #[serde(default = "default_playlists")]
+    pub playlists: Vec<Playlist>,
     pub buses: [AudioChannel; 3],
     pub overlays: [OverlayState; 4],
     pub preferences: Preferences,
@@ -204,13 +217,15 @@ impl ProjectState {
             })
             .collect();
         Self {
-            schema: 2,
+            schema: 3,
             name: "Studio / Demo production".into(),
             revision: 0,
             inputs,
             program: InputId(1),
             preview: InputId(2),
             duration_ms: 1000,
+            transition_slots: default_transition_slots(),
+            playlists: default_playlists(),
             buses: std::array::from_fn(|_| AudioChannel::default()),
             overlays: std::array::from_fn(|i| OverlayState {
                 enabled: false,
@@ -232,6 +247,7 @@ impl ProjectState {
                 high_contrast: false,
                 ui_scale: 1.0,
                 shortcuts: true,
+                key_bindings: default_key_bindings(),
             },
             workspace: WorkspaceState {
                 name: "Production".into(),
@@ -249,9 +265,9 @@ impl ProjectState {
             .map_or(0, |index| index + 1)
     }
     pub fn validate(&self) -> Result<()> {
-        if self.schema != 2 {
+        if self.schema != 3 {
             return Err(invalid(
-                "Unsupported project version; this application supports schema 2",
+                "Unsupported project version; this application supports schema 3",
             ));
         }
         valid_text(&self.name, 120)?;
@@ -314,6 +330,8 @@ impl ProjectState {
         if self.workspace.dock_json.len() > 65536 {
             return Err(invalid("Workspace layout exceeds 64 KiB"));
         }
+        production::validate(self)?;
+        shortcuts::validate(self)?;
         Ok(())
     }
 }
@@ -336,8 +354,50 @@ fn valid_audio(a: &AudioChannel) -> Result<()> {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum TransitionKind {
+    Cut,
     Fade,
     Wipe,
+    WipeReverse,
+    VerticalWipe,
+    VerticalWipeReverse,
+    Slide,
+    SlideReverse,
+    VerticalSlide,
+    VerticalSlideReverse,
+    BarnDoor,
+    RollerDoor,
+}
+impl TransitionKind {
+    pub const ALL: [Self; 12] = [
+        Self::Cut,
+        Self::Fade,
+        Self::Wipe,
+        Self::WipeReverse,
+        Self::VerticalWipe,
+        Self::VerticalWipeReverse,
+        Self::Slide,
+        Self::SlideReverse,
+        Self::VerticalSlide,
+        Self::VerticalSlideReverse,
+        Self::BarnDoor,
+        Self::RollerDoor,
+    ];
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Cut => "Cut",
+            Self::Fade => "Fade",
+            Self::Wipe => "Wipe",
+            Self::WipeReverse => "Wipe reverse",
+            Self::VerticalWipe => "Vertical wipe",
+            Self::VerticalWipeReverse => "Vertical wipe reverse",
+            Self::Slide => "Slide",
+            Self::SlideReverse => "Slide reverse",
+            Self::VerticalSlide => "Vertical slide",
+            Self::VerticalSlideReverse => "Vertical slide reverse",
+            Self::BarnDoor => "Barn door",
+            Self::RollerDoor => "Roller door",
+        }
+    }
 }
 #[derive(Debug, Clone, PartialEq)]
 pub struct TransitionState {
@@ -358,6 +418,18 @@ pub enum Command {
     SetManualProgress(f32),
     CancelTransition,
     SetDuration(u32),
+    SetTransitionSlot(usize, TransitionSlot),
+    RunTransitionSlot(usize),
+    AddPlaylist(String),
+    UpdatePlaylist(Playlist),
+    RemovePlaylist(u32),
+    StartPlaylist {
+        id: u32,
+        selected: usize,
+    },
+    StopPlaylist,
+    PlaylistNext,
+    PlaylistPrevious,
     FadeBlack,
     AddInput {
         name: String,
@@ -436,6 +508,71 @@ impl Command {
                 true,
             ),
             Self::SetDuration(_) => ("program.duration", "Duration", "Switcher", "", true, false),
+            Self::SetTransitionSlot(..) => (
+                "transition.slot.set",
+                "Configure transition slot",
+                "Switcher",
+                "",
+                true,
+                false,
+            ),
+            Self::RunTransitionSlot(_) => (
+                "transition.slot.run",
+                "Run transition slot",
+                "Switcher",
+                "",
+                false,
+                true,
+            ),
+            Self::AddPlaylist(_) => ("playlist.add", "Add playlist", "Playlist", "", false, false),
+            Self::UpdatePlaylist(_) => (
+                "playlist.update",
+                "Update playlist",
+                "Playlist",
+                "",
+                true,
+                false,
+            ),
+            Self::RemovePlaylist(_) => (
+                "playlist.remove",
+                "Remove playlist",
+                "Playlist",
+                "",
+                false,
+                false,
+            ),
+            Self::StartPlaylist { .. } => (
+                "playlist.start",
+                "Start playlist",
+                "Playlist",
+                "",
+                false,
+                true,
+            ),
+            Self::StopPlaylist => (
+                "playlist.stop",
+                "Stop playlist automation",
+                "Playlist",
+                "",
+                true,
+                true,
+            ),
+            Self::PlaylistNext => (
+                "playlist.next",
+                "Next playlist item",
+                "Playlist",
+                "",
+                false,
+                true,
+            ),
+            Self::PlaylistPrevious => (
+                "playlist.previous",
+                "Previous playlist item",
+                "Playlist",
+                "",
+                false,
+                true,
+            ),
             Self::FadeBlack => (
                 "program.fadeBlack",
                 "Fade to black / restore",
@@ -547,6 +684,8 @@ pub struct Engine {
     last_ms: u64,
     playback: HashMap<InputId, playback::PlaybackClock>,
     inputs_paused: bool,
+    playlist_run: Option<PlaylistRun>,
+    playlist_alarm: Option<String>,
 }
 impl Default for Engine {
     fn default() -> Self {
@@ -564,6 +703,8 @@ impl Default for Engine {
             last_ms: 0,
             playback,
             inputs_paused: false,
+            playlist_run: None,
+            playlist_alarm: None,
         }
     }
 }
@@ -586,6 +727,8 @@ impl Engine {
             last_ms: now,
             playback,
             inputs_paused: false,
+            playlist_run: None,
+            playlist_alarm: None,
         })
     }
     fn insert_input(
@@ -642,12 +785,21 @@ impl Engine {
     }
     pub fn enabled(&self, command: &Command) -> Result<()> {
         match command {
+            Command::SelectPreview(id) | Command::TakeInput(id)
+                if self.project.input(*id).is_none() =>
+            {
+                Err(invalid("Input not found"))
+            }
             Command::TakeInput(id) if *id == self.project.program => {
                 Err(invalid("This input is already on Program"))
             }
             Command::Cut
             | Command::TakeInput(_)
             | Command::Transition(_)
+            | Command::RunTransitionSlot(_)
+            | Command::StartPlaylist { .. }
+            | Command::PlaylistNext
+            | Command::PlaylistPrevious
             | Command::SelectPreview(_)
             | Command::AddInput { .. }
             | Command::AddInputAt { .. }
@@ -659,7 +811,9 @@ impl Engine {
             {
                 Err(invalid("Finish or cancel the active transition first"))
             }
-            Command::Transition(_) if self.project.preview == self.project.program => {
+            Command::Transition(_) | Command::RunTransitionSlot(_)
+                if self.project.preview == self.project.program =>
+            {
                 Err(invalid("Select a different Preview input"))
             }
             Command::SetManualProgress(_)
@@ -685,6 +839,66 @@ impl Engine {
             Command::DuplicateInput(id) if self.project.input(*id).is_none() => {
                 Err(invalid("Input not found"))
             }
+            Command::RunTransitionSlot(slot) | Command::SetTransitionSlot(slot, _)
+                if *slot >= 4 =>
+            {
+                Err(invalid("Transition slot not found"))
+            }
+            Command::UpdatePlaylist(list)
+                if self
+                    .playlist_run
+                    .as_ref()
+                    .is_some_and(|run| run.id == list.id) =>
+            {
+                Err(invalid("Stop the playlist before editing it"))
+            }
+            Command::RemovePlaylist(id)
+                if self.project.playlists.len() <= 1
+                    || self.playlist_run.as_ref().is_some_and(|run| run.id == *id) =>
+            {
+                Err(invalid("Keep one playlist and stop it before removing it"))
+            }
+            Command::AddPlaylist(_) if self.project.playlists.len() >= 16 => {
+                Err(invalid("Maximum 16 playlists"))
+            }
+            Command::StartPlaylist { .. } if self.playlist_run.is_some() => {
+                Err(invalid("Stop the active playlist first"))
+            }
+            Command::StartPlaylist { id, selected } => {
+                let list = self
+                    .project
+                    .playlists
+                    .iter()
+                    .find(|p| p.id == *id)
+                    .ok_or_else(|| invalid("Playlist not found"))?;
+                let index = if list.begin_selected { *selected } else { 0 };
+                let item = list
+                    .items
+                    .get(index)
+                    .ok_or_else(|| invalid("Add and select a playlist item first"))?;
+                if self
+                    .project
+                    .input(item.input)
+                    .is_none_or(|input| !input.online)
+                {
+                    return Err(invalid("Playlist target is offline"));
+                }
+                Ok(())
+            }
+            Command::PlaylistNext | Command::PlaylistPrevious => self
+                .playlist_step_index(matches!(command, Command::PlaylistNext))
+                .map(|_| ()),
+            Command::RemoveInput(id)
+                if self.playlist_run.as_ref().is_some_and(|run| {
+                    self.project
+                        .playlists
+                        .iter()
+                        .find(|p| p.id == run.id)
+                        .is_some_and(|p| p.items.iter().any(|item| item.input == *id))
+                }) =>
+            {
+                Err(invalid("Stop the playlist before removing its inputs"))
+            }
             _ => Ok(()),
         }
     }
@@ -694,6 +908,19 @@ impl Engine {
         let mut next = self.project.clone();
         let mut transition = self.transition.clone();
         let mut black_ramp = self.black_ramp;
+        let mut playlist_run = self.playlist_run.clone();
+        let mut playlist_alarm = self.playlist_alarm.clone();
+        if matches!(
+            command,
+            Command::Cut
+                | Command::TakeInput(_)
+                | Command::Transition(_)
+                | Command::RunTransitionSlot(_)
+                | Command::SetManualProgress(_)
+                | Command::CancelTransition
+        ) {
+            playlist_run = None;
+        }
         let mut affected = Vec::new();
         let transport = command.clone();
         match command {
@@ -717,15 +944,79 @@ impl Engine {
                 affected.extend([next.program, next.preview]);
             }
             Command::Transition(kind) => {
-                transition = Some(TransitionState {
-                    from: next.program,
-                    to: next.preview,
+                let slot = TransitionSlot {
                     kind,
-                    start_ms: now,
                     duration_ms: next.duration_ms,
-                    progress: 0.0,
-                    manual: false,
-                });
+                };
+                production::start_transition(&mut next, &mut transition, slot, now);
+            }
+            Command::RunTransitionSlot(index) => {
+                let slot = next
+                    .transition_slots
+                    .get(index)
+                    .copied()
+                    .ok_or_else(|| invalid("Transition slot not found"))?;
+                production::start_transition(&mut next, &mut transition, slot, now);
+            }
+            Command::SetTransitionSlot(index, slot) => {
+                *next
+                    .transition_slots
+                    .get_mut(index)
+                    .ok_or_else(|| invalid("Transition slot not found"))? = slot;
+            }
+            Command::AddPlaylist(name) => {
+                let id = next
+                    .playlists
+                    .iter()
+                    .map(|p| p.id)
+                    .max()
+                    .and_then(|id| id.checked_add(1))
+                    .ok_or_else(|| invalid("Playlist ID limit reached"))?;
+                next.playlists.push(Playlist::empty(id, name));
+            }
+            Command::UpdatePlaylist(list) => {
+                *next
+                    .playlists
+                    .iter_mut()
+                    .find(|p| p.id == list.id)
+                    .ok_or_else(|| invalid("Playlist not found"))? = list;
+            }
+            Command::RemovePlaylist(id) => {
+                if !next.playlists.iter().any(|p| p.id == id) {
+                    return Err(invalid("Playlist not found"));
+                }
+                next.playlists.retain(|p| p.id != id);
+            }
+            Command::StartPlaylist { id, selected } => {
+                let list = next
+                    .playlists
+                    .iter()
+                    .find(|p| p.id == id)
+                    .ok_or_else(|| invalid("Playlist not found"))?;
+                let index = if list.begin_selected { selected } else { 0 };
+                if list.clear_overlays {
+                    for overlay in &mut next.overlays {
+                        overlay.enabled = false;
+                    }
+                }
+                playlist_run = Some(production::cue(&mut next, &mut transition, id, index, now)?);
+                playlist_alarm = None;
+            }
+            Command::StopPlaylist => {
+                playlist_run = None;
+            }
+            Command::PlaylistNext | Command::PlaylistPrevious => {
+                let index = self.playlist_step_index(matches!(command, Command::PlaylistNext))?;
+                if let Some(index) = index {
+                    let id = playlist_run
+                        .as_ref()
+                        .ok_or_else(|| invalid("Start a playlist first"))?
+                        .id;
+                    playlist_run =
+                        Some(production::cue(&mut next, &mut transition, id, index, now)?);
+                } else {
+                    playlist_run = None;
+                }
             }
             Command::SetManualProgress(p) => {
                 if !p.is_finite() || !(0.0..=1.0).contains(&p) {
@@ -815,6 +1106,12 @@ impl Engine {
                     return Err(invalid("Input not found"));
                 }
                 next.inputs.retain(|i| i.id != id);
+                for list in &mut next.playlists {
+                    list.items.retain(|item| item.input != id);
+                }
+                next.preferences
+                    .key_bindings
+                    .retain(|binding| binding.action != ShortcutAction::Preview(id));
                 for input in &mut next.inputs {
                     if input.config.pip_source == Some(id) {
                         input.config.pip_source = None;
@@ -919,6 +1216,8 @@ impl Engine {
         }
         self.transition = transition;
         self.black_ramp = black_ramp;
+        self.playlist_run = playlist_run;
+        self.playlist_alarm = playlist_alarm;
         Ok(CommandResult {
             command: id,
             revision: self.project.revision,
@@ -941,7 +1240,11 @@ impl Engine {
             self.project.program = t.to;
             self.project.preview = t.from;
             self.project.revision = self.project.revision.saturating_add(1);
+            if let Some(run) = &mut self.playlist_run {
+                run.hold_started_ms = Some(t.start_ms.saturating_add(u64::from(t.duration_ms)));
+            }
         }
+        self.tick_playlist(now);
         if let Some((start, from, to)) = self.black_ramp {
             let p = (now.saturating_sub(start) as f32 / self.project.duration_ms.max(1) as f32)
                 .min(1.0);

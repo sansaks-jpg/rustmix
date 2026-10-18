@@ -257,29 +257,31 @@ pub(crate) fn processed_sources(
 }
 
 impl RustMixApp {
-    pub(crate) fn refresh_textures(&mut self, ctx: &egui::Context) {
-        if let Some(worker) = &self.program_worker {
-            worker.submit(program::Snapshot {
-                engine: self.engine.clone(),
-                sources: self.input_fx.clone(),
-            });
-            if let Some(frame) = worker.take() {
-                match frame {
-                    Ok(frame) => {
-                        self.video_stats = frame.stats;
-                        self.video_timing = Some((frame.timing, frame.rate));
-                        self.video_produced_ns = frame.produced_ns;
-                        self.generation_ms = frame.stats.render_ms as f32;
-                        self.upload_program(ctx, frame.pixels);
-                    }
-                    Err(error) => {
-                        self.notice = format!("Program retained last valid frame: {error}");
-                        self.warning = true;
-                    }
+    pub(crate) fn poll_program(&mut self, ctx: &egui::Context) {
+        if let Some(worker) = &self.program_worker
+            && let Some(frame) = worker.take()
+        {
+            match frame {
+                Ok(frame) if frame.generation == self.program_generation => {
+                    // The producer owns automatic progression between explicit
+                    // control updates. Never send a stale UI copy back each paint.
+                    self.engine = frame.engine;
+                    self.video_stats = frame.stats;
+                    self.video_timing = Some((frame.timing, frame.rate));
+                    self.video_produced_ns = frame.produced_ns;
+                    self.generation_ms = frame.stats.render_ms as f32;
+                    self.upload_program(ctx, frame.pixels);
+                }
+                Ok(_) => {} // A frame from before the latest command cannot undo it.
+                Err(error) => {
+                    self.notice = format!("Program retained last valid frame: {error}");
+                    self.warning = true;
                 }
             }
         }
+    }
 
+    pub(crate) fn refresh_textures(&mut self, ctx: &egui::Context) {
         // Avoid flooding the software WARP command queue with 8 texture uploads per frame
         // while static dialog screenshots are being read back in CI smoke mode.
         if self.smoke.as_ref().is_some_and(|s| s.is_dialog_stage())
@@ -797,76 +799,76 @@ impl RustMixApp {
                     self.command_button(ui, "switcher.quickPlay", "Quick Play", Command::Cut, None);
                     self.command_button(ui, "switcher.cut", "Cut", Command::Cut, None);
 
-                    // 4 Configurable Transition Slots: Fade, Merge, Wipe, CubeZoom
-                    for slot_idx in 0..4 {
-                        let slot_name = self
-                            .transition_slots
-                            .get(slot_idx)
-                            .copied()
-                            .unwrap_or("Fade");
-                        let kind = if matches!(slot_name, "Wipe" | "Slide" | "CubeZoom") {
-                            TransitionKind::Wipe
-                        } else {
-                            TransitionKind::Fade
-                        };
+                    for (index, mut slot) in self
+                        .engine
+                        .project()
+                        .transition_slots
+                        .into_iter()
+                        .enumerate()
+                    {
                         ui.horizontal(|ui| {
                             ui.spacing_mut().item_spacing.x = 2.0;
-                            let enabled = self.engine.enabled(&Command::Transition(kind));
-                            let implemented = matches!(slot_name, "Fade" | "Wipe");
-                            let btn = ui
+                            let command = Command::RunTransitionSlot(index);
+                            let enabled = self.engine.enabled(&command);
+                            let button = ui
                                 .add_enabled(
-                                    enabled.is_ok() && implemented,
-                                    egui::Button::new(RichText::new(slot_name).strong().size(11.5))
-                                        .min_size(egui::vec2(center - 22.0, 25.0)),
+                                    enabled.is_ok(),
+                                    egui::Button::new(
+                                        RichText::new(slot.kind.label()).strong().size(10.5),
+                                    )
+                                    .min_size(egui::vec2(center - 22.0, 25.0)),
                                 )
+                                .on_hover_text(format!(
+                                    "Slot {} · {} ms",
+                                    index + 1,
+                                    slot.duration_ms
+                                ))
                                 .on_disabled_hover_text(
-                                    "Choose Fade or Wipe; this transition has no implementation",
+                                    enabled.err().map(|e| e.to_string()).unwrap_or_default(),
                                 );
-                            if slot_idx == 0 {
-                                self.automation.insert("switcher.fade".into(), btn.rect);
-                            } else if slot_idx == 2 {
-                                self.automation.insert("switcher.wipe".into(), btn.rect);
+                            self.automation
+                                .insert(format!("switcher.slot.{}", index + 1), button.rect);
+                            if index == 0 {
+                                self.automation.insert("switcher.fade".into(), button.rect);
                             }
-                            if btn.clicked() {
-                                self.actions.push(Action::Engine(Command::Transition(kind)));
+                            if index == 2 {
+                                self.automation.insert("switcher.wipe".into(), button.rect);
                             }
-                            caret_menu_button(ui, 25.0, |ui| {
-                                for candidate in [
-                                    "Fade",
-                                    "Merge",
-                                    "Wipe",
-                                    "CubeZoom",
-                                    "Zoom",
-                                    "Slide",
-                                    "Fly",
-                                    "CrossZoom",
-                                ] {
-                                    if ui
-                                        .add_enabled(
-                                            matches!(candidate, "Fade" | "Wipe"),
-                                            egui::Button::selectable(
-                                                slot_name == candidate,
-                                                candidate,
-                                            ),
-                                        )
-                                        .clicked()
-                                    {
-                                        if let Some(slot_ref) =
-                                            self.transition_slots.get_mut(slot_idx)
-                                        {
-                                            *slot_ref = candidate;
-                                        }
+                            if button.clicked() {
+                                self.actions.push(Action::Engine(command));
+                            }
+                            let original = slot;
+                            let menu = caret_menu_button(ui, 25.0, |ui| {
+                                for candidate in TransitionKind::ALL {
+                                    let choice = ui.selectable_label(
+                                        slot.kind == candidate,
+                                        candidate.label(),
+                                    );
+                                    self.automation.insert(
+                                        format!("switcher.slot.{}.effect.{candidate:?}", index + 1),
+                                        choice.rect,
+                                    );
+                                    if choice.clicked() {
+                                        slot.kind = candidate;
                                         ui.close();
                                     }
                                 }
                                 ui.separator();
-                                for ms in [250, 500, 1000, 1500, 2000] {
-                                    if ui.button(format!("{slot_name} · {ms} ms")).clicked() {
-                                        self.actions.push(Action::Engine(Command::SetDuration(ms)));
-                                        ui.close();
-                                    }
-                                }
+                                ui.label("Duration (ms)");
+                                ui.add(
+                                    egui::DragValue::new(&mut slot.duration_ms)
+                                        .range(100..=10_000)
+                                        .speed(50),
+                                );
                             });
+                            self.automation.insert(
+                                format!("switcher.slot.{}.settings", index + 1),
+                                menu.response.rect,
+                            );
+                            if slot != original {
+                                self.actions
+                                    .push(Action::Engine(Command::SetTransitionSlot(index, slot)));
+                            }
                         });
                     }
 

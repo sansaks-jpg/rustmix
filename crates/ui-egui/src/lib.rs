@@ -1,4 +1,5 @@
 #![forbid(unsafe_code)]
+mod controls;
 mod dialogs;
 mod inputs;
 mod media;
@@ -463,6 +464,7 @@ pub struct RustMixApp {
     pub(crate) program_texture: Option<egui::TextureHandle>,
     pub(crate) last_program_rgba: Vec<u8>,
     program_worker: Option<program::ProgramWorker>,
+    program_generation: u64,
     program_renderer: program::ProgramRenderer,
     program_pixels: Option<Arc<Vec<[u8; 4]>>>,
     video_stats: program::VideoStats,
@@ -480,7 +482,6 @@ pub struct RustMixApp {
     properties_texture: Option<egui::TextureHandle>,
     add_token: u64,
     add_loading: bool,
-    pub(crate) transition_slots: [&'static str; 4],
     pub(crate) monitor_level: f32,
     last_demo_frame: Option<u64>,
     pub(crate) notice: String,
@@ -579,15 +580,11 @@ pub struct RustMixApp {
     pub(crate) mc_folder: String,
     pub(crate) mc_checked: [bool; 12],
     pub(crate) playlist_open: bool,
-    pub(crate) playlist_items: Vec<InputId>,
+    pub(crate) playlist_selected_id: u32,
     pub(crate) playlist_selected_avail: usize,
     pub(crate) playlist_selected_item: usize,
-    pub(crate) playlist_loop: bool,
-    pub(crate) playlist_begin_selected: bool,
-    pub(crate) playlist_clear_overlays: bool,
-    pub(crate) playlist_manual: bool,
-    pub(crate) playlist_running: bool,
-    pub(crate) playlist_last_step_ms: u64,
+    pub(crate) playlist_name: String,
+    pub(crate) playlist_delete_confirm: bool,
     pub(crate) shortcuts_open: bool,
     pub(crate) search_open: bool,
     pub(crate) ui_locked: bool,
@@ -662,6 +659,7 @@ impl RustMixApp {
         }
         app.program_worker = Some(program::ProgramWorker::spawn(
             program::Snapshot {
+                generation: app.program_generation,
                 engine: app.engine.clone(),
                 sources: app.input_fx.clone(),
             },
@@ -690,6 +688,7 @@ impl RustMixApp {
             program_texture: None,
             last_program_rgba: Vec::new(),
             program_worker: None,
+            program_generation: 0,
             program_renderer: program::ProgramRenderer::default(),
             program_pixels: None,
             video_stats: program::VideoStats::default(),
@@ -707,7 +706,6 @@ impl RustMixApp {
             properties_texture: None,
             add_token: 0,
             add_loading: false,
-            transition_slots: ["Fade", "Merge", "Wipe", "CubeZoom"],
             monitor_level: 0.78,
             last_demo_frame: None,
             notice: "Ready · offline synthetic workspace".into(),
@@ -806,15 +804,11 @@ impl RustMixApp {
                 true, true, true, false, false, false, false, false, true, false, false, false,
             ],
             playlist_open: false,
-            playlist_items: vec![InputId(1), InputId(2), InputId(3)],
+            playlist_selected_id: 1,
             playlist_selected_avail: 0,
             playlist_selected_item: 0,
-            playlist_loop: true,
-            playlist_begin_selected: false,
-            playlist_clear_overlays: false,
-            playlist_manual: false,
-            playlist_running: false,
-            playlist_last_step_ms: 0,
+            playlist_name: "Default".into(),
+            playlist_delete_confirm: false,
             shortcuts_open: false,
             search_open: true,
             ui_locked: false,
@@ -904,6 +898,15 @@ impl RustMixApp {
         self.streaming_setup = false;
         self.multicorder_open = false;
         self.playlist_open = false;
+        self.playlist_selected_id = self.engine.project().playlists.first().map_or(1, |p| p.id);
+        self.playlist_name = self
+            .engine
+            .project()
+            .playlists
+            .first()
+            .map_or_else(String::new, |p| p.name.clone());
+        self.playlist_selected_item = 0;
+        self.playlist_delete_confirm = false;
         self.shortcuts_open = false;
     }
 
@@ -998,9 +1001,21 @@ impl RustMixApp {
         self.submit_program();
     }
 
-    fn submit_program(&self) {
+    fn submit_program(&mut self) {
+        if self.program_worker.is_none() {
+            return;
+        }
+        let Some(generation) = self.program_generation.checked_add(1) else {
+            self.say(
+                "Program update limit reached; last valid output retained".into(),
+                true,
+            );
+            return;
+        };
+        self.program_generation = generation;
         if let Some(worker) = &self.program_worker {
             worker.submit(program::Snapshot {
+                generation,
                 engine: self.engine.clone(),
                 sources: self.input_fx.clone(),
             });
@@ -1138,11 +1153,12 @@ impl RustMixApp {
                         match Engine::from_project_at(*project, self.now) {
                             Ok(engine) => {
                                 let layout = engine.project().workspace.dock_json.clone();
-                                self.reset_editors();
                                 self.engine = engine;
+                                self.reset_editors();
                                 self.media_loader.reset();
                                 self.input_fx.clear();
                                 self.sync_input_cache();
+                                self.submit_program();
                                 self.last_demo_frame = None;
                                 self.theme(ctx);
                                 self.path = Some(path);
@@ -1774,7 +1790,7 @@ impl RustMixApp {
                 self.actions.push(Action::PlayList);
             }
             let mut pl_btn_w = egui::Button::new(
-                RichText::new(if self.playlist_running {
+                RichText::new(if self.engine.playlist_run().is_some() {
                     "PlayList ON"
                 } else {
                     "PlayList"
@@ -1782,14 +1798,19 @@ impl RustMixApp {
                 .strong(),
             )
             .min_size(egui::vec2(68.0, 24.0));
-            if self.playlist_running {
+            if self.engine.playlist_run().is_some() {
                 pl_btn_w = pl_btn_w.fill(PROGRAM);
             }
-            let pl_btn = ui.add(pl_btn_w).on_hover_text("Open PlayList automation");
+            let playlist_command = self.playlist_toggle_command();
+            let available = self.engine.enabled(&playlist_command);
+            let pl_btn = ui
+                .add_enabled(available.is_ok(), pl_btn_w)
+                .on_hover_text("Start / stop playlist; use the gear to configure")
+                .on_disabled_hover_text(available.err().map(|e| e.to_string()).unwrap_or_default());
             self.automation
                 .insert("output.playlist".into(), pl_btn.rect);
             if pl_btn.clicked() {
-                self.actions.push(Action::PlayList);
+                self.actions.push(Action::Engine(playlist_command));
             }
 
             // Right-side modern vector icon cluster
@@ -1935,8 +1956,27 @@ impl RustMixApp {
                     .color(RED),
                 );
             }
-            if self.playlist_running {
-                ui.label(RichText::new("● PLAYLIST AUTO").strong().color(TEAL));
+            if self.engine.playlist_run().is_some() {
+                let manual = self
+                    .engine
+                    .playlist_run()
+                    .and_then(|run| {
+                        self.engine
+                            .project()
+                            .playlists
+                            .iter()
+                            .find(|p| p.id == run.id)
+                    })
+                    .is_some_and(|p| p.manual);
+                ui.label(
+                    RichText::new(if manual {
+                        "● PLAYLIST MANUAL"
+                    } else {
+                        "● PLAYLIST AUTO"
+                    })
+                    .strong()
+                    .color(TEAL),
+                );
             }
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 ui.add(
@@ -1970,105 +2010,38 @@ impl RustMixApp {
         {
             return;
         }
-        ctx.input_mut(|i| {
-            for (key, action) in [
-                (egui::Key::S, Action::Save(false)),
-                (egui::Key::O, Action::Open),
-                (egui::Key::I, Action::Add),
-            ] {
-                if i.consume_key(egui::Modifiers::CTRL, key) {
-                    self.actions.push(action);
-                }
+        for (modifiers, key, action) in [
+            (
+                egui::Modifiers::CTRL | egui::Modifiers::SHIFT,
+                egui::Key::S,
+                Action::Save(true),
+            ),
+            (egui::Modifiers::CTRL, egui::Key::S, Action::Save(false)),
+            (egui::Modifiers::CTRL, egui::Key::O, Action::Open),
+            (egui::Modifiers::CTRL, egui::Key::I, Action::Add),
+        ] {
+            if controls::consume_press(ctx, modifiers, key) {
+                self.actions.push(action);
             }
-            if i.consume_key(egui::Modifiers::CTRL | egui::Modifiers::SHIFT, egui::Key::S) {
-                self.actions.push(Action::Save(true));
-            }
-        });
+        }
         if !self.engine.project().preferences.shortcuts {
             return;
         }
-        ctx.input_mut(|i| {
-            for (key, command) in [
-                (egui::Key::Space, Command::Cut),
-                (egui::Key::Enter, Command::Transition(TransitionKind::Fade)),
-                (egui::Key::B, Command::FadeBlack),
-                (egui::Key::Escape, Command::CancelTransition),
-            ] {
-                if i.consume_key(egui::Modifiers::NONE, key) {
-                    self.actions.push(Action::Engine(command));
-                }
-            }
-            for (n, key) in [
-                egui::Key::Num1,
-                egui::Key::Num2,
-                egui::Key::Num3,
-                egui::Key::Num4,
-                egui::Key::Num5,
-                egui::Key::Num6,
-                egui::Key::Num7,
-            ]
-            .into_iter()
-            .enumerate()
-            {
-                if i.consume_key(egui::Modifiers::NONE, key)
-                    && let Some(input) = self.engine.project().inputs.get(n)
-                {
-                    self.actions
-                        .push(Action::Engine(Command::SelectPreview(input.id)));
-                }
-            }
-            for (n, key) in [egui::Key::F1, egui::Key::F2, egui::Key::F3, egui::Key::F4]
-                .into_iter()
-                .enumerate()
-            {
-                if i.consume_key(egui::Modifiers::NONE, key)
-                    && let Some(o) = self.engine.project().overlays.get(n)
-                {
-                    let mut o = o.clone();
-                    o.enabled = !o.enabled;
-                    self.actions.push(Action::Engine(Command::SetOverlay(n, o)));
-                }
-            }
-        });
-    }
-
-    fn tick_live_outputs(&mut self) {
-        if self.playlist_running
-            && !self.playlist_manual
-            && !self.playlist_items.is_empty()
-            && self.engine.transition().is_none()
-            && self.now.saturating_sub(self.playlist_last_step_ms) >= 3500
-        {
-            self.playlist_last_step_ms = self.now;
-            let next_idx = if self.playlist_selected_item + 1 < self.playlist_items.len() {
-                self.playlist_selected_item + 1
-            } else if self.playlist_loop {
-                0
-            } else {
-                self.playlist_running = false;
-                return;
-            };
-            self.playlist_selected_item = next_idx;
-            if let Some(target_id) = self.playlist_items.get(next_idx).copied()
-                && target_id != self.engine.project().program
-            {
-                let _ = self
-                    .engine
-                    .execute(Command::SelectPreview(target_id), self.now);
-                let _ = self
-                    .engine
-                    .execute(Command::Transition(TransitionKind::Fade), self.now);
-                self.last_demo_frame = None;
-            }
-        }
+        self.dispatch_key_bindings(ctx);
     }
 
     fn frame_ui(&mut self, ui: &mut egui::Ui) {
         let ctx = ui.ctx().clone();
         self.automation.clear();
         self.now = u64::try_from(self.start.elapsed().as_millis()).unwrap_or(u64::MAX);
+        let previous_alarm = self.engine.playlist_alarm().map(str::to_owned);
+        self.poll_program(&ctx);
         self.engine.tick(self.now);
-        self.tick_live_outputs();
+        if self.engine.playlist_alarm() != previous_alarm.as_deref()
+            && let Some(message) = self.engine.playlist_alarm().map(str::to_owned)
+        {
+            self.say(message, true);
+        }
         self.poll_job(&ctx);
         self.poll_media();
         self.shortcuts(&ctx);
