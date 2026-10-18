@@ -551,7 +551,6 @@ pub struct RustMixApp {
     pub(crate) stream_frames: u64,
     pub(crate) stream_kbps: u32,
     pub(crate) external_active: bool,
-    pub(crate) external_started_ms: u64,
     pub(crate) multicorder_open: bool,
     pub(crate) mc_format: usize,
     pub(crate) mc_running: bool,
@@ -744,7 +743,6 @@ impl RustMixApp {
             stream_frames: 0,
             stream_kbps: 4500,
             external_active: false,
-            external_started_ms: 0,
             multicorder_open: false,
             mc_format: 0,
             mc_running: false,
@@ -1813,9 +1811,9 @@ impl RustMixApp {
                     .strong()
                     .color(Color32::WHITE),
             );
-            ui.label(RichText::new("FPS:").strong().color(DIM));
+            ui.label(RichText::new("UI FPS:").strong().color(DIM));
             ui.label(RichText::new(format!("{:.0}", self.fps)).color(Color32::WHITE));
-            ui.label(RichText::new("Render:").strong().color(DIM));
+            ui.label(RichText::new("CPU:").strong().color(DIM));
             ui.label(RichText::new(format!("{:.1} ms", self.generation_ms)).color(Color32::WHITE));
             if self.rec_active {
                 let s = self.now.saturating_sub(self.rec_started_ms) / 1000;

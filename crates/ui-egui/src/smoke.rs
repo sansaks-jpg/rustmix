@@ -21,6 +21,8 @@ pub(crate) struct Smoke {
     last_stage: u32,
     wait: u32,
     captured: bool,
+    bank_baseline: Option<Rect>,
+    paused_program: Option<(u64, Vec<u8>, Rect)>,
 }
 impl Smoke {
     pub(crate) fn is_dialog_stage(&self) -> bool {
@@ -73,6 +75,10 @@ impl RustMixApp {
                 std::fs::create_dir_all("artifacts")?;
                 let filename = if reopen {
                     "artifacts/reopened.png".into()
+                } else if s.stage == 15 {
+                    "artifacts/paused-program.png".into()
+                } else if s.stage == 18 {
+                    "artifacts/workspace-1100.png".into()
                 } else if let Some((name, _, _)) = s
                     .stage
                     .checked_sub(20)
@@ -120,6 +126,29 @@ impl RustMixApp {
         }
         match s.stage {
             0 => {
+                let bank = self
+                    .automation
+                    .get("monitor.bank.bounds")
+                    .copied()
+                    .ok_or_else(|| Error::Invalid("Monitor bank has no bounds".into()))?;
+                if let Some(baseline) = s.bank_baseline {
+                    if (bank.bottom() - baseline.bottom()).abs() > 1.0 {
+                        return Err(Error::Invalid(
+                            "Native monitor bank grew without operator input".into(),
+                        ));
+                    }
+                } else {
+                    s.bank_baseline = Some(bank);
+                }
+                if s.wait < 60 {
+                    return Ok(());
+                }
+                std::fs::write(
+                    "artifacts/layout-stability.json",
+                    serde_json::to_vec_pretty(
+                        &serde_json::json!({"frames":s.wait,"bounds":format!("{bank:?}"),"stable":true}),
+                    )?,
+                )?;
                 s.events = key(egui::Key::Num2);
                 s.stage = 1;
             }
@@ -235,8 +264,101 @@ impl RustMixApp {
                             .collect::<HashMap<_, _>>(),
                     )?,
                 )?;
-                s.stage = 20;
+                s.stage = 12;
             }
+
+            12 | 13 => {
+                let pos = self
+                    .automation
+                    .get("monitor.program.play")
+                    .ok_or_else(|| Error::Invalid("Program play control missing".into()))?
+                    .center();
+                s.events = vec![
+                    egui::Event::PointerMoved(pos),
+                    egui::Event::PointerButton {
+                        pos,
+                        button: egui::PointerButton::Primary,
+                        pressed: s.stage == 12,
+                        modifiers: egui::Modifiers::NONE,
+                    },
+                ];
+                s.stage += 1;
+            }
+            14 => {
+                let clock = self
+                    .engine
+                    .playback(self.engine.project().program)
+                    .ok_or_else(|| Error::Invalid("Program transport missing".into()))?;
+                if !clock.paused() {
+                    return Err(Error::Invalid(
+                        "Native pause control did not pause Program".into(),
+                    ));
+                }
+                let progress = *self
+                    .automation
+                    .get("monitor.program.progress")
+                    .ok_or_else(|| Error::Invalid("Program progress bar missing".into()))?;
+                if let Some((position, pixels, previous_progress)) = &s.paused_program {
+                    if *position != clock.position_ms()
+                        || *pixels != self.last_program_rgba
+                        || *previous_progress != progress
+                    {
+                        return Err(Error::Invalid(
+                            "Paused Program picture or progress advanced".into(),
+                        ));
+                    }
+                } else {
+                    s.paused_program = Some((
+                        clock.position_ms(),
+                        self.last_program_rgba.clone(),
+                        progress,
+                    ));
+                }
+                if s.wait < 35 {
+                    return Ok(());
+                }
+                std::fs::write(
+                    "artifacts/pause-transport.json",
+                    serde_json::to_vec_pretty(
+                        &serde_json::json!({"held_frames":s.wait,"source":self.engine.project().program.0,"position_ms":clock.position_ms(),"picture_frozen":true,"progress_frozen":true}),
+                    )?,
+                )?;
+                ctx.send_viewport_cmd(egui::ViewportCommand::Screenshot(egui::UserData::default()));
+                s.captured = false;
+                s.stage = 15;
+            }
+            15 if s.captured => {
+                self.execute(Command::RestartInput(self.engine.project().program));
+                s.stage = 16;
+            }
+            16 => {
+                let id = self.engine.project().program;
+                if self
+                    .engine
+                    .playback(id)
+                    .is_none_or(|clock| clock.position_ms() != 0 || !clock.paused())
+                {
+                    return Err(Error::Invalid(
+                        "Paused restart did not return Program to zero".into(),
+                    ));
+                }
+                self.execute(Command::SetInputPaused(id, false));
+                ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(egui::vec2(1100.0, 700.0)));
+                s.stage = 17;
+            }
+            17 => {
+                let bank = self
+                    .automation
+                    .get("monitor.bank.bounds")
+                    .ok_or_else(|| Error::Invalid("Small monitor bank missing".into()))?;
+                if ctx.viewport_rect().bottom() - bank.bottom() < 230.0 {
+                    return Err(Error::Invalid("Small native workspace hides inputs".into()));
+                }
+                ctx.send_viewport_cmd(egui::ViewportCommand::Screenshot(egui::UserData::default()));
+                s.captured = false;
+                s.stage = 18;
+            }
+            18 if s.captured => s.stage = 20,
 
             20..=46 => {
                 let offset = s.stage - 20;
