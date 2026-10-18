@@ -17,6 +17,8 @@ transactions publish after their matching image cache is committed.
 
 The rational clock computes deadlines from integer frame indices, including
 60000/1001. A late wake skips obsolete frame indices and records the count.
+A rate change begins a new epoch at the current monotonic instant, so switching
+to a slower rate cannot move presentation timestamps backwards.
 On Windows the worker uses the high-resolution waitable timer behind [Rust 1.94 thread::sleep](https://github.com/rust-lang/rust/blob/1.94.1/library/std/src/sys/thread/windows.rs), with a 10 ms maximum sleep and no busy spin.
 Nanosecond metadata does not claim an audio/device clock or hard real-time
 Windows scheduling. Source procedural sampling is still millisecond based.

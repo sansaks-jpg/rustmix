@@ -59,7 +59,10 @@ impl ProgramWorker {
             (Arc::clone(&pending), Arc::clone(&latest), Arc::clone(&stop));
         let thread = std::thread::spawn(move || {
             let mut rate = snapshot.engine.project().preferences.rate;
-            let mut clock = FrameClock::new(rate);
+            let mut clock = FrameClock::at(
+                rate,
+                u64::try_from(origin.elapsed().as_nanos()).unwrap_or(u64::MAX),
+            );
             let mut renderer = ProgramRenderer::default();
             let mut stats = VideoStats::default();
             let mut sample_start = Instant::now();
@@ -71,7 +74,10 @@ impl ProgramWorker {
                 }
                 if rate != snapshot.engine.project().preferences.rate {
                     rate = snapshot.engine.project().preferences.rate;
-                    clock = FrameClock::new(rate);
+                    clock = FrameClock::at(
+                        rate,
+                        u64::try_from(origin.elapsed().as_nanos()).unwrap_or(u64::MAX),
+                    );
                     stats = VideoStats::default();
                     sample_frames = 0;
                     sample_start = Instant::now();

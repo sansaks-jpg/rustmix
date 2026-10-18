@@ -10,6 +10,7 @@ pub struct FrameTiming {
 }
 pub struct FrameClock {
     rate: Rate,
+    origin_ns: u64,
     next: Option<u64>,
     skipped: u64,
 }
@@ -27,8 +28,12 @@ impl Rate {
 }
 impl FrameClock {
     pub fn new(rate: Rate) -> Self {
+        Self::at(rate, 0)
+    }
+    pub fn at(rate: Rate, origin_ns: u64) -> Self {
         Self {
             rate,
+            origin_ns,
             next: None,
             skipped: 0,
         }
@@ -37,26 +42,34 @@ impl FrameClock {
         self.skipped
     }
     pub fn due(&mut self, now_ns: u64) -> Option<FrameTiming> {
-        let index = self.rate.frame_at_ns(now_ns);
+        if now_ns < self.origin_ns {
+            return None;
+        }
+        let index = self.rate.frame_at_ns(now_ns - self.origin_ns);
         let next = self.next.unwrap_or(index);
         if index < next {
             return None;
         }
         self.skipped = self.skipped.saturating_add(index.saturating_sub(next));
         self.next = Some(index.saturating_add(1));
-        let pts_ns = self.rate.frame_start_ns(index);
+        let pts_ns = self
+            .rate
+            .frame_start_ns(index)
+            .saturating_add(self.origin_ns);
         Some(FrameTiming {
             index,
             pts_ns,
             duration_ns: self
                 .rate
                 .frame_start_ns(index.saturating_add(1))
+                .saturating_add(self.origin_ns)
                 .saturating_sub(pts_ns),
         })
     }
     pub fn wait_ns(&self, now_ns: u64) -> u64 {
         self.rate
             .frame_start_ns(self.next.unwrap_or(0))
+            .saturating_add(self.origin_ns)
             .saturating_sub(now_ns)
     }
 }
@@ -99,5 +112,18 @@ mod tests {
         assert_eq!(clock.due(1_000_000_000).unwrap().index, 60);
         assert_eq!(clock.skipped(), 58);
         assert!(clock.due(1_000_000_000).is_none());
+    }
+    #[test]
+    fn format_changes_start_a_new_monotonic_epoch() {
+        let mut old = FrameClock::new(Rate::new(60, 1).unwrap());
+        let previous = old.due(100_100_000).unwrap();
+        let mut next = FrameClock::at(Rate::new(24, 1).unwrap(), 101_000_000);
+        assert!(next.due(100_999_999).is_none());
+        let first = next.due(101_000_000).unwrap();
+        assert_eq!(first.index, 0);
+        assert!(first.pts_ns > previous.pts_ns);
+        assert_eq!(next.wait_ns(101_000_000), 41_666_667);
+        assert!(next.due(142_666_666).is_none());
+        assert_eq!(next.due(142_666_667).unwrap().pts_ns, 142_666_667);
     }
 }
