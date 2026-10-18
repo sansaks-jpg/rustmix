@@ -21,13 +21,16 @@ fn mixer_rail(ui: &mut egui::Ui, height: f32, label: &str) {
 }
 
 /// CPU reference effects applied before bus composition.
-fn process_source_pixels(
+pub(crate) fn process_source_pixels(
     base: &[[u8; 4]],
     w: u32,
     h: u32,
     fx: &InputFx,
     pip_pixels: Option<&[[u8; 4]]>,
 ) -> Vec<[u8; 4]> {
+    if fx.media_path.is_some() && fx.custom_rgba.is_none() {
+        return vec![[0, 0, 0, 255]; (w * h) as usize];
+    }
     let resized;
     let src = if let Some((cw, ch, custom)) = &fx.custom_rgba
         && *cw > 0
@@ -36,23 +39,42 @@ fn process_source_pixels(
             .checked_mul(*ch)
             .is_some_and(|size| custom.len() == size as usize)
     {
-        if *cw == w && *ch == h {
-            custom.as_slice()
-        } else {
-            resized = (0..h)
-                .flat_map(|y| {
-                    (0..w).map(move |x| {
-                        let sx = u64::from(x) * u64::from(*cw) / u64::from(w.max(1));
-                        let sy = u64::from(y) * u64::from(*ch) / u64::from(h.max(1));
-                        custom
-                            .get((sy * u64::from(*cw) + sx) as usize)
-                            .copied()
-                            .unwrap_or([0, 0, 0, 255])
-                    })
+        let scale = match fx.image_fit {
+            ImageFit::Contain => (w as f32 / *cw as f32).min(h as f32 / *ch as f32),
+            ImageFit::Cover => (w as f32 / *cw as f32).max(h as f32 / *ch as f32),
+            ImageFit::Stretch => 1.0,
+        };
+        resized = (0..h)
+            .flat_map(|y| {
+                (0..w).map(move |x| {
+                    let (sx, sy) = if fx.image_fit == ImageFit::Stretch {
+                        (
+                            (x as f32 + 0.5) * *cw as f32 / w.max(1) as f32,
+                            (y as f32 + 0.5) * *ch as f32 / h.max(1) as f32,
+                        )
+                    } else {
+                        (
+                            ((x as f32 + 0.5) - w as f32 * 0.5) / scale + *cw as f32 * 0.5,
+                            ((y as f32 + 0.5) - h as f32 * 0.5) / scale + *ch as f32 * 0.5,
+                        )
+                    };
+                    if sx < 0.0 || sy < 0.0 || sx >= *cw as f32 || sy >= *ch as f32 {
+                        return [0, 0, 0, 255];
+                    }
+                    let pixel = custom
+                        .get((sy as u32 * *cw + sx as u32) as usize)
+                        .copied()
+                        .unwrap_or([0, 0, 0, 255]);
+                    let alpha = u32::from(pixel.get(3).copied().unwrap_or(255));
+                    let mut opaque = [0, 0, 0, 255];
+                    for (out, value) in opaque.iter_mut().zip(pixel).take(3) {
+                        *out = ((u32::from(value) * alpha + 127) / 255) as u8;
+                    }
+                    opaque
                 })
-                .collect::<Vec<_>>();
-            resized.as_slice()
-        }
+            })
+            .collect::<Vec<_>>();
+        resized.as_slice()
     } else {
         base
     };
@@ -165,6 +187,61 @@ fn process_source_pixels(
     out
 }
 
+fn processed_sources(
+    project: &ProjectState,
+    raw: &HashMap<InputId, Vec<[u8; 4]>>,
+    fx: &HashMap<InputId, InputFx>,
+    w: u32,
+    h: u32,
+) -> HashMap<InputId, Vec<[u8; 4]>> {
+    fn visit(
+        id: InputId,
+        project: &ProjectState,
+        raw: &HashMap<InputId, Vec<[u8; 4]>>,
+        fx: &HashMap<InputId, InputFx>,
+        size: [u32; 2],
+        out: &mut HashMap<InputId, Vec<[u8; 4]>>,
+        visiting: &mut Vec<InputId>,
+    ) {
+        if out.contains_key(&id) || visiting.contains(&id) || visiting.len() >= 32 {
+            return;
+        }
+        let (Some(input), Some(base)) = (project.input(id), raw.get(&id)) else {
+            return;
+        };
+        visiting.push(id);
+        let effect = fx.get(&id).cloned().unwrap_or_else(|| InputFx {
+            config: input.config.clone(),
+            ..Default::default()
+        });
+        if let Some(pip) = effect.pip_source {
+            visit(pip, project, raw, fx, size, out, visiting);
+        }
+        let [w, h] = size;
+        let pixels = if input.online {
+            process_source_pixels(
+                base,
+                w,
+                h,
+                &effect,
+                effect
+                    .pip_source
+                    .and_then(|pip| out.get(&pip))
+                    .map(Vec::as_slice),
+            )
+        } else {
+            base.clone()
+        };
+        out.insert(id, pixels);
+        let _ = visiting.pop();
+    }
+    let mut out = HashMap::new();
+    for id in raw.keys() {
+        visit(*id, project, raw, fx, [w, h], &mut out, &mut Vec::new());
+    }
+    out
+}
+
 impl RustMixApp {
     pub(crate) fn refresh_textures(&mut self, ctx: &egui::Context) {
         // Avoid flooding the software WARP command queue with 8 texture uploads per frame
@@ -218,18 +295,12 @@ impl RustMixApp {
             }
         }
 
+        let processed_preview = processed_sources(&p, &raw_sources, &self.input_fx, 384, 216);
         for input in &p.inputs {
-            let fx = self.input_fx.get(&input.id).cloned().unwrap_or_default();
-            if let Some(base) = raw_sources.get(&input.id) {
-                let pip_buf = fx.pip_source.and_then(|pid| raw_sources.get(&pid));
-                let processed = if input.online {
-                    process_source_pixels(base, 384, 216, &fx, pip_buf.map(Vec::as_slice))
-                } else {
-                    base.clone()
-                };
+            if let Some(processed) = processed_preview.get(&input.id) {
                 let image = egui::ColorImage::from_rgba_unmultiplied(
                     [384, 216],
-                    &processed.into_iter().flatten().collect::<Vec<_>>(),
+                    &processed.iter().flatten().copied().collect::<Vec<_>>(),
                 );
                 if let Some(texture) = self.textures.get_mut(&input.id) {
                     texture.set(image, egui::TextureOptions::LINEAR);
@@ -252,11 +323,18 @@ impl RustMixApp {
         if let Some(to) = to {
             ids.push(to);
         }
-        // PIP dependencies use their own transport, too, and never recurse.
-        for id in ids.clone() {
-            if let Some(pip) = self.input_fx.get(&id).and_then(|fx| fx.pip_source) {
+        // Bounded, validated layer dependencies include their own image/effects.
+        let mut cursor = 0;
+        while cursor < ids.len() && ids.len() <= 32 {
+            if let Some(pip) = ids
+                .get(cursor)
+                .and_then(|id| p.input(*id))
+                .and_then(|i| i.config.pip_source)
+                && !ids.contains(&pip)
+            {
                 ids.push(pip);
             }
+            cursor += 1;
         }
         for id in ids {
             if let Some(input) = p.input(id) {
@@ -269,19 +347,7 @@ impl RustMixApp {
                 }
             }
         }
-        let mut processed_sources = HashMap::new();
-        for id in [Some(from), to].into_iter().flatten() {
-            if let Some(base) = program_sources.get(&id) {
-                let fx = self.input_fx.get(&id).cloned().unwrap_or_default();
-                let pip = fx.pip_source.and_then(|id| program_sources.get(&id));
-                let pixels = if p.input(id).is_some_and(|i| i.online) {
-                    process_source_pixels(base, 640, 360, &fx, pip.map(Vec::as_slice))
-                } else {
-                    base.clone()
-                };
-                processed_sources.insert(id, pixels);
-            }
-        }
+        let processed_sources = processed_sources(&p, &program_sources, &self.input_fx, 640, 360);
         let composed = processed_sources
             .get(&from)
             .ok_or_else(|| Error::Invalid("Program source missing".into()))
@@ -1193,6 +1259,13 @@ impl RustMixApp {
                                                         response.rect,
                                                     );
                                                 }
+                                                if let Some(fx) = self.input_fx.get(&input.id)
+                                                    && fx.media_path.is_some() && fx.custom_rgba.is_none() {
+                                                    ui.painter().text(response.rect.center(), egui::Align2::CENTER_CENTER,
+                                                        if fx.image_error.is_some() { "PNG UNAVAILABLE" } else { "LOADING PNG…" },
+                                                        egui::FontId::proportional(11.0), PREVIEW);
+                                                    self.automation.insert(format!("input.{}.media-status", input.id.0), response.rect);
+                                                }
                                                 if response.clicked() {
                                                     self.actions.push(Action::Engine(
                                                         Command::SelectPreview(input.id),
@@ -1216,6 +1289,7 @@ impl RustMixApp {
                                                             .push(Action::InputAudio(input.id));
                                                         ui.close();
                                                     }
+                                                    self.command_button(ui, &format!("input.{}.duplicate", input.id.0), "Duplicate Input", Command::DuplicateInput(input.id), None);
                                                     if ui.button("Close Input…").clicked() {
                                                         self.actions
                                                             .push(Action::RequestRemove(input.id));
@@ -1816,6 +1890,7 @@ impl RustMixApp {
                         {
                             self.reset_editors();
                             self.engine = Engine::default();
+                            self.media_loader.reset();
                             self.input_fx.clear();
                             self.dock = default_dock(false);
                             self.path = None;
@@ -1880,7 +1955,7 @@ mod processing_tests {
     fn custom_images_reach_program_size_and_sharpen_changes_edges() {
         let base = vec![[0, 0, 0, 255]; 16];
         let image = InputFx {
-            custom_rgba: Some((2, 2, vec![[200, 40, 80, 255]; 4])),
+            custom_rgba: Some((2, 2, vec![[200, 40, 80, 255]; 4].into())),
             ..Default::default()
         };
         assert_eq!(
@@ -1889,7 +1964,10 @@ mod processing_tests {
         );
         let edge = vec![[40, 40, 40, 255], [100, 100, 100, 255], [40, 40, 40, 255]];
         let fx = InputFx {
-            sharpen: true,
+            config: InputConfig {
+                sharpen: true,
+                ..Default::default()
+            },
             ..Default::default()
         };
         assert_ne!(process_source_pixels(&edge, 3, 1, &fx, None), edge);

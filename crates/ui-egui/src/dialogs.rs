@@ -179,9 +179,9 @@ const ADD_CATEGORIES: [(&str, InputKind, &str); 20] = [
         "Choose a procedural source or PNG image.",
     ),
     (
-        "DVD",
-        InputKind::Bars,
-        "Select the DVD source or test pattern.",
+        "PNG Image",
+        InputKind::Color,
+        "Choose a PNG still image (up to 32 MiB / 4096px).",
     ),
     (
         "List",
@@ -355,6 +355,7 @@ impl RustMixApp {
                 muted: true,
                 ..Default::default()
             },
+            config: InputConfig::default(),
         };
         match render::source(&input, 320, 180, 1500) {
             Ok(pixels) => {
@@ -401,12 +402,11 @@ impl RustMixApp {
                     ui.spacing_mut().item_spacing.y = 1.0;
                     for (idx, (label, kind, _)) in ADD_CATEGORIES.into_iter().enumerate() {
                         let active = app.add_tab == idx && app.add_kind == kind;
-                        let supported = matches!(idx, 0 | 3 | 4 | 6 | 11 | 14 | 15);
+                        let supported = matches!(idx, 0 | 1 | 3 | 4 | 6 | 11 | 14 | 15);
                         let r = ui.add_enabled_ui(supported, |ui| sidebar_row(ui, active, label, 21.0, Some(idx))).inner
                             .on_disabled_hover_text("Unavailable: no media/device backend for this source type");
-                        if matches!(idx, 0 | 3 | 4 | 6 | 11 | 14 | 15) {
-                            app.automation
-                                .insert(format!("dialog.add.kind.{kind:?}"), r.rect);
+                        if matches!(idx, 0 | 1 | 3 | 4 | 6 | 11 | 14 | 15) {
+                            app.automation.insert(if idx == 1 { "dialog.add.image".into() } else { format!("dialog.add.kind.{kind:?}") }, r.rect);
                         }
                         if r.clicked() {
                             app.add_tab = idx;
@@ -440,8 +440,8 @@ impl RustMixApp {
                             let name = ui.add_sized(
                                 [text_w, 22.0],
                                 egui::TextEdit::singleline(&mut app.add_name)
-                                    .char_limit(128)
-                                    .hint_text("Select or enter source name / file path"),
+                                    .char_limit(4096)
+                                    .hint_text("Generator name or PNG file path"),
                             );
                             app.automation.insert("dialog.add.name".into(), name.rect);
                             if ui
@@ -460,6 +460,8 @@ impl RustMixApp {
                                 };
                                 if let Some(path) = picked {
                                     app.add_name = path.display().to_string();
+                                    app.add_tab = 1;
+                                    app.add_kind = InputKind::Color;
                                 }
                             }
                         });
@@ -500,7 +502,10 @@ impl RustMixApp {
                                         .stroke(Stroke::new(1.0, FORM_BORDER))
                                         .inner_margin(4.0)
                                         .show(ui, |ui| {
-                                            if let Some((_, texture)) = &app.add_preview {
+                                            if app.add_tab == 1 || Path::new(&app.add_name).extension().is_some() {
+                                                ui.allocate_space(egui::vec2(180.0, 95.0));
+                                                ui.label("PNG is validated on import");
+                                            } else if let Some((_, texture)) = &app.add_preview {
                                                 let w = ui.available_width().clamp(140.0, 260.0);
                                                 let r = ui.add(
                                                     egui::Image::new((
@@ -516,8 +521,8 @@ impl RustMixApp {
                                     ui.add_space(4.0);
                                     ui.label(
                                         RichText::new(format!(
-                                            "Generator: {:?} · 384x216 preview",
-                                            app.add_kind
+                                            "{} · 384x216 preview",
+                                            if app.add_tab == 1 { "PNG image".into() } else { app.add_kind.label().to_owned() }
                                         ))
                                         .size(11.0)
                                         .color(FORM_TEXT),
@@ -527,19 +532,9 @@ impl RustMixApp {
                         });
                         ui.add_space(6.0);
                         ui.horizontal(|ui| {
-                            ui.checkbox(
-                                &mut app.add_alpha,
-                                RichText::new("Video contains Alpha Channel")
-                                    .size(11.5)
-                                    .color(FORM_TEXT),
-                            );
-                            ui.add_space(12.0);
-                            ui.checkbox(
-                                &mut app.add_interlaced,
-                                RichText::new("Video is Interlaced")
-                                    .size(11.5)
-                                    .color(FORM_TEXT),
-                            );
+                            ui.add_enabled(false, egui::Checkbox::new(&mut app.add_alpha, "PNG alpha is composited over black"));
+                            ui.add_space(8.0);
+                            ui.add_enabled(false, egui::Checkbox::new(&mut app.add_interlaced, "Interlaced video"));
                             ui.with_layout(egui::Layout::right_to_left(Align::Center), |ui| {
                                 if ui
                                     .add_sized([74.0, 22.0], egui::Button::new("Clear"))
@@ -559,7 +554,7 @@ impl RustMixApp {
                     .width(54.0)
                     .selected_text(self.add_number.to_string())
                     .show_ui(ui, |ui| {
-                        for n in 1..=16 {
+                        for n in 1..=self.engine.project().inputs.len() + 1 {
                             ui.selectable_value(&mut self.add_number, n, n.to_string());
                         }
                     });
@@ -584,36 +579,17 @@ impl RustMixApp {
                     );
                     self.automation
                         .insert("dialog.add.confirm".into(), confirm.rect);
-                    if confirm.clicked() {
-                        if self.add_name.trim().is_empty() {
-                            self.notice = "Enter a source name before adding an input".into();
-                            self.warning = true;
-                        } else {
-                            let next_id = InputId(
-                                self.engine
-                                    .project()
-                                    .inputs
-                                    .iter()
-                                    .map(|i| i.id.0)
-                                    .max()
-                                    .unwrap_or(0)
-                                    .saturating_add(1),
-                            );
-                            let candidate_path = std::path::PathBuf::from(self.add_name.trim());
-                            let file_source = candidate_path.exists() || candidate_path.extension().and_then(|e| e.to_str()).is_some_and(|e| matches!(e.to_ascii_lowercase().as_str(), "png" | "jpg" | "jpeg" | "bmp" | "webp" | "mp4" | "mkv" | "mov" | "avi" | "webm" | "wav" | "mp3"));
-                            if !file_source || self.load_image_into_input(next_id, &candidate_path) {
-                                let display_name = if file_source { candidate_path.file_stem().and_then(|s| s.to_str()).unwrap_or("PNG image").to_owned() } else { self.add_name.clone() };
-                                self.actions.push(Action::Engine(Command::AddInput { name: display_name, kind: self.add_kind }));
-                                close_requested = true;
-                            }
-
-                        }
+                    if confirm.clicked() && !self.add_loading {
+                        close_requested = self.request_add_input();
                     }
+                    if self.add_loading { ui.label("Loading PNG…"); }
                 });
             });
         });
         if close_requested || !open {
             self.add_open = false;
+            self.add_loading = false;
+            self.add_token = self.add_token.wrapping_add(1);
         }
     }
 
@@ -669,7 +645,9 @@ impl RustMixApp {
                     .into_iter()
                     .enumerate()
                     {
-                        let r = sidebar_row(ui, app.input_page == page, label, 18.5, Some(idx));
+                        let supported = !matches!(page, InputPage::Triggers | InputPage::TallyLights | InputPage::Ptz | InputPage::Advanced);
+                        let r = ui.add_enabled_ui(supported, |ui| sidebar_row(ui, app.input_page == page, label, 18.5, Some(idx))).inner
+                            .on_disabled_hover_text("This source control is unavailable");
                         app.automation
                             .insert(format!("dialog.properties.page.{key}"), r.rect);
                         if r.clicked() {
@@ -687,8 +665,8 @@ impl RustMixApp {
                     {
                         let pvw_id = app.engine.project().preview;
                         if let Some(src_fx) = app.input_fx.get(&pvw_id).cloned() {
-                            app.input_fx.insert(id, src_fx);
-                            app.sync_prop_from_fx(id);
+                            app.properties_fx = Some(src_fx);
+                            app.load_draft_controls();
                             app.last_demo_frame = None;
                         }
                     }
@@ -702,8 +680,8 @@ impl RustMixApp {
                             ui.set_min_width((ui.available_width() - 2.0).max(80.0));
                             ui.horizontal(|ui| {
                                 let path_lbl = app
-                                    .input_fx
-                                    .get(&id)
+                                    .properties_fx
+                                    .as_ref()
                                     .and_then(|f| f.media_path.as_deref())
                                     .map(str::to_owned)
                                     .unwrap_or_else(|| format!("{} · synthetic {}", draft.name, draft.kind.label()));
@@ -727,11 +705,16 @@ impl RustMixApp {
                                             )
                                             .pick_file()
                                     {
-                                        app.load_image_into_input(id, &path);
+                                        app.request_property_png(id, path);
                                     }
                                 });
                             });
                         });
+                    if app.properties_loading { ui.colored_label(PREVIEW, "Loading PNG… current source stays active"); }
+                    if let Some(fx) = &app.properties_fx {
+                        if let Some(error) = &fx.image_error { ui.colored_label(RED, error); }
+                        if let Some([w, h]) = fx.image_size { ui.label(format!("PNG source: {w} × {h} · CPU preview / Program")); }
+                    }
                     ui.add_space(4.0);
                     light_form_frame(ui, 8, |ui| match app.input_page {
                         InputPage::General => {
@@ -814,6 +797,12 @@ impl RustMixApp {
                                                     );
                                                     if r.clicked() {
                                                         draft.kind = kind;
+                                                        if let Some(fx) = app.properties_fx.as_mut() {
+                                                            fx.media_path = None;
+                                                            fx.custom_rgba = None;
+                                                            fx.image_error = None;
+                                                            fx.image_pending = false;
+                                                        }
                                                         draft.color = [
                                                             swatch_c.r(),
                                                             swatch_c.g(),
@@ -826,8 +815,7 @@ impl RustMixApp {
                                         });
                                     left_col.add_space(2.0);
                                     left_col.spacing_mut().item_spacing.y = 1.5;
-                                    left_col
-                                        .checkbox(&mut app.prop_deinterlace, "Deinterlace Blend");
+                                    left_col.add_enabled(false, egui::Checkbox::new(&mut app.prop_deinterlace, "Deinterlace Blend"));
                                     if left_col
                                         .checkbox(&mut app.prop_sharpen, "Sharpen")
                                         .changed()
@@ -837,24 +825,27 @@ impl RustMixApp {
                                     if left_col.checkbox(&mut app.prop_mirror, "Mirror").changed() {
                                         app.sync_fx_from_prop(id);
                                     }
-                                    left_col.checkbox(&mut app.prop_flatten, "Flatten Layers");
-                                    left_col.checkbox(
-                                        &mut app.prop_auto_mix,
-                                        "Automatically mix audio",
-                                    );
-                                    left_col.checkbox(
-                                        &mut app.prop_auto_play,
-                                        "Automatically Play with Transition",
-                                    );
-                                    left_col.checkbox(
-                                        &mut app.prop_auto_restart,
-                                        "Automatically Restart with Transition",
-                                    );
-                                    left_col.checkbox(
-                                        &mut app.prop_auto_pause,
-                                        "Automatically Pause after Transition",
-                                    );
-
+                                    left_col.add_enabled_ui(false, |ui| {
+                                        ui.checkbox(&mut app.prop_flatten, "Flatten Layers");
+                                        ui.checkbox(&mut app.prop_auto_mix, "Automatically mix audio");
+                                        ui.checkbox(&mut app.prop_auto_play, "Automatically Play with Transition");
+                                        ui.checkbox(&mut app.prop_auto_restart, "Automatically Restart with Transition");
+                                        ui.checkbox(&mut app.prop_auto_pause, "Automatically Pause after Transition");
+                                    }).response.on_hover_text("Automatic input triggers are unavailable");
+                                    left_col.horizontal(|ui| {
+                                        ui.label("Generator colour");
+                                        let colour = ui.color_edit_button_srgb(&mut draft.color);
+                                        app.automation.insert("dialog.properties.colour".into(), colour.rect);
+                                    });
+                                    if let Some(fx) = app.properties_fx.as_mut() {
+                                        egui::ComboBox::from_id_salt("prop.image_fit")
+                                            .selected_text(format!("Image fit: {:?}", fx.image_fit))
+                                            .show_ui(left_col, |ui| {
+                                                for fit in [ImageFit::Contain, ImageFit::Cover, ImageFit::Stretch] {
+                                                    ui.selectable_value(&mut fx.config.image_fit, fit, format!("{fit:?}"));
+                                                }
+                                            });
+                                    }
                                     egui::Grid::new("input_props_right")
                                         .num_columns(2)
                                         .spacing([8.0, 4.0])
@@ -921,14 +912,14 @@ impl RustMixApp {
                                     if right_col
                                         .add_sized(
                                             [240.0, 24.0],
-                                            egui::Button::new("Create Virtual Input"),
+                                            egui::Button::new("Duplicate Input"),
                                         )
                                         .clicked()
                                     {
-                                        app.actions.push(Action::Engine(Command::AddInput {
-                                            name: format!("{} (Virtual)", draft.name),
-                                            kind: draft.kind,
-                                        }));
+                                        if app.apply_properties(draft.clone()) {
+                                            app.actions.push(Action::Engine(Command::DuplicateInput(id)));
+                                            cancel_clicked = true;
+                                        }
                                     }
                                 }
                             });
@@ -940,7 +931,7 @@ impl RustMixApp {
                                     .strong()
                                     .color(FORM_TEXT),
                             );
-                            let fx = app.input_fx.entry(id).or_default();
+                            let fx = app.properties_fx.get_or_insert_default();
                             if ui
                                 .checkbox(
                                     &mut fx.chroma_key,
@@ -975,7 +966,7 @@ impl RustMixApp {
                                 .filter(|i| i.id != id)
                                 .map(|i| (i.id, format!("{}: {}", i.id.0, i.name)))
                                 .collect();
-                            let fx = app.input_fx.entry(id).or_default();
+                            let fx = app.properties_fx.get_or_insert_default();
                             let selected_lbl = fx
                                 .pip_source
                                 .and_then(|pid| {
@@ -1125,9 +1116,9 @@ impl RustMixApp {
                                 let preview_w = (preview_h * 16.0 / 9.0).min(avail_w);
                                 let pad_left = ((avail_w - preview_w) * 0.5).max(0.0);
                                 ui.add_space(pad_left);
-                                if let Some(texture) = app.textures.get(&id) {
+                                if let Some(texture) = app.draft_texture(ctx, &draft) {
                                     let r = ui.add(egui::Image::new((
-                                        texture.id(),
+                                        texture,
                                         egui::vec2(preview_w, preview_h),
                                     )));
                                     app.automation
@@ -1194,12 +1185,9 @@ impl RustMixApp {
             });
         });
         if apply_clicked {
-            self.sync_fx_from_prop(id);
-            self.actions
-                .push(Action::Engine(Command::UpdateInput(draft)));
-            self.properties = None;
+            self.apply_properties(draft);
         } else if cancel_clicked || !open {
-            self.properties = None;
+            self.close_properties();
         } else {
             self.properties = Some(draft);
         }

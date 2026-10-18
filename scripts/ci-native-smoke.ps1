@@ -25,5 +25,10 @@ foreach ($dialog in @('add-input-1600','input-properties-1600','settings-1600','
 }
 Invoke-NativeSmoke @('--ui-smoke-reopen','artifacts/smoke.rustmix.json')
 if (-not (Test-Path artifacts/reopen-ok.json)) { throw 'Reopen did not validate the saved production' }
+Invoke-NativeSmoke @('--ui-input-smoke')
+Invoke-NativeSmoke @('--ui-input-smoke-reopen','artifacts/inputs.rustmix.json')
+foreach ($file in @('input-fixture.png','input-workflow.png','input-properties.png','input-reopened.png','input-smoke-ok.json','input-reopen-ok.json','inputs.rustmix.json')) {
+    if (-not (Test-Path (Join-Path artifacts $file))) { throw "Missing PNG workflow evidence: $file" }
+}
 Get-CimInstance Win32_VideoController | Select-Object Name,DriverVersion | ConvertTo-Json | Out-File artifacts/runner-graphics.json
 "Windows runner: $([System.Environment]::OSVersion.VersionString)" | Out-File artifacts/platform.txt

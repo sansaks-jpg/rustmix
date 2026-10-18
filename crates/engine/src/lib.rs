@@ -1,5 +1,7 @@
 #![forbid(unsafe_code)]
 pub mod audio;
+pub mod input;
+pub use input::{ImageFit, InputConfig};
 pub mod persistence;
 pub mod playback;
 pub mod render;
@@ -118,6 +120,8 @@ pub struct InputState {
     pub color: [u8; 3],
     pub online: bool,
     pub audio: AudioChannel,
+    #[serde(default)]
+    pub config: InputConfig,
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Position {
@@ -195,10 +199,11 @@ impl ProjectState {
                     muted: i > 1,
                     ..Default::default()
                 },
+                config: InputConfig::default(),
             })
             .collect();
         Self {
-            schema: 1,
+            schema: 2,
             name: "Studio / Demo production".into(),
             revision: 0,
             inputs,
@@ -237,14 +242,14 @@ impl ProjectState {
         self.inputs.iter().find(|s| s.id == id)
     }
     pub fn validate(&self) -> Result<()> {
-        if self.schema != 1 {
+        if self.schema != 2 {
             return Err(invalid(
-                "Unsupported project version; this application supports schema 1",
+                "Unsupported project version; this application supports schema 2",
             ));
         }
         valid_text(&self.name, 120)?;
         if !(2..=32).contains(&self.inputs.len()) {
-            return Err(invalid("A project needs 2–32 synthetic inputs"));
+            return Err(invalid("A project needs 2–32 inputs"));
         }
         let mut ids = HashSet::new();
         for input in &self.inputs {
@@ -253,6 +258,20 @@ impl ProjectState {
             }
             valid_text(&input.name, 64)?;
             valid_audio(&input.audio)?;
+            input.config.validate()?;
+        }
+        for input in &self.inputs {
+            let mut seen = HashSet::from([input.id]);
+            let mut dependency = input.config.pip_source;
+            while let Some(id) = dependency {
+                if !seen.insert(id) {
+                    return Err(invalid("Input layers cannot contain a cycle"));
+                }
+                let source = self
+                    .input(id)
+                    .ok_or_else(|| invalid("Layer source is missing"))?;
+                dependency = source.config.pip_source;
+            }
         }
         if self.input(self.program).is_none() || self.input(self.preview).is_none() {
             return Err(invalid("Program or Preview references a missing input"));
@@ -333,9 +352,23 @@ pub enum Command {
     CancelTransition,
     SetDuration(u32),
     FadeBlack,
-    AddInput { name: String, kind: InputKind },
+    AddInput {
+        name: String,
+        kind: InputKind,
+    },
+    AddInputAt {
+        name: String,
+        kind: InputKind,
+        config: InputConfig,
+        index: usize,
+    },
+    DuplicateInput(InputId),
     RemoveInput(InputId),
     UpdateInput(InputState),
+    ApplyInput {
+        input: InputState,
+        audio: Option<AudioChannel>,
+    },
     SetInputAudio(InputId, AudioChannel),
     SetBus(usize, AudioChannel),
     SetOverlay(usize, OverlayState),
@@ -404,16 +437,27 @@ impl Command {
                 false,
                 true,
             ),
-            Self::AddInput { .. } => (
-                "input.add",
-                "Add synthetic input",
+            Self::AddInput { .. } | Self::AddInputAt { .. } => {
+                ("input.add", "Add input", "Inputs", "Ctrl+I", false, false)
+            }
+            Self::RemoveInput(_) => ("input.remove", "Remove input", "Inputs", "", false, false),
+            Self::UpdateInput(_) => ("input.update", "Edit input", "Inputs", "", true, false),
+            Self::ApplyInput { .. } => (
+                "input.apply",
+                "Apply input settings",
                 "Inputs",
-                "Ctrl+I",
+                "",
+                true,
+                true,
+            ),
+            Self::DuplicateInput(_) => (
+                "input.duplicate",
+                "Duplicate input",
+                "Inputs",
+                "",
                 false,
                 false,
             ),
-            Self::RemoveInput(_) => ("input.remove", "Remove input", "Inputs", "", false, false),
-            Self::UpdateInput(_) => ("input.update", "Edit input", "Inputs", "", true, false),
             Self::SetInputAudio(..) => (
                 "audio.input.set",
                 "Input audio controls",
@@ -533,6 +577,43 @@ impl Engine {
             inputs_paused: false,
         })
     }
+    fn insert_input(
+        project: &mut ProjectState,
+        name: String,
+        kind: InputKind,
+        config: InputConfig,
+        index: usize,
+    ) -> Result<InputId> {
+        if index > project.inputs.len() || project.inputs.len() >= 32 {
+            return Err(invalid(
+                "Choose an available input position (maximum 32 inputs)",
+            ));
+        }
+        let id = project
+            .inputs
+            .iter()
+            .map(|i| i.id.0)
+            .max()
+            .and_then(|i| i.checked_add(1))
+            .map(InputId)
+            .ok_or_else(|| invalid("Input ID limit reached"))?;
+        project.inputs.insert(
+            index,
+            InputState {
+                id,
+                name,
+                kind,
+                config,
+                color: [37, 160, 183],
+                online: true,
+                audio: AudioChannel {
+                    muted: true,
+                    ..Default::default()
+                },
+            },
+        );
+        Ok(id)
+    }
     pub fn project(&self) -> &ProjectState {
         &self.project
     }
@@ -558,8 +639,11 @@ impl Engine {
             | Command::Transition(_)
             | Command::SelectPreview(_)
             | Command::AddInput { .. }
+            | Command::AddInputAt { .. }
+            | Command::DuplicateInput(_)
             | Command::RemoveInput(_)
             | Command::UpdateInput(_)
+            | Command::ApplyInput { .. }
                 if self.transition.is_some() =>
             {
                 Err(invalid("Finish or cancel the active transition first"))
@@ -663,32 +747,71 @@ impl Engine {
                 black_ramp = Some((now, self.black, target));
             }
             Command::AddInput { name, kind } => {
-                let id = next
+                let index = next.inputs.len();
+                let id = Self::insert_input(&mut next, name, kind, InputConfig::default(), index)?;
+                affected.push(id);
+            }
+            Command::AddInputAt {
+                name,
+                kind,
+                config,
+                index,
+            } => {
+                let id = Self::insert_input(&mut next, name, kind, config, index)?;
+                affected.push(id);
+            }
+            Command::DuplicateInput(source) => {
+                let index = next
                     .inputs
                     .iter()
-                    .map(|i| i.id.0)
-                    .max()
-                    .and_then(|i| i.checked_add(1))
-                    .ok_or_else(|| invalid("Input ID limit reached"))?;
-                next.inputs.push(InputState {
-                    id: InputId(id),
-                    name,
-                    kind,
-                    color: [37, 160, 183],
-                    online: true,
-                    audio: AudioChannel {
+                    .position(|i| i.id == source)
+                    .ok_or_else(|| invalid("Input not found"))?;
+                let original = next
+                    .input(source)
+                    .cloned()
+                    .ok_or_else(|| invalid("Input not found"))?;
+                let mut name = String::new();
+                for ch in original.name.chars() {
+                    if name.len() + ch.len_utf8() > 57 {
+                        break;
+                    }
+                    name.push(ch);
+                }
+                name.push_str(" (Copy)");
+                let id =
+                    Self::insert_input(&mut next, name, original.kind, original.config, index + 1)?;
+                if let Some(copy) = next.inputs.iter_mut().find(|i| i.id == id) {
+                    copy.color = original.color;
+                    copy.online = original.online;
+                    copy.audio = AudioChannel {
                         muted: true,
-                        ..Default::default()
-                    },
-                });
-                affected.push(InputId(id));
+                        solo: false,
+                        ..original.audio
+                    };
+                }
+                affected.push(id);
             }
             Command::RemoveInput(id) => {
                 if next.input(id).is_none() {
                     return Err(invalid("Input not found"));
                 }
                 next.inputs.retain(|i| i.id != id);
+                for input in &mut next.inputs {
+                    if input.config.pip_source == Some(id) {
+                        input.config.pip_source = None;
+                    }
+                }
                 affected.push(id);
+            }
+            Command::ApplyInput { mut input, audio } => {
+                let old = next
+                    .inputs
+                    .iter_mut()
+                    .find(|i| i.id == input.id)
+                    .ok_or_else(|| invalid("Input not found"))?;
+                input.audio = audio.unwrap_or_else(|| old.audio.clone());
+                affected.push(input.id);
+                *old = input;
             }
             Command::UpdateInput(mut input) => {
                 let old = next
@@ -696,12 +819,11 @@ impl Engine {
                     .iter_mut()
                     .find(|i| i.id == input.id)
                     .ok_or_else(|| invalid("Input not found"))?;
-                affected.push(input.id);
-                // Properties editors may hold an old snapshot. Audio has its own command
-                // and must never be reset by applying a source name/type/color change.
                 input.audio = old.audio.clone();
+                affected.push(input.id);
                 *old = input;
             }
+
             Command::SetInputAudio(id, a) => {
                 let input = next
                     .inputs

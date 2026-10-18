@@ -19,7 +19,12 @@ pub fn load(path: &Path) -> Result<ProjectState> {
     if bytes.len() as u64 > MAX_FILE {
         return Err(invalid("Project exceeds 1 MiB limit"));
     }
-    let p: ProjectState = serde_json::from_slice(&bytes)?;
+    let mut p: ProjectState = serde_json::from_slice(&bytes)?;
+    // Schema 1 had only procedural descriptors. New fields deserialize to
+    // identity processing, and its input IDs, bus state and layout are retained.
+    if p.schema == 1 {
+        p.schema = 2;
+    }
     p.validate()?;
     Ok(p)
 }

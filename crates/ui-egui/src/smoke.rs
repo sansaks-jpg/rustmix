@@ -63,6 +63,9 @@ impl RustMixApp {
         self.smoke = Some(s);
     }
     fn smoke_run(&mut self, ctx: &egui::Context, s: &mut Smoke) -> Result<()> {
+        if std::env::args().any(|s| s == "--ui-input-smoke" || s == "--ui-input-smoke-reopen") {
+            return self.smoke_inputs(ctx, s);
+        }
         let reopen = std::env::args().any(|s| s == "--ui-smoke-reopen");
         // Includes 60 idle + 35 paused native frames and all nine dialogs on
         // hosted software graphics. Keep the matching external limit at 270s.
@@ -462,6 +465,222 @@ impl RustMixApp {
                 ctx.send_viewport_cmd(egui::ViewportCommand::Close);
             }
 
+            _ => {}
+        }
+        Ok(())
+    }
+
+    fn native_click(&self, s: &mut Smoke, id: &str) -> Result<()> {
+        let pos = self
+            .automation
+            .get(id)
+            .ok_or_else(|| Error::Invalid(format!("Missing native control {id}")))?
+            .center();
+        s.events = vec![
+            egui::Event::PointerMoved(pos),
+            egui::Event::PointerButton {
+                pos,
+                button: egui::PointerButton::Primary,
+                pressed: true,
+                modifiers: egui::Modifiers::NONE,
+            },
+            egui::Event::PointerButton {
+                pos,
+                button: egui::PointerButton::Primary,
+                pressed: false,
+                modifiers: egui::Modifiers::NONE,
+            },
+        ];
+        Ok(())
+    }
+    fn assert_input_smoke(&self) -> Result<()> {
+        let p = self.engine.project();
+        let source = p
+            .input(InputId(8))
+            .ok_or_else(|| Error::Invalid("Imported PNG is missing".into()))?;
+        let copy = p
+            .input(InputId(9))
+            .ok_or_else(|| Error::Invalid("Duplicated PNG is missing".into()))?;
+        if p.program != InputId(9)
+            || p.inputs.get(1).map(|i| i.id) != Some(InputId(8))
+            || p.inputs.get(2).map(|i| i.id) != Some(InputId(9))
+            || source.config != copy.config
+            || !source.config.mirror
+            || source.config.gain != 0.5
+            || source.config.media_path.is_none()
+            || !copy.audio.muted
+            || self.last_program_rgba.is_empty()
+            || !self
+                .last_program_rgba
+                .chunks_exact(4)
+                .all(|p| p == [50, 20, 10, 255])
+        {
+            return Err(Error::Invalid(
+                "PNG import/order/effects/duplicate/pixel acceptance failed".into(),
+            ));
+        }
+        Ok(())
+    }
+    fn smoke_inputs(&mut self, ctx: &egui::Context, s: &mut Smoke) -> Result<()> {
+        if self.start.elapsed() > Duration::from_secs(120) {
+            return Err(Error::Invalid(format!(
+                "Native input workflow timed out at stage {}",
+                s.stage
+            )));
+        }
+        let reopen = std::env::args().any(|s| s == "--ui-input-smoke-reopen");
+        for event in ctx.input(|i| i.events.clone()) {
+            if let egui::Event::Screenshot { image, .. } = event {
+                let name = if reopen {
+                    "input-reopened"
+                } else if s.stage == 10 {
+                    "input-properties"
+                } else {
+                    "input-workflow"
+                };
+                let bytes: Vec<u8> = image.pixels.iter().flat_map(|p| p.to_array()).collect();
+                image::save_buffer(
+                    format!("artifacts/{name}.png"),
+                    &bytes,
+                    image.width() as u32,
+                    image.height() as u32,
+                    image::ColorType::Rgba8,
+                )
+                .map_err(|e| Error::Invalid(e.to_string()))?;
+                s.captured = true;
+            }
+        }
+        if s.wait < 5 {
+            return Ok(());
+        }
+        self.validate_monitor_geometry(ctx.viewport_rect().right())?;
+        if reopen {
+            if self.job.is_some() || self.media_loader.busy() {
+                return Ok(());
+            }
+            self.assert_input_smoke()?;
+            if s.stage == 0 {
+                ctx.send_viewport_cmd(egui::ViewportCommand::Screenshot(egui::UserData::default()));
+                s.captured = false;
+                s.stage = 1;
+            } else if s.captured {
+                std::fs::write(
+                    "artifacts/input-reopen-ok.json",
+                    serde_json::to_vec_pretty(self.engine.project())?,
+                )?;
+                self.saved_revision = self.engine.project().revision;
+                ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+            }
+            return Ok(());
+        }
+        match s.stage {
+            0 => {
+                std::fs::create_dir_all("artifacts")?;
+                let path = PathBuf::from("artifacts/input-fixture.png");
+                image::save_buffer(
+                    &path,
+                    &[100, 40, 20, 255].repeat(16 * 9),
+                    16,
+                    9,
+                    image::ColorType::Rgba8,
+                )
+                .map_err(|e| Error::Invalid(e.to_string()))?;
+                self.dispatch(Action::Add, ctx);
+                self.add_name = path.display().to_string();
+                self.add_number = 2;
+                s.stage = 1;
+            }
+            1 => {
+                self.validate_dialog_geometry(ctx, "dialog.add")?;
+                self.native_click(s, "dialog.add.confirm")?;
+                s.stage = 2;
+            }
+            2 => {
+                if self.add_loading || self.media_loader.busy() {
+                    return Ok(());
+                }
+                if self.add_open
+                    || self.engine.project().inputs.get(1).map(|i| i.id) != Some(InputId(8))
+                    || self.engine.project().program != InputId(1)
+                    || self.engine.project().preview != InputId(2)
+                {
+                    return Err(Error::Invalid(format!(
+                        "Native PNG Add Input failed: {}",
+                        self.notice
+                    )));
+                }
+                self.dispatch(Action::Properties(InputId(8)), ctx);
+                s.stage = 3;
+            }
+            3 => {
+                self.prop_mirror = true;
+                self.prop_gain = 0.5;
+                self.sync_fx_from_prop(InputId(8));
+                self.native_click(s, "dialog.properties.cancel")?;
+                s.stage = 4;
+            }
+            4 => {
+                let input = self
+                    .engine
+                    .project()
+                    .input(InputId(8))
+                    .ok_or_else(|| Error::Invalid("PNG missing after Cancel".into()))?;
+                if self.properties.is_some() || input.config.mirror || input.config.gain != 1.0 {
+                    return Err(Error::Invalid(
+                        "Native Properties Cancel changed committed effects".into(),
+                    ));
+                }
+                self.dispatch(Action::Properties(InputId(8)), ctx);
+                s.stage = 5;
+            }
+            5 => {
+                self.prop_mirror = true;
+                self.prop_gain = 0.5;
+                self.sync_fx_from_prop(InputId(8));
+                self.native_click(s, "dialog.properties.apply")?;
+                s.stage = 6;
+            }
+            6 => {
+                if self.properties.is_some() {
+                    return Err(Error::Invalid(
+                        "Native Apply did not close Properties".into(),
+                    ));
+                }
+                self.execute(Command::DuplicateInput(InputId(8)));
+                self.execute(Command::TakeInput(InputId(9)));
+                s.stage = 7;
+            }
+            7 => {
+                self.assert_input_smoke()?;
+                self.path = Some("artifacts/inputs.rustmix.json".into());
+                self.start_save(false, false);
+                ctx.send_viewport_cmd(egui::ViewportCommand::Screenshot(egui::UserData::default()));
+                s.captured = false;
+                s.stage = 8;
+            }
+            8 => {
+                if self.job.is_some() || !s.captured {
+                    return Ok(());
+                }
+                self.assert_input_smoke()?;
+                std::fs::write(
+                    "artifacts/input-smoke-ok.json",
+                    serde_json::to_vec_pretty(self.engine.project())?,
+                )?;
+                self.dispatch(Action::Properties(InputId(9)), ctx);
+                s.stage = 9;
+            }
+            9 => {
+                self.validate_dialog_geometry(ctx, "dialog.properties")?;
+                ctx.send_viewport_cmd(egui::ViewportCommand::Screenshot(egui::UserData::default()));
+                s.captured = false;
+                s.stage = 10;
+            }
+            10 if s.captured => {
+                self.close_properties();
+                self.saved_revision = self.engine.project().revision;
+                ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+            }
             _ => {}
         }
         Ok(())
@@ -1035,7 +1254,8 @@ mod tests {
         app.refresh_textures(&ctx);
         assert_eq!(stamp, app.last_demo_frame);
         let id = app.engine.project().inputs.last().unwrap().id;
-        app.input_fx.entry(id).or_default().custom_rgba = Some((1, 1, vec![[255, 0, 0, 255]]));
+        app.input_fx.entry(id).or_default().custom_rgba =
+            Some((1, 1, vec![[255, 0, 0, 255]].into()));
         app.input_fx.entry(InputId(1)).or_default().pip_source = Some(id);
         app.execute(Command::RemoveInput(id));
         assert!(!app.input_fx.contains_key(&id));
@@ -1049,8 +1269,11 @@ mod tests {
         app.theme(&ctx);
         let id = InputId(1);
         let original = vec![[120, 20, 10, 255]];
-        app.input_fx.entry(id).or_default().custom_rgba = Some((1, 1, original.clone()));
-        assert!(!app.load_image_into_input(id, Path::new("missing-video.mp4")));
+        app.input_fx.entry(id).or_default().custom_rgba = Some((1, 1, original.clone().into()));
+        app.dispatch(Action::Properties(id), &ctx);
+        app.request_property_png(id, "missing-video.mp4".into());
+        finish_media(&mut app);
+        app.close_properties();
         assert_eq!(
             app.input_fx
                 .get(&id)
@@ -1058,8 +1281,9 @@ mod tests {
                 .custom_rgba
                 .as_ref()
                 .unwrap()
-                .2,
-            original
+                .2
+                .as_ref(),
+            &original
         );
         let size = [1600.0, 900.0];
         app.dispatch(Action::Add, &ctx);
@@ -1081,7 +1305,11 @@ mod tests {
         let mut app = RustMixApp::headless();
         let ctx = egui::Context::default();
         let id = app.engine.project().program;
-        assert!(app.load_image_into_input(id, &file));
+        app.dispatch(Action::Properties(id), &ctx);
+        app.request_property_png(id, file);
+        finish_media(&mut app);
+        app.properties_fx.as_mut().unwrap().image_fit = ImageFit::Stretch;
+        assert!(app.apply_properties(app.properties.clone().unwrap()));
         app.refresh_textures(&ctx);
         assert!(
             app.last_program_rgba
@@ -1309,5 +1537,205 @@ mod tests {
         assert!(app.shortcuts_open);
         click(&mut app, &ctx, "dialog.shortcuts.close", size);
         assert!(!app.shortcuts_open);
+    }
+    fn finish_media(app: &mut RustMixApp) {
+        let deadline = Instant::now() + Duration::from_secs(10);
+        loop {
+            app.poll_media();
+            if !app.media_loader.busy() {
+                break;
+            }
+            assert!(
+                Instant::now() < deadline,
+                "bounded PNG worker did not finish"
+            );
+            std::thread::sleep(Duration::from_millis(1));
+        }
+    }
+    fn fixture(path: &Path, color: [u8; 4]) {
+        image::save_buffer(path, &color.repeat(16 * 9), 16, 9, image::ColorType::Rgba8).unwrap();
+    }
+    fn attach_png(app: &mut RustMixApp, ctx: &egui::Context, id: InputId, path: PathBuf) {
+        app.dispatch(Action::Properties(id), ctx);
+        app.request_property_png(id, path);
+        finish_media(app);
+        assert!(app.apply_properties(app.properties.clone().unwrap()));
+    }
+
+    #[test]
+    fn properties_cancel_discards_png_and_effects_without_touching_program() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("red.png");
+        fixture(&path, [120, 20, 10, 255]);
+        let mut app = RustMixApp::headless();
+        let ctx = egui::Context::default();
+        app.theme(&ctx);
+        let id = app.engine.project().program;
+        app.execute(Command::SetInputsPaused(true));
+        app.refresh_textures(&ctx);
+        let before = app.engine.project().clone();
+        let pixels = app.last_program_rgba.clone();
+        app.dispatch(Action::Properties(id), &ctx);
+        app.request_property_png(id, path);
+        finish_media(&mut app);
+        app.prop_mirror = true;
+        app.prop_gain = 0.5;
+        app.sync_fx_from_prop(id);
+        app.refresh_textures(&ctx);
+        assert_eq!(app.last_program_rgba, pixels);
+        click(&mut app, &ctx, "dialog.properties.cancel", [1600.0, 900.0]);
+        assert_eq!(app.engine.project(), &before);
+        assert!(app.properties.is_none());
+        assert!(app.input_fx.get(&id).unwrap().custom_rgba.is_none());
+    }
+
+    #[test]
+    fn png_add_order_duplicate_and_reopen_preserve_rendered_pixels() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("logo.png");
+        fixture(&path, [100, 40, 20, 255]);
+        let mut app = RustMixApp::headless();
+        let ctx = egui::Context::default();
+        app.theme(&ctx);
+        app.dispatch(Action::Add, &ctx);
+        app.add_name = path.display().to_string();
+        app.add_number = 2;
+        click(&mut app, &ctx, "dialog.add.confirm", [1600.0, 900.0]);
+        finish_media(&mut app);
+        let id = app.engine.project().inputs[1].id;
+        assert_eq!(id, InputId(8));
+        assert_eq!(app.engine.project().program, InputId(1));
+        assert_eq!(app.engine.project().preview, InputId(2));
+        app.dispatch(Action::Properties(id), &ctx);
+        app.prop_gain = 0.5;
+        app.prop_mirror = true;
+        click(&mut app, &ctx, "dialog.properties.apply", [1600.0, 900.0]);
+        app.execute(Command::DuplicateInput(id));
+        let copy = app.engine.project().inputs[2].id;
+        assert_eq!(
+            app.engine.project().input(id).unwrap().config,
+            app.engine.project().input(copy).unwrap().config
+        );
+        app.execute(Command::TakeInput(copy));
+        app.refresh_textures(&ctx);
+        assert!(
+            app.last_program_rgba
+                .chunks_exact(4)
+                .all(|p| p == [50, 20, 10, 255])
+        );
+        let pixels = app.last_program_rgba.clone();
+        let project_path = dir.path().join("show.rustmix.json");
+        persistence::save(&project_path, app.engine.project()).unwrap();
+        let restored = persistence::load(&project_path).unwrap();
+        let mut reopened = RustMixApp::headless();
+        reopened.engine = Engine::from_project(restored).unwrap();
+        reopened.input_fx.clear();
+        finish_media(&mut reopened);
+        reopened.refresh_textures(&ctx);
+        assert_eq!(reopened.last_program_rgba, pixels);
+    }
+
+    #[test]
+    fn missing_png_is_black_and_can_be_relinked_without_changing_input_identity() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("missing.png");
+        let replacement = dir.path().join("replacement.png");
+        fixture(&replacement, [20, 100, 50, 255]);
+        let mut app = RustMixApp::headless();
+        let ctx = egui::Context::default();
+        let id = app.engine.project().program;
+        let mut input = app.engine.project().input(id).unwrap().clone();
+        input.config.media_path = Some(path.display().to_string());
+        app.execute(Command::UpdateInput(input));
+        finish_media(&mut app);
+        app.refresh_textures(&ctx);
+        assert!(app.input_fx.get(&id).unwrap().image_error.is_some());
+        assert!(
+            app.last_program_rgba
+                .chunks_exact(4)
+                .all(|p| p == [0, 0, 0, 255])
+        );
+        attach_png(&mut app, &ctx, id, replacement);
+        app.refresh_textures(&ctx);
+        assert_eq!(app.engine.project().program, id);
+        assert!(app.input_fx.get(&id).unwrap().image_error.is_none());
+        assert!(
+            app.last_program_rgba
+                .chunks_exact(4)
+                .all(|p| p == [20, 100, 50, 255])
+        );
+    }
+
+    #[test]
+    fn invalid_apply_retains_the_editor_and_current_picture() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("ready.png");
+        fixture(&path, [150, 30, 10, 255]);
+        let mut app = RustMixApp::headless();
+        let ctx = egui::Context::default();
+        let id = app.engine.project().program;
+        app.execute(Command::SetInputsPaused(true));
+        app.refresh_textures(&ctx);
+        let pixels = app.last_program_rgba.clone();
+        let before = app.engine.project().clone();
+        app.dispatch(Action::Properties(id), &ctx);
+        app.request_property_png(id, path);
+        finish_media(&mut app);
+        let mut draft = app.properties.clone().unwrap();
+        draft.name.clear();
+        assert!(!app.apply_properties(draft));
+        assert!(app.properties.is_some() && app.warning);
+        assert_eq!(app.engine.project(), &before);
+        app.refresh_textures(&ctx);
+        assert_eq!(app.last_program_rgba, pixels);
+    }
+
+    #[test]
+    fn closed_dialog_and_new_project_ignore_late_png_results() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("late.png");
+        fixture(&path, [150, 30, 10, 255]);
+        let mut app = RustMixApp::headless();
+        let ctx = egui::Context::default();
+        app.dispatch(Action::Properties(InputId(1)), &ctx);
+        app.request_property_png(InputId(1), path.clone());
+        app.close_properties();
+        app.dispatch(Action::Properties(InputId(2)), &ctx);
+        finish_media(&mut app);
+        assert!(app.properties_fx.as_ref().unwrap().media_path.is_none());
+        assert!(
+            app.engine
+                .project()
+                .inputs
+                .iter()
+                .all(|i| i.config.media_path.is_none())
+        );
+        app.close_properties();
+        app.dispatch(Action::Add, &ctx);
+        app.add_name = path.display().to_string();
+        assert!(!app.request_add_input());
+        app.reset_editors();
+        app.media_loader.reset();
+        finish_media(&mut app);
+        assert_eq!(app.engine.project().inputs.len(), 7);
+    }
+
+    #[test]
+    fn png_capacity_failure_does_not_create_cache_or_source() {
+        let mut app = RustMixApp::headless();
+        let ctx = egui::Context::default();
+        for n in 7..32 {
+            app.execute(Command::AddInput {
+                name: format!("Generator {n}"),
+                kind: InputKind::Grid,
+            });
+        }
+        app.dispatch(Action::Add, &ctx);
+        app.add_name = "some.png".into();
+        let before = app.engine.project().clone();
+        assert!(!app.request_add_input());
+        assert_eq!(app.engine.project(), &before);
+        assert!(!app.media_loader.busy());
+        assert_eq!(app.input_fx.len(), 32);
     }
 }

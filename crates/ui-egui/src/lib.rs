@@ -1,5 +1,7 @@
 #![forbid(unsafe_code)]
 mod dialogs;
+mod inputs;
+mod media;
 mod panels;
 mod smoke;
 mod workspace;
@@ -11,7 +13,10 @@ use serde::{Deserialize, Serialize};
 use std::{
     collections::{HashMap, VecDeque},
     path::{Path, PathBuf},
-    sync::mpsc::{self, Receiver},
+    sync::{
+        Arc,
+        mpsc::{self, Receiver},
+    },
     time::{Duration, Instant},
 };
 
@@ -31,41 +36,33 @@ pub(crate) const CHIP_BG: Color32 = Color32::from_rgb(32, 39, 49);
 pub(crate) const FORM_LIGHT: Color32 = Color32::from_rgb(24, 30, 39);
 pub(crate) const FORM_TEXT: Color32 = Color32::from_rgb(232, 238, 245);
 
-/// Per-input CPU reference processing and custom image buffer.
-#[derive(Clone)]
+/// Decoded image cache plus the engine's committed processing configuration.
+#[derive(Clone, Default)]
 pub(crate) struct InputFx {
-    pub zoom: f32,
-    pub pan_x: f32,
-    pub pan_y: f32,
-    pub mirror: bool,
-    pub sharpen: bool,
-    pub lift: f32,
-    pub gain: f32,
-    pub saturation: f32,
-    pub chroma_key: bool,
-    pub chroma_tolerance: f32,
-    pub pip_source: Option<InputId>,
-    pub media_path: Option<String>,
-    pub custom_rgba: Option<(u32, u32, Vec<[u8; 4]>)>,
+    pub config: InputConfig,
+    pub custom_rgba: Option<(u32, u32, Arc<Vec<[u8; 4]>>)>,
+    pub image_size: Option<[u32; 2]>,
+    pub image_error: Option<String>,
+    pub image_pending: bool,
 }
-
-impl Default for InputFx {
-    fn default() -> Self {
-        Self {
-            zoom: 1.0,
-            pan_x: 0.0,
-            pan_y: 0.0,
-            mirror: false,
-            sharpen: false,
-            lift: 0.0,
-            gain: 1.0,
-            saturation: 1.0,
-            chroma_key: false,
-            chroma_tolerance: 0.28,
-            pip_source: None,
-            media_path: None,
-            custom_rgba: None,
-        }
+impl std::ops::Deref for InputFx {
+    type Target = InputConfig;
+    fn deref(&self) -> &Self::Target {
+        &self.config
+    }
+}
+impl std::ops::DerefMut for InputFx {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.config
+    }
+}
+impl InputFx {
+    fn set_image(&mut self, image: media::DecodedPng) {
+        self.media_path = Some(image.path);
+        self.custom_rgba = Some((image.width, image.height, image.pixels));
+        self.image_size = Some(image.original_size);
+        self.image_error = None;
+        self.image_pending = false;
     }
 }
 
@@ -462,6 +459,14 @@ pub struct RustMixApp {
     pub(crate) program_texture: Option<egui::TextureHandle>,
     pub(crate) last_program_rgba: Vec<u8>,
     pub(crate) input_fx: HashMap<InputId, InputFx>,
+    media_loader: media::MediaLoader,
+    properties_fx: Option<InputFx>,
+    properties_audio_original: Option<AudioChannel>,
+    properties_token: u64,
+    properties_loading: bool,
+    properties_texture: Option<egui::TextureHandle>,
+    add_token: u64,
+    add_loading: bool,
     pub(crate) transition_slots: [&'static str; 4],
     pub(crate) monitor_level: f32,
     last_demo_frame: Option<u64>,
@@ -614,7 +619,12 @@ impl RustMixApp {
         {
             app.start_load(Some(PathBuf::from(path)));
         }
-        if std::env::args().any(|s| s == "--ui-smoke" || s == "--ui-smoke-reopen") {
+        if std::env::args().any(|s| {
+            matches!(
+                s.as_str(),
+                "--ui-smoke" | "--ui-smoke-reopen" | "--ui-input-smoke" | "--ui-input-smoke-reopen"
+            )
+        }) {
             app.smoke = Some(smoke::Smoke::default());
         }
         app.theme(&cc.egui_ctx);
@@ -656,6 +666,14 @@ impl RustMixApp {
             program_texture: None,
             last_program_rgba: Vec::new(),
             input_fx,
+            media_loader: media::MediaLoader::default(),
+            properties_fx: None,
+            properties_audio_original: None,
+            properties_token: 0,
+            properties_loading: false,
+            properties_texture: None,
+            add_token: 0,
+            add_loading: false,
             transition_slots: ["Fade", "Merge", "Wipe", "CubeZoom"],
             monitor_level: 0.78,
             last_demo_frame: None,
@@ -790,47 +808,27 @@ impl RustMixApp {
         }
     }
 
-    /// Decode an image file from disk into a 384x216 RGBA8 buffer for real-time GPU upload.
-    pub(crate) fn load_image_into_input(&mut self, id: InputId, path: &Path) -> bool {
-        if path
-            .extension()
-            .and_then(|e| e.to_str())
-            .is_none_or(|e| !e.eq_ignore_ascii_case("png"))
-            || !std::fs::metadata(path).is_ok_and(|m| m.is_file() && m.len() <= 32 * 1024 * 1024)
-        {
-            self.say(
-                "Only existing PNG images up to 32 MB are supported; video decoding is unavailable"
-                    .into(),
-                true,
-            );
-            return false;
-        }
-        if let Ok(img) = image::open(path) {
-            let resized = img
-                .resize_exact(384, 216, image::imageops::FilterType::Triangle)
-                .to_rgba8();
-            let mut pixels = Vec::with_capacity(384 * 216);
-            for chunk in resized.as_raw().chunks_exact(4) {
-                pixels.push([
-                    chunk.first().copied().unwrap_or(0),
-                    chunk.get(1).copied().unwrap_or(0),
-                    chunk.get(2).copied().unwrap_or(0),
-                    chunk.get(3).copied().unwrap_or(255),
-                ]);
+    pub(crate) fn sync_prop_from_fx(&mut self, id: InputId) {
+        self.properties_token = self.properties_token.wrapping_add(1);
+        self.properties_loading = false;
+        self.properties_texture = None;
+        self.properties_audio_original = self.engine.project().input(id).map(|i| i.audio.clone());
+        self.properties_fx = Some(self.input_fx.get(&id).cloned().unwrap_or_else(|| {
+            InputFx {
+                config: self
+                    .engine
+                    .project()
+                    .input(id)
+                    .map(|i| i.config.clone())
+                    .unwrap_or_default(),
+                ..Default::default()
             }
-            let fx = self.input_fx.entry(id).or_default();
-            fx.custom_rgba = Some((384, 216, pixels));
-            fx.media_path = Some(path.display().to_string());
-            self.last_demo_frame = None;
-            true
-        } else {
-            self.say("Unable to decode PNG; current source retained".into(), true);
-            false
-        }
+        }));
+        self.load_draft_controls();
     }
 
-    pub(crate) fn sync_prop_from_fx(&mut self, id: InputId) {
-        let fx = self.input_fx.entry(id).or_default().clone();
+    fn load_draft_controls(&mut self) {
+        let fx = self.properties_fx.clone().unwrap_or_default();
         self.prop_zoom = fx.zoom;
         self.prop_pan_x = fx.pan_x;
         self.prop_pan_y = fx.pan_y;
@@ -841,8 +839,10 @@ impl RustMixApp {
         self.prop_saturation = fx.saturation;
     }
 
-    pub(crate) fn sync_fx_from_prop(&mut self, id: InputId) {
-        let fx = self.input_fx.entry(id).or_default();
+    pub(crate) fn sync_fx_from_prop(&mut self, _id: InputId) {
+        let Some(fx) = self.properties_fx.as_mut() else {
+            return;
+        };
         fx.zoom = self.prop_zoom;
         fx.pan_x = self.prop_pan_x;
         fx.pan_y = self.prop_pan_y;
@@ -856,7 +856,9 @@ impl RustMixApp {
 
     fn reset_editors(&mut self) {
         self.add_open = false;
-        self.properties = None;
+        self.add_loading = false;
+        self.add_token = self.add_token.wrapping_add(1);
+        self.close_properties();
         self.input_page = InputPage::General;
         self.confirm_remove_input = None;
         self.settings = false;
@@ -958,22 +960,23 @@ impl RustMixApp {
     }
 
     fn execute(&mut self, c: Command) {
+        let _ = self.try_execute(c);
+    }
+
+    fn try_execute(&mut self, c: Command) -> Option<CommandResult> {
         let label = c.definition().label;
         match self.engine.execute(c, self.now) {
-            Ok(_) => self.say(format!("{label} completed"), false),
-            Err(e) => self.say(e.to_string(), true),
-        }
-        self.input_fx
-            .retain(|id, _| self.engine.project().input(*id).is_some());
-        for fx in self.input_fx.values_mut() {
-            if fx
-                .pip_source
-                .is_some_and(|id| self.engine.project().input(id).is_none())
-            {
-                fx.pip_source = None;
+            Ok(result) => {
+                self.say(format!("{label} completed"), false);
+                self.sync_input_cache();
+                self.last_demo_frame = None;
+                Some(result)
+            }
+            Err(e) => {
+                self.say(e.to_string(), true);
+                None
             }
         }
-        self.last_demo_frame = None;
     }
 
     fn recovery_path() -> PathBuf {
@@ -1089,7 +1092,9 @@ impl RustMixApp {
                             let layout = engine.project().workspace.dock_json.clone();
                             self.reset_editors();
                             self.engine = engine;
+                            self.media_loader.reset();
                             self.input_fx.clear();
+                            self.sync_input_cache();
                             self.last_demo_frame = None;
                             self.theme(ctx);
                             self.path = Some(path);
@@ -1160,6 +1165,8 @@ impl RustMixApp {
             Action::Save(as_new) => self.start_save(as_new, false),
             Action::CheckpointNow => self.start_save(false, true),
             Action::Add => {
+                self.add_token = self.add_token.wrapping_add(1);
+                self.add_loading = false;
                 self.add_number = self.engine.project().inputs.len() + 1;
                 self.add_tab = match self.add_kind {
                     InputKind::Grid => 0,
@@ -2009,6 +2016,7 @@ impl RustMixApp {
         self.engine.tick(self.now);
         self.tick_live_outputs();
         self.poll_job(&ctx);
+        self.poll_media();
         self.shortcuts(&ctx);
         self.refresh_textures(&ctx);
         let dialog_busy = self.add_open

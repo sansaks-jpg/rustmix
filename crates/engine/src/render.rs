@@ -4,7 +4,7 @@ use crate::{
     InputKind, InputState, Position, ProjectState, Result, TransitionKind, TransitionState, invalid,
 };
 fn pixel(input: &InputState, x: u32, y: u32, w: u32, h: u32, ms: u64) -> [u8; 4] {
-    if !input.online {
+    if !input.online || input.config.media_path.is_some() {
         return [0, 0, 0, 255];
     }
     let u = x as f32 / w.max(1) as f32;
