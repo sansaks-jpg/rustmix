@@ -412,9 +412,13 @@ impl RustMixApp {
                     ui.add_sized(
                         [(ui.available_width() - 96.0).max(40.0), 18.0],
                         egui::Label::new(
-                            RichText::new(format!("{badge}  {} · {}", id.0, input.name))
-                                .strong()
-                                .color(Color32::WHITE),
+                            RichText::new(format!(
+                                "{badge}  {} · {}",
+                                p.input_number(id),
+                                input.name
+                            ))
+                            .strong()
+                            .color(Color32::WHITE),
                         )
                         .truncate(),
                     );
@@ -1088,7 +1092,7 @@ impl RustMixApp {
                     && (needle.is_empty()
                         || i.name.to_lowercase().contains(&needle)
                         || i.kind.label().to_lowercase().contains(&needle)
-                        || i.id.0.to_string() == needle)
+                        || self.engine.project().input_number(i.id).to_string() == needle)
             })
             .cloned()
             .collect();
@@ -1163,7 +1167,7 @@ impl RustMixApp {
                                                                 egui::Label::new(
                                                                     RichText::new(format!(
                                                                         "{}   {}",
-                                                                        input.id.0, input.name
+                                                                        self.engine.project().input_number(input.id), input.name
                                                                     ))
                                                                     .size(11.0)
                                                                     .strong()

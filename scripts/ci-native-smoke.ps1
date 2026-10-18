@@ -16,17 +16,20 @@ function Invoke-NativeSmoke([string[]]$SmokeArguments) {
         }
         try {
             $process.Refresh()
-            $samples.Add([ordered]@{ elapsedMs = $timer.ElapsedMilliseconds; workingSetBytes = $process.WorkingSet64; peakWorkingSetBytes = $process.PeakWorkingSet64; privateBytes = $process.PrivateMemorySize64; cpuMs = $process.TotalProcessorTime.TotalMilliseconds })
+            $samples.Add([pscustomobject]@{ elapsedMs = $timer.ElapsedMilliseconds; workingSetBytes = $process.WorkingSet64; peakWorkingSetBytes = $process.PeakWorkingSet64; privateBytes = $process.PrivateMemorySize64; cpuMs = $process.TotalProcessorTime.TotalMilliseconds })
         } catch { if (-not $process.HasExited) { throw } }
         $null = $process.WaitForExit(500)
     }
     $process.WaitForExit()
     if ($samples.Count -eq 0) { throw 'Native memory sampler produced no evidence' }
     $measurementPath = Join-Path artifacts ($SmokeArguments[0].TrimStart('-') + '-memory.json')
+    $peakBytes = ($samples | ForEach-Object { $_.peakWorkingSetBytes } | Measure-Object -Maximum).Maximum
+    $privateBytes = ($samples | ForEach-Object { $_.privateBytes } | Measure-Object -Maximum).Maximum
+    if ($null -eq $peakBytes -or $peakBytes -le 0 -or $null -eq $privateBytes -or $privateBytes -le 0) { throw 'Missing positive process memory measurements' }
     [ordered]@{
         arguments = $SmokeArguments; elapsedMs = $timer.ElapsedMilliseconds
-        peakWorkingSetBytes = ($samples | Measure-Object -Property peakWorkingSetBytes -Maximum).Maximum
-        maxPrivateBytes = ($samples | Measure-Object -Property privateBytes -Maximum).Maximum
+        peakWorkingSetBytes = $peakBytes
+        maxPrivateBytes = $privateBytes
         samples = $samples
     } | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $measurementPath
     if ($process.ExitCode -ne 0) { throw "Native app exit code $($process.ExitCode)" }

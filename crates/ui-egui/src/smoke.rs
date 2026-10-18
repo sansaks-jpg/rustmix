@@ -1604,6 +1604,10 @@ mod tests {
         finish_media(&mut app);
         let id = app.engine.project().inputs[1].id;
         assert_eq!(id, InputId(8));
+        assert_eq!(app.engine.project().input_number(id), 2);
+        frame(&mut app, &ctx, key(egui::Key::Num2), [1600.0, 900.0]);
+        assert_eq!(app.engine.project().preview, id);
+        app.execute(Command::SelectPreview(InputId(2)));
         assert_eq!(app.engine.project().program, InputId(1));
         assert_eq!(app.engine.project().preview, InputId(2));
         app.dispatch(Action::Properties(id), &ctx);

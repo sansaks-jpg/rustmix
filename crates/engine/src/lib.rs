@@ -242,6 +242,12 @@ impl ProjectState {
     pub fn input(&self, id: InputId) -> Option<&InputState> {
         self.inputs.iter().find(|s| s.id == id)
     }
+    pub fn input_number(&self, id: InputId) -> usize {
+        self.inputs
+            .iter()
+            .position(|s| s.id == id)
+            .map_or(0, |index| index + 1)
+    }
     pub fn validate(&self) -> Result<()> {
         if self.schema != 2 {
             return Err(invalid(

@@ -24,6 +24,8 @@ fn input_assets_effects_and_order_survive_atomic_save() {
         .unwrap();
     let id = result.affected[0];
     assert_eq!(e.project().inputs[1].id, id);
+    assert_eq!(e.project().input_number(id), 2);
+    assert_eq!(e.project().input_number(InputId(2)), 3);
     assert_eq!(e.project().input(id).unwrap().config, config);
     assert_eq!(e.project().program, InputId(1));
     assert_eq!(e.project().preview, InputId(2));

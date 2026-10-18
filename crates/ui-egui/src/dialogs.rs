@@ -626,7 +626,7 @@ impl RustMixApp {
         let height = (ctx.viewport_rect().height() - 180.0).clamp(200.0, 540.0);
         operator_window(
             ctx,
-            format!("Input: {} {title_name}", id.0),
+            format!("Input: {} {title_name}", self.engine.project().input_number(id)),
             "dialog.input_properties",
             &mut open,
             Vec2::new(790.0, 580.0),
@@ -967,7 +967,7 @@ impl RustMixApp {
                                 .inputs
                                 .iter()
                                 .filter(|i| i.id != id)
-                                .map(|i| (i.id, format!("{}: {}", i.id.0, i.name)))
+                                .map(|i| (i.id, format!("{}: {}", app.engine.project().input_number(i.id), i.name)))
                                 .collect();
                             let fx = app.properties_fx.get_or_insert_default();
                             let selected_lbl = fx
@@ -2545,7 +2545,11 @@ impl RustMixApp {
                             "Output 4".to_owned(),
                         ];
                         for input in &self.engine.project().inputs {
-                            rows.push(format!("{}: {}", input.id.0, input.name));
+                            rows.push(format!(
+                                "{}: {}",
+                                self.engine.project().input_number(input.id),
+                                input.name
+                            ));
                         }
                         for (idx, label) in rows.into_iter().take(10).enumerate() {
                             let is_checked = self.mc_checked.get(idx).copied().unwrap_or(false);
@@ -2641,7 +2645,12 @@ impl RustMixApp {
                 .project()
                 .inputs
                 .iter()
-                .map(|i| (i.id, format!("{}   {}", i.id.0, i.name)))
+                .map(|i| {
+                    (
+                        i.id,
+                        format!("{}   {}", self.engine.project().input_number(i.id), i.name),
+                    )
+                })
                 .collect();
             ui.columns(3, |cols| {
                 if let [left_col, mid_col, right_col, ..] = cols {
@@ -2905,7 +2914,13 @@ impl RustMixApp {
             .engine
             .project()
             .input(id)
-            .map(|input| format!("input {} — {}", id.0, input.name))
+            .map(|input| {
+                format!(
+                    "input {} — {}",
+                    self.engine.project().input_number(id),
+                    input.name
+                )
+            })
             .unwrap_or_else(|| format!("input {}", id.0));
         let mut open = true;
         let mut cancel_clicked = false;

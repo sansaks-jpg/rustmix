@@ -114,7 +114,12 @@ impl ProgramWorker {
                     }
                 }
                 let now_ns = u64::try_from(origin.elapsed().as_nanos()).unwrap_or(u64::MAX);
-                std::thread::park_timeout(Duration::from_nanos(clock.wait_ns(now_ns).max(100_000)));
+                // Rust 1.94's Windows sleep uses a high-resolution waitable
+                // timer. park_timeout can round to the coarse Windows tick.
+                // No busy spin; bound shutdown/state-update latency to 10 ms.
+                std::thread::sleep(Duration::from_nanos(
+                    clock.wait_ns(now_ns).clamp(100_000, 10_000_000),
+                ));
             }
         });
         Self {
@@ -126,9 +131,6 @@ impl ProgramWorker {
     }
     pub fn submit(&self, snapshot: Snapshot) {
         self.pending.put(snapshot);
-        if let Some(thread) = &self.thread {
-            thread.thread().unpark();
-        }
     }
     pub fn take(&self) -> Option<std::result::Result<ProgramFrame, String>> {
         self.latest.take()
@@ -138,7 +140,6 @@ impl Drop for ProgramWorker {
     fn drop(&mut self) {
         self.stop.store(true, Ordering::Release);
         if let Some(thread) = self.thread.take() {
-            thread.thread().unpark();
             let _ = thread.join();
         }
     }
