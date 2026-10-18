@@ -427,3 +427,21 @@ Verified with headless runs only: `cargo test --workspace --locked` green - engi
 `cargo clippy --workspace --all-targets --locked -- -D warnings` clean;
 `pwsh scripts/check-repository.ps1` passes. Hosted native re-run is pending; no native result is
 claimed here.
+
+## 2026-10-18 - hosted native-smoke run 39128182424: main and input workflows green, reference reopen schema literal fixed (local headless run)
+
+The third hosted run completed the main native smoke end to end (all 47 stages: save/reopen,
+paused transport, all nine dialog captures), the input smoke and its reopen with pixels/Basic
+captures, and the first reference-smoke process. The failure moved to
+`--ui-reference-smoke-reopen`, which compared the loaded project's schema against the literal 4
+while the Task 1.1 port had moved the application to schema 5.
+
+Fix: the reopen expectation now compares `state.schema` with the engine's `SCHEMA` constant and
+lives in a testable `assert_reference_reopen`; a new headless regression applies the reference
+category/theme configuration, saves, loads and asserts the expectation for the current schema
+(UI 47 tests). No product behaviour changed.
+
+Verified with headless runs only: `cargo test --workspace --locked` green - engine 56 and UI 47;
+`cargo fmt --all -- --check` clean;
+`cargo clippy --workspace --all-targets --locked -- -D warnings` clean. Hosted native re-run is
+pending; no native result is claimed here.

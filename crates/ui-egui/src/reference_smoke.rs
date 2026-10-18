@@ -49,20 +49,7 @@ impl RustMixApp {
         }
         if reopen {
             let p = self.engine.project();
-            if p.schema != 4
-                || p.input(InputId(1)).is_none_or(|i| i.category != Some(0))
-                || p.preferences.ui_theme != UiTheme::Light
-                || p.preferences.preview_color != [80, 100, 200]
-                || p.preferences
-                    .categories
-                    .iter()
-                    .find(|c| c.id == 21)
-                    .is_none_or(|c| c.name != "Interview")
-            {
-                return Err(Error::Invalid(
-                    "Reference category/theme configuration did not reopen".into(),
-                ));
-            }
+            Self::assert_reference_reopen(p)?;
             if s.stage == 0 {
                 ctx.send_viewport_cmd(egui::ViewportCommand::Screenshot(egui::UserData::default()));
                 s.captured = false;
@@ -202,5 +189,62 @@ impl RustMixApp {
             _ => {}
         }
         Ok(())
+    }
+
+    /// Hosted reopen expectation for the reference workflow. It is shared with
+    /// the widget tests so a schema bump cannot silently break the native
+    /// reopen check again.
+    pub(crate) fn assert_reference_reopen(state: &ProjectState) -> Result<()> {
+        if state.schema != SCHEMA
+            || state
+                .input(InputId(1))
+                .is_none_or(|i| i.category != Some(0))
+            || state.preferences.ui_theme != UiTheme::Light
+            || state.preferences.preview_color != [80, 100, 200]
+            || state
+                .preferences
+                .categories
+                .iter()
+                .find(|c| c.id == 21)
+                .is_none_or(|c| c.name != "Interview")
+        {
+            return Err(Error::Invalid(
+                "Reference category/theme configuration did not reopen".into(),
+            ));
+        }
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
+    use super::*;
+
+    #[test]
+    fn reference_reopen_expectation_survives_the_current_schema_round_trip() {
+        let mut app = RustMixApp::headless();
+        let ctx = egui::Context::default();
+        let mut preferences = app.engine.project().preferences.clone();
+        preferences.ui_theme = UiTheme::Light;
+        preferences.preview_color = [80, 100, 200];
+        preferences.program_color = [100, 160, 50];
+        if let Some(c) = preferences.categories.iter_mut().find(|c| c.id == 21) {
+            c.name = "Interview".into();
+        }
+        app.dispatch(
+            Action::Engine(Command::ApplySettings {
+                name: app.engine.project().name.clone(),
+                preferences,
+            }),
+            &ctx,
+        );
+        app.execute(Command::SetInputCategory(InputId(1), Some(0)));
+        assert!(RustMixApp::assert_reference_reopen(app.engine.project()).is_ok());
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("reference.rustmix.json");
+        persistence::save(&path, app.engine.project()).unwrap();
+        let reopened = persistence::load(&path).unwrap();
+        assert!(RustMixApp::assert_reference_reopen(&reopened).is_ok());
     }
 }
