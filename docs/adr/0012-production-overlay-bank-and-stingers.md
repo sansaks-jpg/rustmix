@@ -1,7 +1,7 @@
 # ADR 0012: sixteen-channel production overlay bank and stinger exchange
 
 2026-10-18 · reference Task 1.1 port (production overlay model) · Implemented in source;
-local headless verification only, hosted acceptance pending.
+local headless verification plus hosted native acceptance in run 39129117131 (commit `f597c22`).
 
 The reference task list defines sixteen production overlay channels: standard channels `1–8`
 and stinger channels `9–16`, where each stinger carries its source input, a cut point and a
@@ -47,6 +47,14 @@ New engine tests cover channel classification, cut-point timing, zero-cut exchan
 explicit stop, atomic rejection paths, the 4→5 migration with preserved panels and original
 rollback bytes, F5 toggling channel 5 and the paint/no-paint split. The reference-coverage guard
 now reads the two channel constants instead of the removed fixed-size array.
+
+Verification (hosted): [run 39129117131](https://github.com/sansaks-jpg/rustmix/actions/runs/39129117131),
+commit `f597c22`, passed formatting, the repository guard, the locked check, warnings-as-errors
+clippy, all workspace tests (engine 56, UI 47), the release build, packaging and the full native
+smoke: nine dialog captures (including `overlay-settings-1600` with channels 1–8), paused
+transport, and byte-identical save/reopen pairs for the production, input and reference workflows.
+Hosted cadence samples still miss their 50/59.94/60 targets. No native stage configures or triggers
+a stinger channel; that model and exchange stay covered by engine tests.
 
 Remaining gaps: stinger clip compositing, stinger timing raster, per-channel effects/alpha/
 transforms, source-based standard channels and any vendor pixel/protocol parity remain

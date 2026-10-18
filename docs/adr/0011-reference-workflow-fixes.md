@@ -1,6 +1,8 @@
 # ADR 0011: functional category, search, appearance and file controls
 
-2026-10-18 · UI-013 · Implemented in source; hosted acceptance pending.
+2026-10-18 · UI-013 · Implemented in source; hosted native acceptance passed in run 39129117131
+(category, search, light-theme and audio-pane captures plus reopen). The slot-defined T-bar
+gesture remains covered by widget tests only.
 
 The second complete documentation review found generator-kind filters masquerading as input
 categories, an inline field instead of Input Search, discarded settings selections, synchronous

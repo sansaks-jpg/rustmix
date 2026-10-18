@@ -5,11 +5,11 @@ production bank — eight title-panel channels and eight stinger channels driven
 `overlay.stinger.set` / `overlay.stinger.trigger` / `overlay.stinger.stop`, with a cut-point
 Program/Preview exchange. Schemas 1–4 migrate on load and keep every authored panel and rollback
 byte. Stinger clip compositing is not implemented (no media renderer); the model, commands and
-exchange are real. See ADR 0012.
+exchange are real. Hosted native acceptance passed in run 39129117131. See ADR 0012.
 
 UI-013 source candidate: schema 4 categories/theme, atomic Settings, slot-defined T-Bar,
 real Input Search, temporary audio-pane visibility and worker snapshots. Unsupported scaffolds
-are explicitly unavailable. Hosted compile/tests/native captures are pending; see ADR 0011.
+are explicitly unavailable. Hosted compile/tests/native captures passed in run 39129117131; see ADR 0011.
 
 UI-012: `production` provides persisted transition slots and named playlists over stable input
 IDs, with explicit item hold/effect/duration, manual/loop/selected start and bounded progression.

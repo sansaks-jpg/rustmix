@@ -3,11 +3,12 @@
 Task 1.1 port: the switcher's overlay buttons are a live 4×2 grid
 (`switcher.overlay.{1..8}`), the source-tile strip assigns all eight channels, the Overlays panel
 and Overlay Settings dialog cover channels 1–8, and default F-keys run F1–F8. Stinger channels are
-configured on the engine but composite no clip yet. See ADR 0012.
+configured on the engine but composite no clip yet. Hosted native acceptance passed in run
+39129117131. See ADR 0012.
 
 UI-013 source candidate: schema 4 categories/theme, atomic Settings, slot-defined T-Bar,
 real Input Search, temporary audio-pane visibility and worker snapshots. Unsupported scaffolds
-are explicitly unavailable. Hosted compile/tests/native captures are pending; see ADR 0011.
+are explicitly unavailable. Hosted compile/tests/native captures passed in run 39129117131; see ADR 0011.
 
 UI-012: `controls` renders the engine-backed named playlist editor and staged keyboard mapping
 settings. Slot menus dispatch persisted effect/duration updates. Playlist Start/Stop/Next/Previous

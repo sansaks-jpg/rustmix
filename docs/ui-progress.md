@@ -445,3 +445,29 @@ Verified with headless runs only: `cargo test --workspace --locked` green - engi
 `cargo fmt --all -- --check` clean;
 `cargo clippy --workspace --all-targets --locked -- -D warnings` clean. Hosted native re-run is
 pending; no native result is claimed here.
+
+## 2026-10-18 - hosted native-smoke run 39129117131 passed: first fully green hosted run since UI-012
+
+The fourth hosted run of the branch ([39129117131](https://github.com/sansaks-jpg/rustmix/actions/runs/39129117131),
+commit `f597c22`) completed every step: formatting, repository guard, locked check,
+warnings-as-errors clippy, all workspace tests (engine 56, UI 47), release build, the full native
+smoke and packaging. This is the first hosted run to pass the native harness since run 39111788801
+(UI-012). The intervening failures were the file-job race, the exhausted frame budget and the
+hard-coded schema-4 reopen expectation, each fixed with a headless regression.
+
+Native evidence: the main smoke ran 26.1 s (the identical harness needed 253.7 s on the slower host
+of run 39127410065, which justified the raised budget); nine dialog captures (`add-input-1600`,
+`input-properties-1600`, `settings-1600`, `overlay-settings-1600` with channels 1-8,
+`recording-setup-1600`, `streaming-setup-1600`, `multicorder-1600`, `playlist-1600`,
+`shortcuts-1600`); paused transport; `reopen-ok.json`, `input-reopen-ok.json` and
+`reference-reopen-ok.json`; all seven `*-stderr.txt` files are 0 bytes; and the three save/reopen
+pairs (`smoke.rustmix.json`, `inputs.rustmix.json`, `reference.rustmix.json` versus their reopen
+captures) are byte-for-byte identical.
+
+Explicit non-claims: the three `--ui-perf` cadence samples still miss their targets on the hosted
+software rasteriser (41.9 fps at 50, 48.3 fps at 59.94, 42.4 fps at 60; 65/94/141 skipped frames) -
+`within_sample_target` is false in the uploaded `program-cadence.json`. No stinger clip rasteriser,
+per-channel effects, capture/audio/encoder backend, physical-device qualification or production
+readiness is implied. No native stinger stage exists; the stinger configuration/exchange stays
+covered by engine tests. No local build or launch was used for this entry; it records hosted
+evidence only.

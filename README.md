@@ -9,11 +9,20 @@ persisted transition slots with independent durations, twelve actual CPU effects
 playlists with per-item timing and manual/loop controls, and editable keyboard mappings under
 Settings → Shortcuts. The playlist gear configures the sequence; the adjacent button starts/stops
 it. Program state is acknowledged by the bounded producer instead of being overwritten on every
-UI repaint. Schema 5 (the Task 1.1 port) migrates schemas 1–4 and preserves backup bytes; older
-binaries cannot open newer schemas. Basic now has its own operator presentation instead of toggling Multiview. These
+UI repaint. Basic now has its own operator presentation instead of toggling Multiview. These
 changes are **experimental, functionally tested** in [Windows run 39111788801](https://github.com/sansaks-jpg/rustmix/actions/runs/39111788801):
 75 tests, five native processes, save/reopen and required screenshots passed. See the
 [feature comparison](docs/reference-feature-comparison.md) and [ADR 0009](docs/adr/0009-engine-owned-production-controls.md).
+
+The reference Task 1.1 port adds the schema-5 sixteen-channel overlay bank: eight title-panel
+channels and eight stinger channels with `overlay.stinger.*` commands and an exactly-once
+cut-point Program/Preview exchange. Stinger clips do not composite yet (no media renderer), and
+schemas 1–4 migrate on load while older binaries cannot open schema 5. This port is
+**experimental, functionally tested** in [Windows run 39129117131](https://github.com/sansaks-jpg/rustmix/actions/runs/39129117131):
+all workspace tests, the full native smoke (nine dialog captures, three byte-identical save/reopen
+pairs, empty native stderr) and packaging passed; hosted cadence targets still fail. See
+[ADR 0012](docs/adr/0012-production-overlay-bank-and-stingers.md) and the
+[complete audit](docs/reference-audit.md).
 
 **Full reference parity is not achieved.** The [complete reference audit](docs/reference-audit.md)
 covers all 30 observed areas and their input/effect/overlay/audio inventories. Run

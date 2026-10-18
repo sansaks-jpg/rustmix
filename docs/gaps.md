@@ -13,11 +13,11 @@ G01 still needs production-clock/output qualification; hosted 50/59.94/60 cadenc
 G02–G05, hardware/API/accessibility/endurance and full parity remain open.
 See [reference comparison](reference-feature-comparison.md) for capabilities not implemented here.
 
-Task 1.1 port (2026-10-18), local headless verification only: the schema-5 sixteen-channel
-overlay/stinger bank, `overlay.stinger.*` commands, exactly-once cut-point Program/Preview
-exchange and the channels 1-8 UI are implemented and covered by engine/UI tests. Stinger clip
-compositing, `display_underneath_overlays` rasterisation and per-channel effects/timing remain
-open (G20); a hosted native run of this port had not passed when this entry was written.
+Task 1.1 port (2026-10-18): the schema-5 sixteen-channel overlay/stinger bank,
+`overlay.stinger.*` commands, exactly-once cut-point Program/Preview exchange and the channels
+1-8 UI are implemented and covered by engine/UI tests; hosted native acceptance passed in run
+39129117131. Stinger clip compositing, `display_underneath_overlays` rasterisation and
+per-channel effects/timing remain open (G20).
 
 UI-009 audit (2026-10-18): the UI-008 GPU/output labels were not evidence of media backends. Composition/effects are CPU reference code, wgpu presents UI textures, recording/stream/external start paths were counter simulations, and real video decode/audio/hardware output remain absent. UI-009 prevents false live output state and repairs existing transport/composition/layout paths. It does not close G01–G05 or establish production readiness.
 
