@@ -906,6 +906,7 @@ mod tests {
         let mut app = RustMixApp::headless();
         let ctx = egui::Context::default();
         app.theme(&ctx);
+        app.execute(Command::SetInputsPaused(true));
         for size in [
             [1600.0, 900.0],
             [1920.0, 1080.0],
@@ -985,6 +986,26 @@ mod tests {
             assert!(app.warning);
             assert!(!app.rec_active && !app.stream_active && !app.external_active);
         }
+    }
+
+    #[test]
+    fn global_pause_reuses_surfaces_and_removed_ids_cannot_reuse_old_images() {
+        let mut app = RustMixApp::headless();
+        let ctx = egui::Context::default();
+        app.now = 1250;
+        app.execute(Command::SetInputsPaused(true));
+        app.refresh_textures(&ctx);
+        let stamp = app.last_demo_frame;
+        app.now = 5000;
+        app.engine.tick(app.now);
+        app.refresh_textures(&ctx);
+        assert_eq!(stamp, app.last_demo_frame);
+        let id = app.engine.project().inputs.last().unwrap().id;
+        app.input_fx.entry(id).or_default().custom_rgba = Some((1, 1, vec![[255, 0, 0, 255]]));
+        app.input_fx.entry(InputId(1)).or_default().pip_source = Some(id);
+        app.execute(Command::RemoveInput(id));
+        assert!(!app.input_fx.contains_key(&id));
+        assert!(app.input_fx.get(&InputId(1)).unwrap().pip_source.is_none());
     }
 
     #[test]

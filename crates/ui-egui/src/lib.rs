@@ -951,6 +951,16 @@ impl RustMixApp {
             Ok(_) => self.say(format!("{label} completed"), false),
             Err(e) => self.say(e.to_string(), true),
         }
+        self.input_fx
+            .retain(|id, _| self.engine.project().input(*id).is_some());
+        for fx in self.input_fx.values_mut() {
+            if fx
+                .pip_source
+                .is_some_and(|id| self.engine.project().input(id).is_none())
+            {
+                fx.pip_source = None;
+            }
+        }
         self.last_demo_frame = None;
     }
 
@@ -1067,6 +1077,7 @@ impl RustMixApp {
                             let layout = engine.project().workspace.dock_json.clone();
                             self.reset_editors();
                             self.engine = engine;
+                            self.input_fx.clear();
                             self.last_demo_frame = None;
                             self.theme(ctx);
                             self.path = Some(path);

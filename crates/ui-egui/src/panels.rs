@@ -175,7 +175,32 @@ impl RustMixApp {
         {
             return;
         }
-        let frame = self.engine.project().preferences.rate.frame_at(self.now);
+        use std::hash::{Hash, Hasher};
+        let mut stamp = std::collections::hash_map::DefaultHasher::new();
+        let project = self.engine.project();
+        project.revision.hash(&mut stamp);
+        for input in &project.inputs {
+            let ms = self
+                .engine
+                .playback(input.id)
+                .map_or(0, |clock| clock.position_ms());
+            project.preferences.rate.frame_at(ms).hash(&mut stamp);
+        }
+        let black = self.engine.black_level();
+        let black_state = if black <= 0.0 {
+            0_u8
+        } else if black >= 1.0 {
+            1
+        } else {
+            2
+        };
+        black_state.hash(&mut stamp);
+        let automatic = self.engine.transition().is_some_and(|t| !t.manual) || black_state == 2;
+        automatic.hash(&mut stamp);
+        if automatic {
+            project.preferences.rate.frame_at(self.now).hash(&mut stamp);
+        }
+        let frame = stamp.finish();
         if self.last_demo_frame == Some(frame) {
             return;
         }
@@ -1772,6 +1797,7 @@ impl RustMixApp {
                         {
                             self.reset_editors();
                             self.engine = Engine::default();
+                            self.input_fx.clear();
                             self.dock = default_dock(false);
                             self.path = None;
                             self.saved_revision = 0;
