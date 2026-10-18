@@ -791,6 +791,19 @@ impl RustMixApp {
 
     /// Decode an image file from disk into a 384x216 RGBA8 buffer for real-time GPU upload.
     pub(crate) fn load_image_into_input(&mut self, id: InputId, path: &Path) -> bool {
+        if path
+            .extension()
+            .and_then(|e| e.to_str())
+            .is_none_or(|e| !e.eq_ignore_ascii_case("png"))
+            || !std::fs::metadata(path).is_ok_and(|m| m.is_file() && m.len() <= 32 * 1024 * 1024)
+        {
+            self.say(
+                "Only existing PNG images up to 32 MB are supported; video decoding is unavailable"
+                    .into(),
+                true,
+            );
+            return false;
+        }
         if let Ok(img) = image::open(path) {
             let resized = img
                 .resize_exact(384, 216, image::imageops::FilterType::Triangle)
@@ -810,9 +823,7 @@ impl RustMixApp {
             self.last_demo_frame = None;
             true
         } else {
-            let fx = self.input_fx.entry(id).or_default();
-            fx.media_path = Some(path.display().to_string());
-            self.last_demo_frame = None;
+            self.say("Unable to decode PNG; current source retained".into(), true);
             false
         }
     }
@@ -1148,6 +1159,15 @@ impl RustMixApp {
             Action::CheckpointNow => self.start_save(false, true),
             Action::Add => {
                 self.add_number = self.engine.project().inputs.len() + 1;
+                self.add_tab = match self.add_kind {
+                    InputKind::Grid => 0,
+                    InputKind::Geometry => 3,
+                    InputKind::Studio => 4,
+                    InputKind::Bars => 6,
+                    InputKind::Color => 11,
+                    InputKind::Graphics => 14,
+                    InputKind::Countdown => 15,
+                };
                 self.add_open = true;
             }
             Action::Properties(id) => {
@@ -1509,8 +1529,8 @@ impl RustMixApp {
             }
             let caret = caret_menu_button(ui, 24.0, |ui| {
                 for (idx, (label, kind)) in [
-                    ("Video", InputKind::Grid),
-                    ("Camera", InputKind::Geometry),
+                    ("Generators / PNG", InputKind::Grid),
+                    ("Moving shapes", InputKind::Geometry),
                     ("Colour / Bars", InputKind::Bars),
                     ("Title / XAML", InputKind::Graphics),
                     ("Virtual Set", InputKind::Studio),

@@ -733,11 +733,16 @@ impl RustMixApp {
                         ui.horizontal(|ui| {
                             ui.spacing_mut().item_spacing.x = 2.0;
                             let enabled = self.engine.enabled(&Command::Transition(kind));
-                            let btn = ui.add_enabled(
-                                enabled.is_ok(),
-                                egui::Button::new(RichText::new(slot_name).strong().size(11.5))
-                                    .min_size(egui::vec2(center - 22.0, 25.0)),
-                            );
+                            let implemented = matches!(slot_name, "Fade" | "Wipe");
+                            let btn = ui
+                                .add_enabled(
+                                    enabled.is_ok() && implemented,
+                                    egui::Button::new(RichText::new(slot_name).strong().size(11.5))
+                                        .min_size(egui::vec2(center - 22.0, 25.0)),
+                                )
+                                .on_disabled_hover_text(
+                                    "Choose Fade or Wipe; this transition has no implementation",
+                                );
                             if slot_idx == 0 {
                                 self.automation.insert("switcher.fade".into(), btn.rect);
                             } else if slot_idx == 2 {
@@ -758,7 +763,13 @@ impl RustMixApp {
                                     "CrossZoom",
                                 ] {
                                     if ui
-                                        .selectable_label(slot_name == candidate, candidate)
+                                        .add_enabled(
+                                            matches!(candidate, "Fade" | "Wipe"),
+                                            egui::Button::selectable(
+                                                slot_name == candidate,
+                                                candidate,
+                                            ),
+                                        )
                                         .clicked()
                                     {
                                         if let Some(slot_ref) =

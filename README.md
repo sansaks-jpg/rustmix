@@ -28,7 +28,7 @@ cargo build --release --workspace --locked
 
 Seven synthetic inputs are available on launch. Select an input thumbnail to change Preview. Space cuts, Enter fades, and the T-Bar scrubs a manual crossfade. The source exchange commits at completion; cancel returns to the original Program. B fades to black / restores. F1–F4 toggle Program overlays. Text editing suppresses switching shortcuts.
 
-Add Input supports seven procedural types. Per-tile Cut explicitly takes that source to Program. Per-tile 1–4 buttons use its name as a lower-third title, rather than overlaying the full video input. Quick Play cuts the already animating synthetic Preview; Pause Inputs freezes procedural video while transitions remain responsive. Input Edit opens rename, color, type and online/offline properties. Removing Program/Preview or editing sources during a transition is rejected explicitly. Offline inputs render black and stay in the project with a warning.
+Add Input supports seven procedural types and PNG images. Unsupported device/network/media categories are disabled; no MP4 or other video decoder is present. Generator samples are named as generators, and unsupported files cannot silently become synthetic inputs. Per-tile Cut explicitly takes that source to Program. Per-tile 1–4 buttons use its name as a lower-third title, rather than overlaying the full video input. Quick Play cuts the already animating synthetic Preview; Pause Inputs freezes procedural video while transitions remain responsive. Input Edit opens rename, color, type and online/offline properties. Removing Program/Preview or editing sources during a transition is rejected explicitly. Offline inputs render black and stay in the project with a warning.
 
 The source selector now groups seven implemented procedural generators alongside explicitly disabled media/device categories. Input Properties separates General, live simulated Audio routing, and read-only Status; source removal requires confirmation. Settings groups display, appearance, workspace and shortcuts with a draft Apply/Cancel flow for project preferences and layout presets. Checkpoint recovery runs when requested; live simulated audio changes apply immediately. This follow-up UI work still requires new hosted Windows native screenshots and tests before it can be considered verified; previous CI evidence refers to the earlier layout.
 
@@ -40,7 +40,7 @@ Save / Save As writes versioned `.rustmix.json` project JSON with the panel layo
 
 Canvas resolution is a project preference; the UI demo raster is capped at 640×360 and source previews at 384×216. CPU demo generation time and UI callback FPS are measured; they are not broadcast output, encoder, GPU or end-to-end latency metrics.
 
-UI-004 through UI-006 refine the broadcast operator workflow across all four bounded dialogs (`Add Input`, `Input Properties`, `Settings`, and `Overlay Settings`): left-aligned sidebar navigation with procedural vector icons, fixed Apply/Cancel footers, staged per-slot `Overlay Settings` with a normalized 16:9 placement preview, visual shortcut keycap cards, direct per-input audio routing shortcuts (`⚙` on mixer strips and `"Audio Settings…"` on Input Properties), toolbar dropdown carets (`Open ▼`, `Save As ▼`, `Settings ▼`), graduated vertical T-Bar scale marks, broadcast-dark dock tabs, and `Multiview` Split/Grid layout presets.
+UI-004 through UI-006 refine the broadcast operator workflow across all four bounded dialogs (`Add Input`, `Input Properties`, `Settings`, and `Overlay Settings`): left-aligned sidebar navigation with procedural vector icons, fixed Apply/Cancel footers, staged per-slot `Overlay Settings` with a normalized 16:9 placement preview, visual shortcut keycap cards, direct per-input audio routing shortcuts (`⚙` on mixer strips and `"Audio Settings…"` on Input Properties), toolbar dropdown carets (`Open ▼`, `Save As ▼`, `Settings ▼`), graduated horizontal T-Bar scale marks, broadcast-dark dock tabs, and `Multiview` Split/Grid layout presets.
 
 ## Documentation
 
@@ -49,4 +49,3 @@ UI-004 through UI-006 refine the broadcast operator workflow across all four bou
 - [ADR 0001](docs/adr/0001-native-demo-ui.md), [ADR 0004](docs/adr/0004-main-window-control-fidelity.md), [ADR 0005](docs/adr/0005-overlay-and-reference-dialogs.md), [licensing](docs/licensing.md)
 
 No production readiness, hardware support, GPU compositor parity, long-run timing or live output continuity is claimed.
-

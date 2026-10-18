@@ -1009,6 +1009,63 @@ mod tests {
     }
 
     #[test]
+    fn unsupported_media_does_not_create_input_or_replace_image_state() {
+        let mut app = RustMixApp::headless();
+        let ctx = egui::Context::default();
+        app.theme(&ctx);
+        let id = InputId(1);
+        let original = vec![[120, 20, 10, 255]];
+        app.input_fx.entry(id).or_default().custom_rgba = Some((1, 1, original.clone()));
+        assert!(!app.load_image_into_input(id, Path::new("missing-video.mp4")));
+        assert_eq!(
+            app.input_fx
+                .get(&id)
+                .unwrap()
+                .custom_rgba
+                .as_ref()
+                .unwrap()
+                .2,
+            original
+        );
+        let size = [1600.0, 900.0];
+        app.dispatch(Action::Add, &ctx);
+        app.add_name = "missing-video.mp4".into();
+        for _ in 0..3 {
+            frame(&mut app, &ctx, vec![], size);
+        }
+        let count = app.engine.project().inputs.len();
+        click(&mut app, &ctx, "dialog.add.confirm", size);
+        assert_eq!(app.engine.project().inputs.len(), count);
+        assert!(app.add_open && app.warning);
+    }
+
+    #[test]
+    fn png_pixels_reach_program_and_offline_sources_stay_black() {
+        let folder = tempfile::tempdir().unwrap();
+        let file = folder.path().join("source.png");
+        image::save_buffer(&file, &[120, 20, 10, 255], 1, 1, image::ColorType::Rgba8).unwrap();
+        let mut app = RustMixApp::headless();
+        let ctx = egui::Context::default();
+        let id = app.engine.project().program;
+        assert!(app.load_image_into_input(id, &file));
+        app.refresh_textures(&ctx);
+        assert!(
+            app.last_program_rgba
+                .chunks_exact(4)
+                .all(|pixel| pixel == [120, 20, 10, 255])
+        );
+        let mut input = app.engine.project().input(id).unwrap().clone();
+        input.online = false;
+        app.execute(Command::UpdateInput(input));
+        app.refresh_textures(&ctx);
+        assert!(
+            app.last_program_rgba
+                .chunks_exact(4)
+                .all(|pixel| pixel == [0, 0, 0, 255])
+        );
+    }
+
+    #[test]
     fn dragging_a_panel_tab_changes_docking_and_roundtrips() {
         let mut app = RustMixApp::headless();
         let ctx = egui::Context::default();

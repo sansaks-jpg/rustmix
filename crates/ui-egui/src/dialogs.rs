@@ -173,7 +173,11 @@ fn position_label(position: Position) -> &'static str {
 }
 
 const ADD_CATEGORIES: [(&str, InputKind, &str); 20] = [
-    ("Video", InputKind::Grid, "Select the Video file to open."),
+    (
+        "Generators / PNG",
+        InputKind::Grid,
+        "Choose a procedural source or PNG image.",
+    ),
     (
         "DVD",
         InputKind::Bars,
@@ -185,14 +189,14 @@ const ADD_CATEGORIES: [(&str, InputKind, &str); 20] = [
         "Select the Video List or playlist items.",
     ),
     (
-        "Camera",
+        "Moving shapes",
         InputKind::Geometry,
-        "Select the Camera device and capture format.",
+        "Procedural moving shapes; no camera device is opened.",
     ),
     (
-        "NDI / Desktop Capture",
+        "Studio pattern",
         InputKind::Studio,
-        "Select an NDI source or local Desktop Capture.",
+        "Procedural studio pattern; no network capture is opened.",
     ),
     (
         "SRT",
@@ -200,9 +204,9 @@ const ADD_CATEGORIES: [(&str, InputKind, &str); 20] = [
         "Configure SRT Listener / Caller input stream.",
     ),
     (
-        "Stream / OMT",
+        "Reference bars",
         InputKind::Bars,
-        "Select network Stream / RTSP / RTMP source.",
+        "Procedural reference bars.",
     ),
     (
         "Instant Replay",
@@ -271,35 +275,14 @@ const ADD_CATEGORIES: [(&str, InputKind, &str); 20] = [
     ),
 ];
 
-const SAMPLE_VIDEO_FILES: [(&str, InputKind); 7] = [
-    (
-        "C:\\Broadcast\\Media\\Opening_Bumper_1080p.mp4",
-        InputKind::Grid,
-    ),
-    (
-        "C:\\Broadcast\\Media\\Camera_B_ISO_Feed.mp4",
-        InputKind::Geometry,
-    ),
-    (
-        "C:\\Broadcast\\Media\\SMPTE_Reference_Bars.mp4",
-        InputKind::Bars,
-    ),
-    (
-        "C:\\Broadcast\\Media\\LowerThird_Headline_Overlay.mp4",
-        InputKind::Graphics,
-    ),
-    (
-        "C:\\Broadcast\\Media\\Newsroom_VirtualSet_Wide.mp4",
-        InputKind::Studio,
-    ),
-    (
-        "C:\\Broadcast\\Media\\Solid_Slate_Backplate.mp4",
-        InputKind::Color,
-    ),
-    (
-        "C:\\Broadcast\\Media\\Countdown_60s_Clock.mp4",
-        InputKind::Countdown,
-    ),
+const GENERATOR_SAMPLES: [(&str, InputKind); 7] = [
+    ("Motion grid", InputKind::Grid),
+    ("Moving shapes", InputKind::Geometry),
+    ("Reference bars", InputKind::Bars),
+    ("Lower third graphic", InputKind::Graphics),
+    ("Studio pattern", InputKind::Studio),
+    ("Colour gradient", InputKind::Color),
+    ("Countdown 60 seconds", InputKind::Countdown),
 ];
 
 impl RustMixApp {
@@ -418,7 +401,9 @@ impl RustMixApp {
                     ui.spacing_mut().item_spacing.y = 1.0;
                     for (idx, (label, kind, _)) in ADD_CATEGORIES.into_iter().enumerate() {
                         let active = app.add_tab == idx && app.add_kind == kind;
-                        let r = sidebar_row(ui, active, label, 21.0, Some(idx));
+                        let supported = matches!(idx, 0 | 3 | 4 | 6 | 11 | 14 | 15);
+                        let r = ui.add_enabled_ui(supported, |ui| sidebar_row(ui, active, label, 21.0, Some(idx))).inner
+                            .on_disabled_hover_text("Unavailable: no media/device backend for this source type");
                         if matches!(idx, 0 | 3 | 4 | 6 | 11 | 14 | 15) {
                             app.automation
                                 .insert(format!("dialog.add.kind.{kind:?}"), r.rect);
@@ -441,13 +426,14 @@ impl RustMixApp {
                         .show(ui, |ui| {
                             ui.set_min_width((ui.available_width() - 2.0).max(80.0));
                             ui.label(RichText::new(banner_text).color(Color32::WHITE).size(15.0));
+                            ui.label(RichText::new("Synthetic sources / PNG only · video and capture backends unavailable").size(10.5).color(DIM));
                         });
                     light_form_frame(ui, 10, |ui| {
                         ui.horizontal(|ui| {
                             ui.add_sized(
                                 [48.0, 22.0],
                                 egui::Label::new(
-                                    RichText::new("Video").color(FORM_TEXT).size(12.0),
+                                    RichText::new("Source").color(FORM_TEXT).size(12.0),
                                 ),
                             );
                             let text_w = (ui.available_width() - 94.0).max(120.0);
@@ -465,8 +451,8 @@ impl RustMixApp {
                                 let picked = if app.smoke.is_none() {
                                     rfd::FileDialog::new()
                                         .add_filter(
-                                            "Media & Images",
-                                            &["png", "jpg", "jpeg", "bmp", "webp", "mp4", "mkv"],
+                                            "PNG image",
+                                            &["png"],
                                         )
                                         .pick_file()
                                 } else {
@@ -474,16 +460,6 @@ impl RustMixApp {
                                 };
                                 if let Some(path) = picked {
                                     app.add_name = path.display().to_string();
-                                } else {
-                                    let sample = SAMPLE_VIDEO_FILES
-                                        .iter()
-                                        .find(|(_, k)| *k == app.add_kind)
-                                        .copied()
-                                        .unwrap_or((
-                                            "C:\\Broadcast\\Media\\Opening_Bumper_1080p.mp4",
-                                            InputKind::Grid,
-                                        ));
-                                    app.add_name = sample.0.into();
                                 }
                             }
                         });
@@ -498,13 +474,13 @@ impl RustMixApp {
                                     .show(left_col, |ui| {
                                         ui.set_min_height(155.0);
                                         ui.label(
-                                            RichText::new("Recent Media & Procedural Generators")
+                                            RichText::new("Procedural generators")
                                                 .size(11.0)
                                                 .strong()
                                                 .color(FORM_TEXT),
                                         );
                                         ui.separator();
-                                        for (path, kind) in SAMPLE_VIDEO_FILES {
+                                        for (path, kind) in GENERATOR_SAMPLES {
                                             let selected =
                                                 app.add_kind == kind && app.add_name == path;
                                             let r = ui.selectable_label(
@@ -540,7 +516,7 @@ impl RustMixApp {
                                     ui.add_space(4.0);
                                     ui.label(
                                         RichText::new(format!(
-                                            "Generator: {:?} (1920x1080 29.97p)",
+                                            "Generator: {:?} · 384x216 preview",
                                             app.add_kind
                                         ))
                                         .size(11.0)
@@ -624,20 +600,13 @@ impl RustMixApp {
                                     .saturating_add(1),
                             );
                             let candidate_path = std::path::PathBuf::from(self.add_name.trim());
-                            let display_name = candidate_path
-                                .file_stem()
-                                .and_then(|s| s.to_str())
-                                .filter(|_| candidate_path.exists())
-                                .map(str::to_owned)
-                                .unwrap_or_else(|| self.add_name.clone());
-                            self.actions.push(Action::Engine(Command::AddInput {
-                                name: display_name,
-                                kind: self.add_kind,
-                            }));
-                            if candidate_path.exists() {
-                                self.load_image_into_input(next_id, &candidate_path);
+                            let file_source = candidate_path.exists() || candidate_path.extension().and_then(|e| e.to_str()).is_some_and(|e| matches!(e.to_ascii_lowercase().as_str(), "png" | "jpg" | "jpeg" | "bmp" | "webp" | "mp4" | "mkv" | "mov" | "avi" | "webm" | "wav" | "mp3"));
+                            if !file_source || self.load_image_into_input(next_id, &candidate_path) {
+                                let display_name = if file_source { candidate_path.file_stem().and_then(|s| s.to_str()).unwrap_or("PNG image").to_owned() } else { self.add_name.clone() };
+                                self.actions.push(Action::Engine(Command::AddInput { name: display_name, kind: self.add_kind }));
+                                close_requested = true;
                             }
-                            close_requested = true;
+
                         }
                     }
                 });
@@ -737,7 +706,7 @@ impl RustMixApp {
                                     .get(&id)
                                     .and_then(|f| f.media_path.as_deref())
                                     .map(str::to_owned)
-                                    .unwrap_or_else(|| format!("{}.mp4", draft.name));
+                                    .unwrap_or_else(|| format!("{} · synthetic {}", draft.name, draft.kind.label()));
                                 ui.label(
                                     RichText::new(path_lbl)
                                         .color(Color32::WHITE)
@@ -753,8 +722,8 @@ impl RustMixApp {
                                         && app.smoke.is_none()
                                         && let Some(path) = rfd::FileDialog::new()
                                             .add_filter(
-                                                "Images",
-                                                &["png", "jpg", "jpeg", "bmp", "webp"],
+                                                "PNG image",
+                                                &["png"],
                                             )
                                             .pick_file()
                                     {
@@ -923,8 +892,8 @@ impl RustMixApp {
 
                                             for (k, v) in [
                                                 ("Source Aspect Ratio", "Widescreen"),
-                                                ("Resolution", "1920x1080"),
-                                                ("Frame Rate", "29.97p"),
+                                                ("Preview resolution", "384x216 (demo)"),
+                                                ("Program resolution", "640x360 (demo)"),
                                                 ("Deinterlacing", "None"),
                                             ] {
                                                 ui.label(
