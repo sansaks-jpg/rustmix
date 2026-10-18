@@ -9,8 +9,8 @@ persisted transition slots with independent durations, twelve actual CPU effects
 playlists with per-item timing and manual/loop controls, and editable keyboard mappings under
 Settings → Shortcuts. The playlist gear configures the sequence; the adjacent button starts/stops
 it. Program state is acknowledged by the bounded producer instead of being overwritten on every
-UI repaint. Schema 3 migrates schemas 1/2 and preserves backup bytes; older binaries cannot open
-schema 3. Basic now has its own operator presentation instead of toggling Multiview. These
+UI repaint. Schema 5 (the Task 1.1 port) migrates schemas 1–4 and preserves backup bytes; older
+binaries cannot open newer schemas. Basic now has its own operator presentation instead of toggling Multiview. These
 changes are **experimental, functionally tested** in [Windows run 39111788801](https://github.com/sansaks-jpg/rustmix/actions/runs/39111788801):
 75 tests, five native processes, save/reopen and required screenshots passed. See the
 [feature comparison](docs/reference-feature-comparison.md) and [ADR 0009](docs/adr/0009-engine-owned-production-controls.md).
@@ -67,4 +67,4 @@ UI-004 through UI-006 refine the broadcast operator workflow across all four bou
 
 No production readiness, hardware support, GPU compositor parity, long-run timing or live output continuity is claimed.
 
-UI-010 adds persisted PNG references and processing settings, ordered insertion, source duplication, transactional Input Settings and bounded asynchronous PNG loading. These descriptors were introduced in schema 2; schemas 1/2 now migrate to schema 3, which older builds cannot open. Images remain external references: keep the original files available. Missing images retain their input and show black with a relink warning. This input workflow passed hosted acceptance and is included in the current schema 3 test run; see docs/ui-progress.md.
+UI-010 adds persisted PNG references and processing settings, ordered insertion, source duplication, transactional Input Settings and bounded asynchronous PNG loading. These descriptors were introduced in schema 2; schemas 1/2 migrate through the current chain to schema 5, which older builds cannot open. Images remain external references: keep the original files available. Missing images retain their input and show black with a relink warning. This input workflow passed hosted acceptance and is included in the current schema-5 test runs; see docs/ui-progress.md.

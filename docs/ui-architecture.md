@@ -22,7 +22,7 @@ Demo source IDs remain stable across rename/save/reopen. Program/Preview are dif
 
 Audio simulation is a pure function of time and channel ID. Input mute gates every send, input solo excludes nonsolo inputs, bus gains/mute/solo gate bus meters. It is not an audio callback, sample mixer, limiter, compliant loudness meter or audio-follow-video implementation.
 
-Project IO now uses schema4 JSON with schema1/2/3 migration (UI-013), a 1 MiB bound, finite numeric validation, 2–32 inputs, short strings and known formats/rates. Save writes/syncs a same-directory tempfile, validates a JSON roundtrip, journals and atomically replaces. Two previous generations are retained. Invalid existing files are not overwritten. Paths stay out of operator logs. Bounded background jobs retain the current project on errors.
+Project IO now uses schema5 JSON with schema1–4 migration (Task 1.1 port; UI-013 added categories/theme), a 1 MiB bound, finite numeric validation, 2–32 inputs, short strings and known formats/rates. Save writes/syncs a same-directory tempfile, validates a JSON roundtrip, journals and atomically replaces. Two previous generations are retained. Invalid existing files are not overwritten. Paths stay out of operator logs. Bounded background jobs retain the current project on errors.
 
 Automation: command buttons, source thumbnail selection, overlay toggles and audio faders publish stable IDs/bounds to an internal registry. The opt-in `--ui-smoke` native harness injects egui events, checks engine state and requests real GPU screenshots. JSON exposes the active revision and resulting source IDs. There is no general-purpose remote UI endpoint yet; full per-widget coverage remains a gap.
 

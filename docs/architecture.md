@@ -2,8 +2,8 @@
 
 UI-012: `engine::production` owns transition slots, named playlists and bounded automatic input
 sequencing; `engine::shortcuts` owns portable binding validation and typed action resolution.
-The UI stages keyboard preferences and dispatches playlist commands. Project schema 3 stores
-configuration only. The existing Program producer acknowledges its engine state with a control
+The UI stages keyboard preferences and dispatches playlist commands. Project schema 5 stores
+configuration only (the sixteen-channel overlay/stinger bank since the Task 1.1 port). The existing Program producer acknowledges its engine state with a control
 generation; the UI reads that state before commands and does not resubmit snapshots every paint.
 Old-generation frames cannot undo newer controls. The Basic/Advanced flag is UI presentation
 stored separately from project/engine state and multiview selection; it does not publish a new

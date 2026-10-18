@@ -1,5 +1,10 @@
 # rustmix-ui
 
+Task 1.1 port: the switcher's overlay buttons are a live 4×2 grid
+(`switcher.overlay.{1..8}`), the source-tile strip assigns all eight channels, the Overlays panel
+and Overlay Settings dialog cover channels 1–8, and default F-keys run F1–F8. Stinger channels are
+configured on the engine but composite no clip yet. See ADR 0012.
+
 UI-013 source candidate: schema 4 categories/theme, atomic Settings, slot-defined T-Bar,
 real Input Search, temporary audio-pane visibility and worker snapshots. Unsupported scaffolds
 are explicitly unavailable. Hosted compile/tests/native captures are pending; see ADR 0011.

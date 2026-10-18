@@ -13,7 +13,7 @@ Features remain experimental and performance/full-reference qualification did no
 | Reference workflow | Current RustMix scope | UI-012 change / remaining gap |
 |---|---|---|
 | Preview, Program, Cut, manual T-Bar | Independent buses and explicit takes | Preserved; operator takeover stops playlist automation |
-| Four configurable transition slots | Former UI-only names with shared duration | Persisted independent effects/durations; twelve actual CPU effects including Cut; 3D/Merge/stingers absent |
+| Four configurable transition slots | Former UI-only names with shared duration | Persisted independent effects/durations; twelve actual CPU effects including Cut; 3D/Merge and stinger effect rasters absent (a stinger channel only exchanges buses at its cut point) |
 | Named playlists over current inputs | Former temporary UI sequence | Add/rename/delete, add/remove/reorder references, per-item hold/effect/time, selected start, loop/manual, start/stop/previous/next, offline alarm, project persistence |
 | Keyboard shortcuts and command families | Former fixed keys and enable switch | Editable persisted key/action/modifier rows; conflict validation, exact modifiers, repeat/focus guards; MIDI/control surfaces/API/scripting absent |
 | Basic / Advanced mode | Former Basic-to-Multiview alias | Independent persisted presentation state and reduced controls; buses/revision/multiview preservation tests and native Basic capture passed; global mode restore has source coverage only |
@@ -21,13 +21,13 @@ Features remain experimental and performance/full-reference qualification did no
 | Local media/stills | Bounded PNG files and seven procedural sources | No general video/audio decoding, playlist seek or file-duration inference |
 | Device/network inputs | No backend | Webcam, capture card, desktop capture, RTSP/SRT/NDI/OMT/browser/guest inputs remain absent |
 | Audio Master + A–G, DSP, mix-minus | Master/A/B simulated controls and meters | Real samples/devices/routing/DSP and larger bus graph remain absent |
-| Sixteen overlay channels / key-fill | Four title panels plus input PIP/keying | Stingers, template animation, full-frame overlay channels and key/fill remain absent |
+| Sixteen overlay channels / key-fill | Eight title-panel channels plus eight stinger channels (configured input, cut point, display-underneath) inside the schema-5 bank, plus input PIP/keying | Task 1.1 port added the 16-channel bank, `overlay.stinger.*` commands and the cut-point Program/Preview exchange; stinger clip compositing, template animation, full-frame overlay channels and key/fill remain absent |
 | Multiview and outputs | In-app monitor/grid layouts | Independent monitor outputs, SDI, virtual camera and network outputs remain absent |
 | Record / Stream / MultiCorder | Disabled unavailable actions | Encoders, file recovery and network streaming remain absent |
 | Replay and ISO | No backend | Storage, replay transport and clip export remain absent |
 | Titles, data sources and virtual sets | Procedural graphics, title panels, PIP | No GT/proprietary templates, data connectors or virtual-set asset packages |
 | PTZ, tally, MIDI, voice | No backend | Hardware/license/protocol-specific work remains absent |
-| Presets, saved preferences and recovery | Own RustMix format | Schema 3; migrate 1/2, retain original backups; no `.vmix` compatibility claim |
+| Presets, saved preferences and recovery | Own RustMix format | Schema 5 migrates 1–4, retaining original backups and every authored overlay panel; no `.vmix` compatibility claim |
 | Diagnostics / production qualification | Existing measured prototype counters | Worker acknowledgment regressions passed; hosted cadence targets failed; device-loss, AV sync and endurance remain open |
 
 The public [playlist guide](https://hwww.vmix.com/help29/playlist.html) supports per-item durations,

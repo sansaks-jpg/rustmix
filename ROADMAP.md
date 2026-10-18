@@ -1,5 +1,11 @@
 # Roadmap
 
+- Task 1.1 port (reference → rustmix): sixteen-channel overlay bank — eight title-panel channels
+  and eight stinger channels (configured input, cut point, display-underneath) — with schema 5 and
+  1–4 migration, `overlay.stinger.*` commands and the cut-point Program/Preview exchange. Local
+  headless verification only (engine 56 / UI 45, fmt/clippy/guard clean); hosted acceptance
+  pending; stinger clip compositing absent. See ADR 0012 and docs/reference-audit.md.
+
 - UI-012: reference-driven production controls — persisted independent transition slots and
   twelve CPU effects, named engine playlists with per-item transitions/holds and offline handling,
   editable keyboard bindings, schema 3 migration, acknowledged producer state and independent
