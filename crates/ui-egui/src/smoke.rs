@@ -64,7 +64,9 @@ impl RustMixApp {
     }
     fn smoke_run(&mut self, ctx: &egui::Context, s: &mut Smoke) -> Result<()> {
         let reopen = std::env::args().any(|s| s == "--ui-smoke-reopen");
-        if self.start.elapsed() > Duration::from_secs(180) {
+        // Includes 60 idle + 35 paused native frames and all nine dialogs on
+        // hosted software graphics. Keep the matching external limit at 270s.
+        if self.start.elapsed() > Duration::from_secs(240) {
             return Err(Error::Invalid(format!(
                 "Native UI smoke timed out at stage {} after {} frames",
                 s.stage, s.frames
