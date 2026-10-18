@@ -2724,6 +2724,7 @@ impl RustMixApp {
                 self.automation
                     .insert("dialog.remove.confirm".into(), confirm.rect);
                 if confirm.clicked() && self.try_execute(Command::RemoveInput(id)).is_some() {
+                    self.submit_program();
                     self.confirm_remove_input = None;
                     if self.properties.as_ref().is_some_and(|input| input.id == id) {
                         self.close_properties();

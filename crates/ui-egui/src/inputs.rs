@@ -138,7 +138,11 @@ impl RustMixApp {
             }
             false
         } else {
-            self.try_execute(command).is_some()
+            let added = self.try_execute(command).is_some();
+            if added {
+                self.submit_program();
+            }
+            added
         }
     }
 

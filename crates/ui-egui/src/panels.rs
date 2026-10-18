@@ -1891,16 +1891,22 @@ impl RustMixApp {
                         if ui.button("Save current").clicked() {
                             self.actions.push(Action::Save(false));
                         }
-                        if ui
-                            .add_enabled(self.job.is_none(), egui::Button::new("Create new preset"))
-                            .clicked()
-                        {
+                        let create = ui.add_enabled(
+                            self.job.is_none(),
+                            egui::Button::new("Create new preset"),
+                        );
+                        self.automation
+                            .insert("dialog.new.confirm".into(), create.rect);
+                        if create.clicked() {
                             match Engine::from_project_at(ProjectState::demo(), self.now) {
                                 Ok(engine) => {
-                                    self.reset_editors();
                                     self.engine = engine;
+                                    self.reset_editors();
                                     self.media_loader.reset();
                                     self.input_fx.clear();
+                                    self.sync_input_cache();
+                                    self.submit_program();
+                                    self.theme(ctx);
                                     self.dock = default_dock(false);
                                     self.path = None;
                                     self.saved_revision = 0;

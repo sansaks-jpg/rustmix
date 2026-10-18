@@ -217,3 +217,16 @@ code `537a678`, passed formatting and the repository guard, then failed compilat
 in UpdatePlaylist: assignment evaluates its right side before a destination closure reads the
 moved playlist ID. Capture the ID before moving the replacement; no clone or lint suppression.
 Rust tests, native acceptance and build were not reached in that run. Replacement verification follows.
+
+
+UI-012 second hosted run [39109428806](https://github.com/sansaks-jpg/rustmix/actions/runs/39109428806),
+code `3b93819`, passed compilation and Clippy. All 36 engine tests and 36/37 UI tests passed.
+The failed key-repeat test supplied a raw repeat flag without holding the key; pinned egui 0.35
+recomputes that flag from its held-key set. The regression now sends press, held press, release,
+then a dialog-blocked press, preserving the assertion that a held key cannot take twice.
+
+Source review of explicit worker updates also found synthetic Add Input, confirmed removal and
+New Preset were relying on the removed per-paint snapshot. These paths now submit their final
+state explicitly, and preset replacement resets editors against the new project. A running-worker
+regression covers all three paths; legacy migration additionally checks a custom old duration.
+No lint/test gate is disabled. Another exact-code hosted run is required.

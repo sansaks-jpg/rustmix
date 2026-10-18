@@ -194,7 +194,7 @@ impl RustMixApp {
                 self.automation.insert("dialog.playlist.new".into(), new.rect);
                 if new.clicked() {
                     let name = (1..=17).map(|n| format!("Playlist {n}"))
-                        .find(|name| !lists.iter().any(|p| p.name.eq_ignore_ascii_case(name)));
+                        .find(|name| !lists.iter().any(|p| p.name.trim().eq_ignore_ascii_case(name)));
                     if let Some(name) = name {
                         self.actions.push(Action::Engine(Command::AddPlaylist(name.clone())));
                         if let Some(id) = lists.iter().map(|p| p.id).max().and_then(|n| n.checked_add(1)) {

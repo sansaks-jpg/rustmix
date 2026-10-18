@@ -212,6 +212,7 @@ fn production_configuration_roundtrips_but_automation_never_restarts_on_load() {
     );
     let mut legacy = serde_json::to_value(ProjectState::demo()).unwrap();
     legacy["schema"] = 2.into();
+    legacy["duration_ms"] = 450.into();
     legacy.as_object_mut().unwrap().remove("playlists");
     legacy.as_object_mut().unwrap().remove("transition_slots");
     legacy["preferences"]
@@ -223,6 +224,12 @@ fn production_configuration_roundtrips_but_automation_never_restarts_on_load() {
     assert_eq!(loaded.schema, 3);
     assert!(loaded.playlists[0].items.is_empty());
     assert!(!loaded.preferences.key_bindings.is_empty());
+    assert!(
+        loaded
+            .transition_slots
+            .iter()
+            .all(|slot| slot.duration_ms == 450)
+    );
 }
 
 #[test]

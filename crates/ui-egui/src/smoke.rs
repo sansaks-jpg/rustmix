@@ -867,6 +867,61 @@ mod tests {
     use super::*;
 
     #[test]
+    fn input_lifecycle_and_new_preset_reach_the_running_program_producer() {
+        fn acknowledged(app: &RustMixApp, check: impl Fn(&Engine) -> bool) {
+            let deadline = Instant::now() + Duration::from_secs(2);
+            loop {
+                if let Some(Ok(frame)) = app.program_worker.as_ref().unwrap().take()
+                    && frame.generation == app.program_generation
+                    && check(&frame.engine)
+                {
+                    return;
+                }
+                assert!(
+                    Instant::now() < deadline,
+                    "Worker did not acknowledge the input/project change"
+                );
+                std::thread::sleep(Duration::from_millis(10));
+            }
+        }
+        let mut app = RustMixApp::headless();
+        let ctx = egui::Context::default();
+        app.theme(&ctx);
+        let size = [1600.0, 900.0];
+        app.program_worker = Some(program::ProgramWorker::spawn(
+            program::Snapshot {
+                generation: 0,
+                engine: app.engine.clone(),
+                sources: app.input_fx.clone(),
+            },
+            app.start,
+            None,
+        ));
+        app.dispatch(Action::Add, &ctx);
+        app.add_name = "New stage".into();
+        app.add_kind = InputKind::Color;
+        assert!(app.request_add_input());
+        app.add_open = false;
+        acknowledged(&app, |engine| engine.project().input(InputId(8)).is_some());
+        app.confirm_remove_input = Some(InputId(8));
+        click(&mut app, &ctx, "dialog.remove.confirm", size);
+        acknowledged(&app, |engine| engine.project().input(InputId(8)).is_none());
+        app.execute(Command::RenameProject("Previous show".into()));
+        app.execute(Command::AddPlaylist("Cues".into()));
+        app.playlist_selected_id = 2;
+        app.playlist_name = "Cues".into();
+        app.dispatch(Action::New, &ctx);
+        click(&mut app, &ctx, "dialog.new.confirm", size);
+        acknowledged(&app, |engine| {
+            engine.project().name == ProjectState::demo().name
+                && engine.project().playlists.len() == 1
+                && engine.project().program == InputId(1)
+        });
+        assert_eq!(app.playlist_selected_id, 1);
+        assert_eq!(app.playlist_name, "Default");
+    }
+
+    #[test]
     fn playlist_widgets_commit_order_and_options_and_keep_program_until_start() {
         let mut app = RustMixApp::headless();
         let ctx = egui::Context::default();
@@ -954,9 +1009,15 @@ mod tests {
                 },
             ]
         };
-        frame(&mut app, &ctx, events(true), size);
-        assert_eq!(app.engine.project().program, InputId(1));
-        frame(&mut app, &ctx, events(false), size);
+        // egui determines repeat from its held-key set, ignoring the raw repeat flag.
+        // Keep the key held across frames before delivering its release.
+        let held = vec![events(false).remove(0)];
+        frame(&mut app, &ctx, held.clone(), size);
+        assert_eq!(app.engine.project().program, InputId(2));
+        frame(&mut app, &ctx, held, size);
+        assert_eq!(app.engine.project().program, InputId(2));
+        let released = vec![events(false).remove(1)];
+        frame(&mut app, &ctx, released, size);
         assert_eq!(app.engine.project().program, InputId(2));
         app.dispatch(Action::PlayList, &ctx);
         frame(&mut app, &ctx, events(false), size);
