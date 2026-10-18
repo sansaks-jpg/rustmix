@@ -10,6 +10,8 @@ Schema 2 stores typed `InputConfig` alongside each engine input. Schema 1 files
 migrate to identity processing on load. Future versions remain rejected. PNGs
 are external file references, not embedded media; older binaries cannot open
 schema 2. Atomic saves, backup generations and size limits remain enforced.
+Backup rotation preserves the exact validated bytes of the previous file, so
+the schema 1 rollback copy remains usable by an older application after migration.
 
 `input.add`, `input.duplicate` and `input.apply` validate complete candidate
 states. Insertion preserves Program/Preview IDs; duplicates copy source/effects

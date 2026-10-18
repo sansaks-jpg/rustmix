@@ -11,7 +11,7 @@ pub fn backup_path(path: &Path, slot: usize) -> PathBuf {
     name.push(format!(".bak{slot}"));
     PathBuf::from(name)
 }
-pub fn load(path: &Path) -> Result<ProjectState> {
+fn read_bytes(path: &Path) -> Result<Vec<u8>> {
     let mut bytes = Vec::new();
     File::open(path)?
         .take(MAX_FILE + 1)
@@ -19,7 +19,10 @@ pub fn load(path: &Path) -> Result<ProjectState> {
     if bytes.len() as u64 > MAX_FILE {
         return Err(invalid("Project exceeds 1 MiB limit"));
     }
-    let mut p: ProjectState = serde_json::from_slice(&bytes)?;
+    Ok(bytes)
+}
+fn decode(bytes: &[u8]) -> Result<ProjectState> {
+    let mut p: ProjectState = serde_json::from_slice(bytes)?;
     // Schema 1 had only procedural descriptors. New fields deserialize to
     // identity processing, and its input IDs, bus state and layout are retained.
     if p.schema == 1 {
@@ -27,6 +30,9 @@ pub fn load(path: &Path) -> Result<ProjectState> {
     }
     p.validate()?;
     Ok(p)
+}
+pub fn load(path: &Path) -> Result<ProjectState> {
+    decode(&read_bytes(path)?)
 }
 fn atomic_bytes(path: &Path, bytes: &[u8]) -> Result<()> {
     let parent = path
@@ -48,12 +54,15 @@ pub fn save(path: &Path, project: &ProjectState) -> Result<()> {
     let roundtrip: ProjectState = serde_json::from_slice(&bytes)?;
     roundtrip.validate()?;
     if path.exists() {
-        let previous = load(path)?;
-        let old = serde_json::to_vec_pretty(&previous)?;
+        // Preserve validated original bytes: migrating a project must not also
+        // migrate the rollback copy that an older application may need.
+        let old = read_bytes(path)?;
+        decode(&old)?;
         let first = backup_path(path, 1);
         if first.exists() {
-            let older = load(&first)?;
-            atomic_bytes(&backup_path(path, 2), &serde_json::to_vec_pretty(&older)?)?;
+            let older = read_bytes(&first)?;
+            decode(&older)?;
+            atomic_bytes(&backup_path(path, 2), &older)?;
         }
         atomic_bytes(&first, &old)?;
     }

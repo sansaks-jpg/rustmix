@@ -165,3 +165,28 @@ fn schema_one_migrates_and_future_files_remain_rejected() {
     std::fs::write(&path, serde_json::to_vec(&value).unwrap()).unwrap();
     assert!(persistence::load(&path).is_err());
 }
+
+#[test]
+fn migrating_save_keeps_the_original_schema_one_backup_bytes() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("old.json");
+    let mut legacy = serde_json::to_value(ProjectState::demo()).unwrap();
+    legacy["schema"] = 1.into();
+    for input in legacy["inputs"].as_array_mut().unwrap() {
+        input.as_object_mut().unwrap().remove("config");
+    }
+    let original = serde_json::to_vec(&legacy).unwrap();
+    std::fs::write(&path, &original).unwrap();
+    let migrated = persistence::load(&path).unwrap();
+    persistence::save(&path, &migrated).unwrap();
+    assert_eq!(
+        std::fs::read(persistence::backup_path(&path, 1)).unwrap(),
+        original
+    );
+    assert_eq!(persistence::load(&path).unwrap().schema, 2);
+    persistence::save(&path, &migrated).unwrap();
+    assert_eq!(
+        std::fs::read(persistence::backup_path(&path, 2)).unwrap(),
+        original
+    );
+}
