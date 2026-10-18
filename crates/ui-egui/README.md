@@ -6,6 +6,10 @@ and Overlay Settings dialog cover channels 1–8, and default F-keys run F1–F8
 configured on the engine but composite no clip yet. Hosted native acceptance passed in run
 39129117131. See ADR 0012.
 
+Task 1.2 port: the source-tile grid's category filter runs through the engine
+`ProjectState::visible_inputs` query over the typed `InputCategory` contract; the text matcher
+stays in the UI and the chips, context menu and Settings editor are unchanged. See ADR 0013.
+
 UI-013 source candidate: schema 4 categories/theme, atomic Settings, slot-defined T-Bar,
 real Input Search, temporary audio-pane visibility and worker snapshots. Unsupported scaffolds
 are explicitly unavailable. Hosted compile/tests/native captures passed in run 39129117131; see ADR 0011.

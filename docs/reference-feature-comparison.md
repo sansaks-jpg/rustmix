@@ -17,7 +17,7 @@ Features remain experimental and performance/full-reference qualification did no
 | Named playlists over current inputs | Former temporary UI sequence | Add/rename/delete, add/remove/reorder references, per-item hold/effect/time, selected start, loop/manual, start/stop/previous/next, offline alarm, project persistence |
 | Keyboard shortcuts and command families | Former fixed keys and enable switch | Editable persisted key/action/modifier rows; conflict validation, exact modifiers, repeat/focus guards; MIDI/control surfaces/API/scripting absent |
 | Basic / Advanced mode | Former Basic-to-Multiview alias | Independent persisted presentation state and reduced controls; buses/revision/multiview preservation tests and native Basic capture passed; global mode restore has source coverage only |
-| Input categories/search | Existing kind filters and search | Arbitrary custom color categories remain absent |
+| Input categories/search | Six standard colors plus sixteen editable custom categories with the typed `InputCategory` contract and engine `visible_inputs` query (Task 1.2), plus combined category/text filtering | Task 1.2 port added the typed value, `Custom(1..=16)` clamping and the engine filter query; the text matcher stays in the UI, and no vendor wire ordinals or `.vmix` category identity are claimed |
 | Local media/stills | Bounded PNG files and seven procedural sources | No general video/audio decoding, playlist seek or file-duration inference |
 | Device/network inputs | No backend | Webcam, capture card, desktop capture, RTSP/SRT/NDI/OMT/browser/guest inputs remain absent |
 | Audio Master + A–G, DSP, mix-minus | Master/A/B simulated controls and meters | Real samples/devices/routing/DSP and larger bus graph remain absent |

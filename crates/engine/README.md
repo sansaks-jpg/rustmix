@@ -1,11 +1,16 @@
 # rustmix-engine
 
 Task 1.1 port: schema 5 replaces the fixed four-overlay array with the sixteen-channel
-production bank — eight title-panel channels and eight stinger channels driven by
+production bank - eight title-panel channels and eight stinger channels driven by
 `overlay.stinger.set` / `overlay.stinger.trigger` / `overlay.stinger.stop`, with a cut-point
-Program/Preview exchange. Schemas 1–4 migrate on load and keep every authored panel and rollback
+Program/Preview exchange. Schemas 1-4 migrate on load and keep every authored panel and rollback
 byte. Stinger clip compositing is not implemented (no media renderer); the model, commands and
 exchange are real. Hosted native acceptance passed in run 39129117131. See ADR 0012.
+
+Task 1.2 port: `categories` provides the typed `InputCategory` contract - `All`, the six preset
+colours, `Custom(1..=16)` with clamping and the filter-only `Search` pseudo value - mapped onto
+the persisted 22 definition ids without a schema change, plus `ProjectState::visible_inputs` for
+the category filter the UI grid now uses. See ADR 0013.
 
 UI-013 source candidate: schema 4 categories/theme, atomic Settings, slot-defined T-Bar,
 real Input Search, temporary audio-pane visibility and worker snapshots. Unsupported scaffolds

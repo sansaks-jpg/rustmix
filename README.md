@@ -24,6 +24,13 @@ pairs, empty native stderr) and packaging passed; hosted cadence targets still f
 [ADR 0012](docs/adr/0012-production-overlay-bank-and-stingers.md) and the
 [complete audit](docs/reference-audit.md).
 
+The reference Task 1.2 port adds the typed `InputCategory` contract (`All`, six preset colours,
+`Custom(1..=16)` clamping, filter-only `Search`) and the `ProjectState::visible_inputs` engine
+query; the tile grid filters through the engine while chips, context menu, Settings editing and the
+text search are unchanged. Local headless verification passed (engine 61 tests, UI 47, clippy/fmt
+and both guards clean); hosted acceptance for this commit is pending. See
+[ADR 0013](docs/adr/0013-typed-input-category-contract.md).
+
 **Full reference parity is not achieved.** The [complete reference audit](docs/reference-audit.md)
 covers all 30 observed areas and their input/effect/overlay/audio inventories. Run
 `./scripts/check-reference-coverage.ps1 -RequireFullMatch` for the strict gate: it currently rejects

@@ -471,3 +471,27 @@ per-channel effects, capture/audio/encoder backend, physical-device qualificatio
 readiness is implied. No native stinger stage exists; the stinger configuration/exchange stays
 covered by engine tests. No local build or launch was used for this entry; it records hosted
 evidence only.
+
+## 2026-10-18 - reference Task 1.2 port: typed input-category contract and engine filter query (local headless run)
+
+The second port item brought RustMix's existing category model (schema-5 `Option<u8>` definition
+ids over 22 editable definitions) up to the reference contract: a typed `InputCategory` value with
+`All`, the six preset colours, `Custom(1..=16)` clamping and the filter-only `Search` pseudo value,
+plus `ProjectState::visible_inputs`. The source-tile grid now asks the engine for visible inputs
+instead of testing the category inline; chips, context menu, Settings editing, the
+`input.category.set` command and the combined text search are unchanged, and no schema migration
+was needed. Deliberate divergences are documented in ADR 0013: `Search` is never storable and no
+wire ordinals exist because there is no control endpoint.
+
+Local headless verification: `cargo fmt --all` clean, `cargo clippy --workspace --all-targets -- -D
+warnings` clean, `cargo test --workspace` green - engine 61 (17 unit + 8 categories + 8 inputs + 7
+overlays + 8 production + 2 transitions + 11 workflow) and UI 47 - and both
+`scripts/check-repository.ps1` and `scripts/check-reference-coverage.ps1` pass (`Full reference
+match: False` is expected). New tests cover custom clamping, stored-id round-trips for all 22
+slots, default definition names matching the typed preset order, filter semantics for
+`All`/`Search`/presets/custom values and the Engine-level query against real assignments.
+
+Explicit non-claims: no hosted run covers this commit yet; no control endpoint, wire ordinals or
+vendor category identity is implemented; the text matcher stays a UI concern; nothing here changes
+rendering, audio or Program routing. See ADR 0013.
+

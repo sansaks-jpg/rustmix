@@ -7,6 +7,14 @@
   three byte-identical save/reopen pairs, empty native stderr; hosted cadence targets still fail.
   Stinger clip compositing absent. See ADR 0012 and docs/reference-audit.md.
 
+- Task 1.2 port (reference → rustmix): typed `InputCategory` contract — `All`, six preset colours,
+  `Custom(1..=16)` with clamping and the filter-only `Search` pseudo value — plus the
+  `ProjectState::visible_inputs` engine query; the tile grid filters through the engine and the
+  existing schema-5 ids, command, chips, context menu and Settings editor stay unchanged. Local
+  headless verification passed (engine 61 tests, UI 47, clippy/fmt/guards clean); hosted acceptance
+  for this commit is pending. No control endpoint, so no wire ordinals. See ADR 0013 and
+  docs/reference-audit.md.
+
 - UI-012: reference-driven production controls — persisted independent transition slots and
   twelve CPU effects, named engine playlists with per-item transitions/holds and offline handling,
   editable keyboard bindings, schema 3 migration, acknowledged producer state and independent
