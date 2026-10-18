@@ -404,3 +404,26 @@ new scripted-save regression); `cargo fmt --all -- --check` clean;
 `cargo clippy --workspace --all-targets --locked -- -D warnings` clean;
 `pwsh scripts/check-repository.ps1` passes. Hosted native re-run is pending; this entry claims no
 native result.
+
+## 2026-10-18 - hosted native-smoke run 39127410065: save race cleared, frame budget raised (local headless run)
+
+The second hosted run of the branch ([39127410065](https://github.com/sansaks-jpg/rustmix/actions/runs/39127410065))
+confirmed the file-job fix: the native smoke wrote `smoke.rustmix.json`, `smoke.rustmix.json.bak0`,
+`smoke-ok.json`, `ui-elements.json`, `layout-stability.json`, `pause-transport.json`,
+`paused-program.png`, the three workspace captures and both `add-input-1600`/`input-properties-1600`
+dialog artifacts before failing. The remaining failure is budget, not behaviour: the app's own
+240-second guard fired at dialog stage 25 after 329 real frames (~0.73 s/frame on the hosted WARP
+adapter), while the full run needs roughly 450 frames for 60 idle + 35 paused frames and 27 dialog
+stages.
+
+Changes: the main native smoke's internal deadline is 540 seconds (comment records the measured
+cost) and `scripts/ci-native-smoke.ps1` kills at 600 seconds, keeping the app-side guard ahead of
+the external one so the app can still write `smoke-error.txt` and exit cleanly. The input, reference
+and perf modes keep their own 150/180/120-second guards; they stayed under the external limit and
+passed hosted runs before.
+
+Verified with headless runs only: `cargo test --workspace --locked` green - engine 56 and UI 46;
+`cargo fmt --all -- --check` clean;
+`cargo clippy --workspace --all-targets --locked -- -D warnings` clean;
+`pwsh scripts/check-repository.ps1` passes. Hosted native re-run is pending; no native result is
+claimed here.

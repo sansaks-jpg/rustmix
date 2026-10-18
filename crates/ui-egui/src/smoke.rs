@@ -73,9 +73,11 @@ impl RustMixApp {
             return self.smoke_inputs(ctx, s);
         }
         let reopen = std::env::args().any(|s| s == "--ui-smoke-reopen");
-        // Includes 60 idle + 35 paused native frames and all nine dialogs on
-        // hosted software graphics. Keep the matching external limit at 270s.
-        if self.start.elapsed() > Duration::from_secs(240) {
+        // Includes 60 idle + 35 paused native frames and 27 dialog stages on
+        // hosted software graphics. Measured 2026-10-18: 329 frames in 240s
+        // (~0.73 s/frame), so the full ~450-frame run needs a larger budget.
+        // Keep the matching external limit at 600s.
+        if self.start.elapsed() > Duration::from_secs(540) {
             return Err(Error::Invalid(format!(
                 "Native UI smoke timed out at stage {} after {} frames",
                 s.stage, s.frames

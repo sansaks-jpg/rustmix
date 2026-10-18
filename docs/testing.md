@@ -58,7 +58,7 @@ Basic-mode regression checks reduced controls, real Quick Play, preservation of 
 restoring Advanced and independent multiview selection at three viewport sizes. The native input
 workflow must capture `input-basic.png` after clicking Basic and preserve buses/revision when
 returning to Advanced. Its deadline is 150 seconds for the added playlist/keyboard/Basic stages;
-the outer process timeout remains 270 seconds. This correction passed hosted run 39111788801; the Basic capture was visually reviewed. Global-mode restore has source coverage only; second-process tests verify project configuration.
+the outer process timeout is 600 seconds (raised on 2026-10-18 from 270 after the hosted runner measured 329 smoke frames in 240 seconds). This correction passed hosted run 39111788801; the Basic capture was visually reviewed. Global-mode restore has source coverage only; second-process tests verify project configuration.
 
 ## UI-004 / UI-005 / UI-006 dialog and workflow checks
 

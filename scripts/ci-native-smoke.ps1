@@ -10,9 +10,9 @@ function Invoke-NativeSmoke([string[]]$SmokeArguments) {
     $samples = [System.Collections.Generic.List[object]]::new()
     $timer = [System.Diagnostics.Stopwatch]::StartNew()
     while (-not $process.HasExited) {
-        if ($timer.Elapsed.TotalSeconds -gt 270) {
+        if ($timer.Elapsed.TotalSeconds -gt 600) {
             Stop-Process -Id $process.Id -Force
-            throw 'Native smoke exceeded 270 seconds on GitHub runner'
+            throw 'Native smoke exceeded 600 seconds on GitHub runner'
         }
         try {
             $process.Refresh()
