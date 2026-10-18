@@ -714,7 +714,7 @@ impl RustMixApp {
         );
         bounded.set_clip_rect(bounds.intersect(ui.clip_rect()));
         let ui = &mut bounded;
-        if self.multiview {
+        if self.multiview && !self.basic_mode {
             ui.horizontal(|ui| {
                 ui.label(
                     RichText::new("MULTIVIEW · click a tile to select Preview")
@@ -797,6 +797,9 @@ impl RustMixApp {
                     ui.set_width(center);
                     ui.spacing_mut().item_spacing.y = 3.0;
                     self.command_button(ui, "switcher.quickPlay", "Quick Play", Command::Cut, None);
+                    if self.basic_mode {
+                        return;
+                    }
                     self.command_button(ui, "switcher.cut", "Cut", Command::Cut, None);
 
                     for (index, mut slot) in self
@@ -1306,7 +1309,8 @@ impl RustMixApp {
                                                 // Modern 2-row control strip:
                                                 // Row 1: [1][2][3][4][GO][Cut][Loop]
                                                 // Row 2: [5][6][7][8][Audio][Display][Gear]
-                                                let cell_w = (inner_w / 7.0).floor().max(20.0);
+                                                let columns = if self.basic_mode { 6.0 } else { 7.0 };
+                                                let cell_w = (inner_w / columns).floor().max(20.0);
                                                 let rem_w = (inner_w - cell_w * 6.0).max(cell_w);
                                                 ui.horizontal(|ui| {
                                                     ui.spacing_mut().item_spacing.x = 0.0;
@@ -1395,6 +1399,9 @@ impl RustMixApp {
                                                     {
                                                         self.actions.push(Action::Engine(take));
                                                     }
+                                                    if self.basic_mode {
+                                                        return;
+                                                    }
                                                     let looped = self.engine.playback(input.id).is_none_or(|clock| clock.looping());
                                                     let loop_btn = vector_icon_button(
                                                         ui,
@@ -1409,6 +1416,9 @@ impl RustMixApp {
                                                         self.actions.push(Action::Engine(Command::SetInputLoop(input.id, !looped)));
                                                     }
                                                 });
+                                                if self.basic_mode {
+                                                    return;
+                                                }
                                                 ui.horizontal(|ui| {
                                                     ui.spacing_mut().item_spacing.x = 0.0;
                                                     ui.spacing_mut().button_padding =

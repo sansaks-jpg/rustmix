@@ -24,6 +24,7 @@ pub(crate) struct Smoke {
     bank_baseline: Option<Rect>,
     paused_program: Option<(u64, Vec<u8>, Rect)>,
     transport_target: Option<Rect>,
+    basic_state: Option<(InputId, InputId, u64)>,
 }
 impl Smoke {
     pub(crate) fn is_dialog_stage(&self) -> bool {
@@ -532,7 +533,8 @@ impl RustMixApp {
         Ok(())
     }
     fn smoke_inputs(&mut self, ctx: &egui::Context, s: &mut Smoke) -> Result<()> {
-        if self.start.elapsed() > Duration::from_secs(120) {
+        // Includes the playlist, keyboard editor and Basic-mode capture stages.
+        if self.start.elapsed() > Duration::from_secs(150) {
             return Err(Error::Invalid(format!(
                 "Native input workflow timed out at stage {}",
                 s.stage
@@ -549,6 +551,8 @@ impl RustMixApp {
                     "input-playlist"
                 } else if s.stage == 24 {
                     "input-keyboard"
+                } else if s.stage == 27 {
+                    "input-basic"
                 } else {
                     "input-workflow"
                 };
@@ -794,9 +798,69 @@ impl RustMixApp {
                         "Native keyboard settings did not close".into(),
                     ));
                 }
+                let project = self.engine.project();
+                s.basic_state = Some((project.program, project.preview, project.revision));
+                self.native_click(s, "toolbar.basic")?;
+                s.stage = 26;
+            }
+            26 => {
+                self.validate_basic_controls()?;
+                self.validate_basic_state(s)?;
+                ctx.send_viewport_cmd(egui::ViewportCommand::Screenshot(egui::UserData::default()));
+                s.captured = false;
+                s.stage = 27;
+            }
+            27 if s.captured => {
+                self.native_click(s, "toolbar.basic")?;
+                s.stage = 28;
+            }
+            28 => {
+                self.validate_basic_state(s)?;
+                if self.basic_mode || !self.automation.contains_key("switcher.cut") {
+                    return Err(Error::Invalid("Advanced controls were not restored".into()));
+                }
                 s.stage = 7;
             }
             _ => {}
+        }
+        Ok(())
+    }
+    fn validate_basic_state(&self, s: &Smoke) -> Result<()> {
+        let project = self.engine.project();
+        if s.basic_state != Some((project.program, project.preview, project.revision)) {
+            return Err(Error::Invalid(
+                "Changing operator mode modified the live project".into(),
+            ));
+        }
+        Ok(())
+    }
+    fn validate_basic_controls(&self) -> Result<()> {
+        if !self.basic_mode
+            || [
+                "switcher.cut",
+                "switcher.fade",
+                "output.record",
+                "output.playlist",
+                "toolbar.fullscreen",
+                "input.1.loop",
+                "input.1.audio",
+            ]
+            .iter()
+            .any(|id| self.automation.contains_key(*id))
+            || [
+                "switcher.quickPlay",
+                "production.add",
+                "output.lock",
+                "toolbar.basic",
+                "input.1.cut",
+                "input.1.preview",
+            ]
+            .iter()
+            .any(|id| !self.automation.contains_key(*id))
+        {
+            return Err(Error::Invalid(
+                "Basic operator controls do not match their scope".into(),
+            ));
         }
         Ok(())
     }
@@ -852,14 +916,15 @@ impl RustMixApp {
             .automation
             .get("monitor.program")
             .ok_or_else(|| Error::Invalid("Program viewport was not rendered".into()))?;
+        let take_id = if self.basic_mode {
+            "switcher.quickPlay"
+        } else {
+            "switcher.cut"
+        };
         let cut = self
             .automation
-            .get("switcher.cut")
-            .ok_or_else(|| Error::Invalid("CUT control was not rendered".into()))?;
-        let fade = self
-            .automation
-            .get("switcher.fade")
-            .ok_or_else(|| Error::Invalid("FADE control was not rendered".into()))?;
+            .get(take_id)
+            .ok_or_else(|| Error::Invalid(format!("{take_id} control was not rendered")))?;
         for rect in [preview, program] {
             if !rect.is_finite()
                 || rect.width() < 300.0
@@ -872,14 +937,19 @@ impl RustMixApp {
                 )));
             }
         }
-        if preview.right() > cut.left()
-            || cut.right() > program.left()
-            || (cut.left() - fade.left()).abs() > 2.0
-            || fade.top() < cut.bottom()
-        {
+        if preview.right() > cut.left() || cut.right() > program.left() {
             return Err(Error::Invalid(
-                "Transition controls overlap the monitors or are not stacked".into(),
+                "Transition controls overlap the monitors".into(),
             ));
+        }
+        if !self.basic_mode {
+            let fade = self
+                .automation
+                .get("switcher.fade")
+                .ok_or_else(|| Error::Invalid("FADE control was not rendered".into()))?;
+            if (cut.left() - fade.left()).abs() > 2.0 || fade.top() < cut.bottom() {
+                return Err(Error::Invalid("Transition controls are not stacked".into()));
+            }
         }
         Ok(())
     }
@@ -1126,6 +1196,58 @@ mod tests {
                 ],
                 size,
             );
+        }
+    }
+
+    #[test]
+    fn basic_mode_simplifies_controls_without_switching_program_or_multiview() {
+        for size in [[1100.0, 700.0], [1600.0, 900.0], [1920.0, 1080.0]] {
+            let mut app = RustMixApp::headless();
+            let ctx = egui::Context::default();
+            app.theme(&ctx);
+            let before = app.engine.project().clone();
+            click(&mut app, &ctx, "toolbar.basic", size);
+            frame(&mut app, &ctx, vec![], size);
+            app.validate_basic_controls().unwrap();
+            app.validate_monitor_geometry(size[0]).unwrap();
+            assert_eq!(*app.engine.project(), before);
+            assert!(!app.multiview);
+
+            click(&mut app, &ctx, "switcher.quickPlay", size);
+            assert_eq!(app.engine.project().program, InputId(2));
+            assert_eq!(app.engine.project().preview, InputId(1));
+            let taken = app.engine.project().clone();
+            click(&mut app, &ctx, "toolbar.basic", size);
+            frame(&mut app, &ctx, vec![], size);
+            assert!(!app.basic_mode && !app.multiview);
+            for id in [
+                "switcher.cut",
+                "switcher.fade",
+                "output.record",
+                "output.playlist",
+                "input.1.loop",
+                "input.1.audio",
+            ] {
+                assert!(
+                    app.automation.contains_key(id),
+                    "Advanced control was not restored: {id}"
+                );
+            }
+            assert_eq!(*app.engine.project(), taken);
+
+            // Entering Basic from a full multiview still shows both switcher
+            // monitors; returning to Advanced restores the chosen multiview.
+            app.multiview = true;
+            app.multiview_split = false;
+            click(&mut app, &ctx, "toolbar.basic", size);
+            frame(&mut app, &ctx, vec![], size);
+            app.validate_basic_controls().unwrap();
+            app.validate_monitor_geometry(size[0]).unwrap();
+            click(&mut app, &ctx, "toolbar.basic", size);
+            frame(&mut app, &ctx, vec![], size);
+            assert!(app.multiview && !app.multiview_split && !app.basic_mode);
+            assert!(app.automation.contains_key("multiview.preset.grid"));
+            assert_eq!(*app.engine.project(), taken);
         }
     }
 

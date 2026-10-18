@@ -436,6 +436,7 @@ pub(crate) enum Action {
     Snapshot,
     About,
     Workspace(bool),
+    BasicMode,
     Multiview,
     Fullscreen,
     Close,
@@ -588,6 +589,7 @@ pub struct RustMixApp {
     pub(crate) shortcuts_open: bool,
     pub(crate) search_open: bool,
     pub(crate) ui_locked: bool,
+    pub(crate) basic_mode: bool,
     pub(crate) about: bool,
     pub(crate) multiview: bool,
     pub(crate) multiview_split: bool,
@@ -622,6 +624,9 @@ impl RustMixApp {
                     app.notice = "Saved workspace was invalid; using Production layout".into()
                 }
             }
+        }
+        if let Some(storage) = cc.storage {
+            app.basic_mode = storage.get_string("basic-mode.v1").as_deref() == Some("true");
         }
         if let Some(path) = std::env::args()
             .skip(1)
@@ -812,6 +817,7 @@ impl RustMixApp {
             shortcuts_open: false,
             search_open: true,
             ui_locked: false,
+            basic_mode: false,
             about: false,
             multiview: false,
             multiview_split: true,
@@ -1324,6 +1330,7 @@ impl RustMixApp {
                     dock_json: String::new(),
                 }));
             }
+            Action::BasicMode => self.basic_mode = !self.basic_mode,
             Action::Multiview => self.multiview = !self.multiview,
             Action::Fullscreen => {
                 self.fullscreen = !self.fullscreen;
@@ -1382,14 +1389,15 @@ impl RustMixApp {
                 self.actions.push(Action::About);
             }
             ui.add_space(4.0);
-            if ui
-                .add_enabled(
-                    self.job.is_none(),
-                    egui::Button::new(RichText::new("New").strong())
-                        .min_size(egui::vec2(56.0, 22.0)),
-                )
-                .on_hover_text("New preset / project")
-                .clicked()
+            if !self.basic_mode
+                && ui
+                    .add_enabled(
+                        self.job.is_none(),
+                        egui::Button::new(RichText::new("New").strong())
+                            .min_size(egui::vec2(56.0, 22.0)),
+                    )
+                    .on_hover_text("New preset / project")
+                    .clicked()
             {
                 self.actions.push(Action::New);
             }
@@ -1470,52 +1478,55 @@ impl RustMixApp {
                     .response
                     .on_hover_text("Save preset or write an immediate recovery checkpoint");
             });
-            if ui
-                .add_enabled(
-                    self.path.is_some() && self.job.is_none(),
-                    egui::Button::new(RichText::new("Last").strong())
-                        .min_size(egui::vec2(52.0, 22.0)),
-                )
-                .on_disabled_hover_text("Save or open a preset first")
-                .on_hover_text("Reload the most recently saved preset")
-                .clicked()
+            if !self.basic_mode
+                && ui
+                    .add_enabled(
+                        self.path.is_some() && self.job.is_none(),
+                        egui::Button::new(RichText::new("Last").strong())
+                            .min_size(egui::vec2(52.0, 22.0)),
+                    )
+                    .on_disabled_hover_text("Save or open a preset first")
+                    .on_hover_text("Reload the most recently saved preset")
+                    .clicked()
             {
                 self.actions.push(Action::Last);
             }
             ui.add_space((ui.max_rect().width() * 0.48 - ui.cursor().left() - 48.0).max(4.0));
-            let fullscreen = ui
-                .add(
-                    egui::Button::new(
-                        RichText::new(if self.fullscreen {
-                            "Exit Fullscreen"
-                        } else {
-                            "Fullscreen"
-                        })
-                        .strong(),
+            if !self.basic_mode {
+                let fullscreen = ui
+                    .add(
+                        egui::Button::new(
+                            RichText::new(if self.fullscreen {
+                                "Exit Fullscreen"
+                            } else {
+                                "Fullscreen"
+                            })
+                            .strong(),
+                        )
+                        .min_size(egui::vec2(78.0, 22.0)),
                     )
-                    .min_size(egui::vec2(78.0, 22.0)),
-                )
-                .on_hover_text("Toggle Fullscreen output");
-            self.automation
-                .insert("toolbar.fullscreen".into(), fullscreen.rect);
-            if fullscreen.clicked() {
-                self.actions.push(Action::Fullscreen);
+                    .on_hover_text("Toggle Fullscreen output");
+                self.automation
+                    .insert("toolbar.fullscreen".into(), fullscreen.rect);
+                if fullscreen.clicked() {
+                    self.actions.push(Action::Fullscreen);
+                }
+                caret_menu_button(ui, 22.0, |ui| {
+                    if ui.button("Fullscreen 1 → Program").clicked() {
+                        self.settings_fullscreen_slot = 0;
+                        ui.close();
+                    }
+                    if ui.button("Fullscreen 2 → Multiview").clicked() {
+                        self.settings_fullscreen_slot = 1;
+                        ui.close();
+                    }
+                    ui.separator();
+                    if ui.button("Display Settings…").clicked() {
+                        self.actions.push(Action::SettingsAt(SettingsPage::Display));
+                        ui.close();
+                    }
+                });
             }
-            caret_menu_button(ui, 22.0, |ui| {
-                if ui.button("Fullscreen 1 → Program").clicked() {
-                    self.settings_fullscreen_slot = 0;
-                    ui.close();
-                }
-                if ui.button("Fullscreen 2 → Multiview").clicked() {
-                    self.settings_fullscreen_slot = 1;
-                    ui.close();
-                }
-                ui.separator();
-                if ui.button("Display Settings…").clicked() {
-                    self.actions.push(Action::SettingsAt(SettingsPage::Display));
-                    ui.close();
-                }
-            });
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 ui.spacing_mut().item_spacing.x = 3.0;
                 if ui
@@ -1562,25 +1573,29 @@ impl RustMixApp {
                 if settings.clicked() {
                     self.actions.push(Action::Settings);
                 }
-                if ui
+                let mode = ui
                     .add(
-                        egui::Button::new(RichText::new("Basic").strong())
-                            .selected(self.multiview)
-                            .min_size(egui::vec2(54.0, 22.0)),
+                        egui::Button::new(
+                            RichText::new(if self.basic_mode { "Advanced" } else { "Basic" })
+                                .strong(),
+                        )
+                        .selected(self.basic_mode)
+                        .min_size(egui::vec2(54.0, 22.0)),
                     )
-                    .on_hover_text("Toggle Basic / Multiview mode")
-                    .clicked()
-                {
-                    self.actions.push(Action::Multiview);
+                    .on_hover_text("Show Basic or Advanced operator controls");
+                self.automation.insert("toolbar.basic".into(), mode.rect);
+                if mode.clicked() {
+                    self.actions.push(Action::BasicMode);
                 }
-                if ui
-                    .add(
-                        egui::Button::new(RichText::new("Pause Inputs").strong())
-                            .selected(self.engine.inputs_paused())
-                            .min_size(egui::vec2(84.0, 22.0)),
-                    )
-                    .on_hover_text("Freeze input motion while keeping switching active")
-                    .clicked()
+                if !self.basic_mode
+                    && ui
+                        .add(
+                            egui::Button::new(RichText::new("Pause Inputs").strong())
+                                .selected(self.engine.inputs_paused())
+                                .min_size(egui::vec2(84.0, 22.0)),
+                        )
+                        .on_hover_text("Freeze input motion while keeping switching active")
+                        .clicked()
                 {
                     self.actions.push(Action::PauseDemo);
                 }
@@ -1600,6 +1615,12 @@ impl RustMixApp {
             self.automation.insert("production.add".into(), add.rect);
             if add.clicked() {
                 self.actions.push(Action::Add);
+            }
+            if self.basic_mode {
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    self.workspace_lock(ui);
+                });
+                return;
             }
             let caret = caret_menu_button(ui, 24.0, |ui| {
                 for (idx, (label, kind)) in [
@@ -1816,17 +1837,7 @@ impl RustMixApp {
             // Right-side modern vector icon cluster
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 ui.spacing_mut().item_spacing.x = 3.0;
-                let lock = vector_icon_button(
-                    ui,
-                    VectorIcon::Lock(self.ui_locked),
-                    egui::vec2(26.0, 24.0),
-                    self.ui_locked,
-                    None,
-                )
-                .on_hover_text("Lock workspace controls");
-                if lock.clicked() {
-                    self.ui_locked = !self.ui_locked;
-                }
+                self.workspace_lock(ui);
                 let snap =
                     vector_icon_button(ui, VectorIcon::Camera, egui::vec2(26.0, 24.0), false, None)
                         .on_hover_text("Save Program snapshot to PNG");
@@ -1901,6 +1912,21 @@ impl RustMixApp {
                 }
             });
         });
+    }
+
+    fn workspace_lock(&mut self, ui: &mut egui::Ui) {
+        let lock = vector_icon_button(
+            ui,
+            VectorIcon::Lock(self.ui_locked),
+            egui::vec2(26.0, 24.0),
+            self.ui_locked,
+            None,
+        )
+        .on_hover_text("Lock workspace controls");
+        self.automation.insert("output.lock".into(), lock.rect);
+        if lock.clicked() {
+            self.ui_locked = !self.ui_locked;
+        }
     }
 
     fn status(&mut self, ui: &mut egui::Ui) {
@@ -2207,6 +2233,7 @@ impl eframe::App for RustMixApp {
         }
     }
     fn save(&mut self, storage: &mut dyn eframe::Storage) {
+        storage.set_string("basic-mode.v1", self.basic_mode.to_string());
         if let Ok(json) = serde_json::to_string(&self.dock) {
             storage.set_string("workspace.v2", json);
         }
