@@ -178,11 +178,20 @@ impl RustMixApp {
                 s.stage = 13;
             }
             13 if s.captured => {
-                self.path = Some("artifacts/reference.rustmix.json".into());
-                self.start_save(false, false);
-                s.stage = 14;
+                if self.scripted_save("artifacts/reference.rustmix.json", ctx)? {
+                    s.stage = 14;
+                }
             }
             14 => {
+                if self.job.is_some() {
+                    return Ok(());
+                }
+                if !PathBuf::from("artifacts/reference.rustmix.json").exists() {
+                    return Err(Error::Invalid(format!(
+                        "Reference smoke save did not write the project (status: {})",
+                        self.notice
+                    )));
+                }
                 std::fs::write(
                     "artifacts/reference-smoke-ok.json",
                     serde_json::to_vec_pretty(self.engine.project())?,

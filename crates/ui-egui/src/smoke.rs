@@ -233,9 +233,9 @@ impl RustMixApp {
                 s.stage = 10;
             }
             10 => {
-                std::fs::create_dir_all("artifacts")?;
-                self.path = Some(PathBuf::from("artifacts/smoke.rustmix.json"));
-                self.dispatch(Action::Save(false), ctx);
+                if !self.scripted_save("artifacts/smoke.rustmix.json", ctx)? {
+                    return Ok(());
+                }
                 s.stage = 11;
             }
             11 => {
@@ -243,9 +243,10 @@ impl RustMixApp {
                     return Ok(());
                 }
                 if !PathBuf::from("artifacts/smoke.rustmix.json").exists() {
-                    return Err(Error::Invalid(
-                        "UI save worker did not write the project".into(),
-                    ));
+                    return Err(Error::Invalid(format!(
+                        "UI save worker did not write the project (status: {})",
+                        self.notice
+                    )));
                 }
                 self.assert_smoke_state()?;
                 ctx.send_viewport_cmd(egui::ViewportCommand::Screenshot(egui::UserData::default()));
@@ -675,8 +676,9 @@ impl RustMixApp {
             }
             7 => {
                 self.assert_input_smoke()?;
-                self.path = Some("artifacts/inputs.rustmix.json".into());
-                self.start_save(false, false);
+                if !self.scripted_save("artifacts/inputs.rustmix.json", ctx)? {
+                    return Ok(());
+                }
                 ctx.send_viewport_cmd(egui::ViewportCommand::Screenshot(egui::UserData::default()));
                 s.captured = false;
                 s.stage = 8;
@@ -684,6 +686,12 @@ impl RustMixApp {
             8 => {
                 if self.job.is_some() || !s.captured {
                     return Ok(());
+                }
+                if !PathBuf::from("artifacts/inputs.rustmix.json").exists() {
+                    return Err(Error::Invalid(format!(
+                        "Input smoke save did not write the project (status: {})",
+                        self.notice
+                    )));
                 }
                 self.assert_input_smoke()?;
                 std::fs::write(
@@ -964,6 +972,32 @@ impl RustMixApp {
 mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used, clippy::indexing_slicing)]
     use super::*;
+
+    #[test]
+    fn scripted_save_waits_for_the_file_job_slot_and_writes_the_project() {
+        let mut app = RustMixApp::headless();
+        let ctx = egui::Context::default();
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("scripted.rustmix.json");
+        let path = path.to_str().unwrap().to_owned();
+        let (_sender, receiver) = std::sync::mpsc::sync_channel(1);
+        app.job = Some(receiver);
+        assert!(!app.scripted_save(&path, &ctx).unwrap());
+        assert!(app.job.is_some(), "busy slot must be left untouched");
+        app.job = None;
+        assert!(app.scripted_save(&path, &ctx).unwrap());
+        let receiver = app.job.take().expect("scripted save started no job");
+        let outcome = match receiver
+            .recv_timeout(Duration::from_secs(10))
+            .expect("scripted save worker did not answer")
+        {
+            JobDone::Saved(..) => Ok(()),
+            JobDone::Failed(error) => Err(error),
+            _ => Err("unexpected scripted save result".to_owned()),
+        };
+        outcome.expect("scripted save did not write the project");
+        assert!(Path::new(&path).exists());
+    }
 
     #[test]
     fn input_lifecycle_and_new_preset_reach_the_running_program_producer() {

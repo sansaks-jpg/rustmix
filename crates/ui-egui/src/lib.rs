@@ -1111,6 +1111,28 @@ impl RustMixApp {
         });
     }
 
+    /// Save entry point for the opt-in native smoke drivers. It first waits out
+    /// any in-flight file operation (for example the periodic recovery
+    /// checkpoint) so a scripted save cannot be refused, reports that the
+    /// caller must retry on a later frame, and fails loudly when no file job
+    /// started at all. No product path uses it.
+    fn scripted_save(&mut self, path: &str, ctx: &egui::Context) -> Result<bool> {
+        if self.job.is_some() {
+            return Ok(false);
+        }
+        if let Some(parent) = Path::new(path).parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        self.path = Some(PathBuf::from(path));
+        self.dispatch(Action::Save(false), ctx);
+        if self.job.is_none() {
+            return Err(Error::Invalid(
+                "Scripted save did not start a file job".into(),
+            ));
+        }
+        Ok(true)
+    }
+
     fn start_load(&mut self, path: Option<PathBuf>) {
         if self.job.is_some() {
             return;
@@ -2152,7 +2174,14 @@ impl RustMixApp {
         for action in std::mem::take(&mut self.actions) {
             self.dispatch(action, &ctx);
         }
-        if self.job.is_none() && self.last_autosave.elapsed() > Duration::from_secs(60) {
+        // Scripted hosted runs stay deterministic: the periodic recovery
+        // checkpoint would otherwise race the harness's explicit saves for the
+        // single file-job slot and add disk writes to the perf cadence.
+        if self.smoke.is_none()
+            && self.profile.is_none()
+            && self.job.is_none()
+            && self.last_autosave.elapsed() > Duration::from_secs(60)
+        {
             self.start_save(false, true);
             self.last_autosave = Instant::now();
         }

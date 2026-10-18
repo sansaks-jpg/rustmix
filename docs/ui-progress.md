@@ -368,3 +368,39 @@ keyboard assertion, the source-tile channel-5 click and the dialog 1–8 flow);
 `pwsh scripts/check-repository.ps1` passes (reference inventory verified; full reference match
 remains **false**). No hosted run, native launch, screenshot inspection or stinger-clip
 implementation happened here; those stay explicitly open in `docs/gaps.md`/the feature matrix.
+
+## 2026-10-18 - hosted native-smoke failure after the Task 1.1 push: file-job race (local headless run)
+
+The first hosted run of the Task 1.1 port ([39126451836](https://github.com/sansaks-jpg/rustmix/actions/runs/39126451836))
+passed formatting, the repository guard, locked check, warnings-as-errors clippy, all workspace
+tests and the release build, then failed the native smoke at stage 11 with "UI save worker did not
+write the project". Downloaded evidence (`smoke-error.txt`, empty stderr, `layout-stability.json`)
+showed the app ran real native frames and died exactly at the scripted save check.
+
+Root cause: the UI-013 periodic recovery checkpoint (`last_autosave`, every 60 seconds) writes
+through the same single file-job slot as the harness's scripted saves. On the hosted runner the
+60-second tick landed while the scripted `Action::Save` was being dispatched; `start_save` refused
+with "A file operation is already running", the stage advanced anyway and the file was never
+written. The same unguarded pattern existed in the input smoke, and the reference smoke dispatched
+its save and closed the process one frame later without waiting for the worker or checking the
+file.
+
+Fix (harness and scripted-mode only, no product behaviour changed):
+
+- New `RustMixApp::scripted_save` used by all three scripted saves: it waits out any in-flight
+  file job (returns "retry next frame"), creates the parent directory, dispatches the operator
+  `Action::Save` path, and fails with an explicit error when no file job started.
+- Smoke stage 11, the input smoke and the reference smoke now verify that the scripted project
+  file exists and include the current status-banner text in the failure message; the reference
+  smoke waits for the save worker before writing its evidence and closing.
+- The periodic recovery checkpoint is suppressed while a scripted smoke or `--ui-perf` profile run
+  is active so hosted runs stay deterministic (autosave remains active in normal operation).
+- New headless regression test `scripted_save_waits_for_the_file_job_slot_and_writes_the_project`
+  covers the busy-slot path and a real worker write.
+
+Verified with headless runs only: `cargo test --workspace --locked` green - engine 56 (13 unit,
+7 overlays, 7 categories, 8 inputs, 8 production, 2 transitions, 11 workflow) and UI 46 (with the
+new scripted-save regression); `cargo fmt --all -- --check` clean;
+`cargo clippy --workspace --all-targets --locked -- -D warnings` clean;
+`pwsh scripts/check-repository.ps1` passes. Hosted native re-run is pending; this entry claims no
+native result.
