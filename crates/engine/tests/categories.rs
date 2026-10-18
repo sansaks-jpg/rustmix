@@ -157,3 +157,93 @@ fn presentation_changes_leave_an_active_transition_and_automation_running() {
             .is_err()
     );
 }
+
+#[test]
+fn combined_settings_apply_validates_name_and_preferences_atomically() {
+    let mut engine = Engine::default();
+    let before = engine.project().clone();
+    let mut changed = before.preferences.clone();
+    changed.ui_theme = UiTheme::Light;
+    assert!(
+        engine
+            .execute(
+                Command::ApplySettings {
+                    name: "\n".into(),
+                    preferences: changed
+                },
+                0
+            )
+            .is_err()
+    );
+    assert_eq!(engine.project(), &before);
+    let mut malformed = before.preferences.clone();
+    malformed.categories[0].id = 21;
+    assert!(
+        engine
+            .execute(
+                Command::ApplySettings {
+                    name: "Valid new name".into(),
+                    preferences: malformed
+                },
+                0
+            )
+            .is_err()
+    );
+    assert_eq!(engine.project(), &before);
+}
+
+#[test]
+fn combined_settings_apply_commits_once_and_preserves_active_program() {
+    let mut engine = Engine::default();
+    engine
+        .execute(Command::Transition(TransitionKind::Wipe), 0)
+        .unwrap();
+    engine.tick(250);
+    let before = engine.project().clone();
+    let transition = engine.transition().unwrap().clone();
+    let mut preferences = before.preferences.clone();
+    preferences.ui_theme = UiTheme::Light;
+    preferences.program_color = [4, 5, 6];
+    let command = Command::ApplySettings {
+        name: "Evening show".into(),
+        preferences: preferences.clone(),
+    };
+    assert_eq!(command.definition().id, "project.settings.apply");
+    assert!(command.definition().idempotent);
+    assert!(!command.definition().live);
+    engine.execute(command, 250).unwrap();
+    assert_eq!(engine.project().revision, before.revision + 1);
+    assert_eq!(engine.project().name, "Evening show");
+    assert_eq!(engine.project().preferences, preferences);
+    assert_eq!(engine.project().program, before.program);
+    assert_eq!(engine.project().preview, before.preview);
+    let active = engine.transition().unwrap();
+    assert_eq!(active.kind, transition.kind);
+    assert_eq!(active.from, transition.from);
+    assert_eq!(active.to, transition.to);
+    assert_eq!(active.start_ms, transition.start_ms);
+    assert_eq!(active.progress, transition.progress);
+}
+
+#[test]
+fn combined_settings_revision_overflow_has_no_partial_commit() {
+    let mut project = ProjectState::demo();
+    project.revision = u64::MAX;
+    let mut engine = Engine::from_project(project).unwrap();
+    let before = engine.project().clone();
+    let mut preferences = before.preferences.clone();
+    preferences.ui_theme = UiTheme::Light;
+    assert!(
+        engine
+            .execute(
+                Command::ApplySettings {
+                    name: "Overflow attempt".into(),
+                    preferences
+                },
+                0
+            )
+            .is_err()
+    );
+    assert_eq!(engine.project(), &before);
+    assert!(engine.transition().is_none());
+}

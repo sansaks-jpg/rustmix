@@ -473,6 +473,10 @@ pub enum Command {
     SetBus(usize, AudioChannel),
     SetOverlay(usize, OverlayState),
     SetPreferences(Preferences),
+    ApplySettings {
+        name: String,
+        preferences: Preferences,
+    },
     SetWorkspace(WorkspaceState),
     RenameProject(String),
     SetInputPaused(InputId, bool),
@@ -658,6 +662,14 @@ impl Command {
             Self::SetPreferences(_) => (
                 "project.preferences",
                 "Preferences",
+                "Project",
+                "",
+                true,
+                false,
+            ),
+            Self::ApplySettings { .. } => (
+                "project.settings.apply",
+                "Apply project settings",
                 "Project",
                 "",
                 true,
@@ -1229,6 +1241,10 @@ impl Engine {
             }
             Command::SetPreferences(p) => {
                 next.preferences = p;
+            }
+            Command::ApplySettings { name, preferences } => {
+                next.name = name;
+                next.preferences = preferences;
             }
             Command::SetWorkspace(w) => {
                 next.workspace = w;
