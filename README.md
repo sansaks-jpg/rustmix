@@ -13,6 +13,12 @@ UI repaint. Schema 3 migrates schemas 1/2 and preserves backup bytes; older bina
 schema 3. These changes are **experimental, hosted acceptance pending**. See the
 [feature comparison](docs/reference-feature-comparison.md) and [ADR 0009](docs/adr/0009-engine-owned-production-controls.md).
 
+**Full reference parity is not achieved.** The [complete reference audit](docs/reference-audit.md)
+covers all 30 observed areas and their input/effect/overlay/audio inventories. Run
+`./scripts/check-reference-coverage.ps1 -RequireFullMatch` for the strict gate: it currently rejects
+full acceptance because major backends, protocol compatibility and cadence/hardware qualification
+remain missing. Ordinary inventory/functional test success is not full feature acceptance.
+
 UI-009 repairs the growing monitor bank, changes the T-Bar to horizontal, and gives each synthetic input an engine-owned pause/restart/loop clock shared by its picture, progress bar and timecode. Program now processes each input before composition. Status distinguishes CPU composition from GPU display and unsupported outputs cannot display a false live state. All 32 tests and hosted native acceptance passed in [run 39089212707](https://github.com/sansaks-jpg/rustmix/actions/runs/39089212707); see [ADR 0006](docs/adr/0006-stable-monitor-bank-and-source-transports.md).
 
 ## Download / build

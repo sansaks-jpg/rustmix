@@ -42,6 +42,24 @@ Not yet verified: audio samples, capture devices, monitor hotplug, independent o
 
 Current run evidence and exact outcomes belong in [ui-progress.md](ui-progress.md).
 
+## Complete reference inventory versus acceptance
+
+`scripts/check-reference-coverage.ps1` validates the committed [audit data](reference-audit.json):
+30 areas, 40 input types, 20 effects, 16 overlay/stinger channels, 9 audio destinations, 12 UI
+workflows and all 777 unique public function names in 29 groups. It checks the pinned function-name
+hash, actual engine transition enum, overlay/audio bank sizes and evidence paths. The normal
+repository guard checks inventory consistency; a green result is not reference feature acceptance.
+`./scripts/check-reference-coverage.ps1 -RequireFullMatch` is the separate strict gate and must fail
+while the ledger contains missing/partial behavior or lacks protocol/hardware/cadence qualification.
+Current full match is false. Every future matched claim still requires actual scope-specific runtime
+evidence; this static checker cannot establish behavior or replace hardware/AV/endurance tests.
+
+Basic-mode regression checks reduced controls, real Quick Play, preservation of live project state,
+restoring Advanced and independent multiview selection at three viewport sizes. The native input
+workflow must capture `input-basic.png` after clicking Basic and preserve buses/revision when
+returning to Advanced. Its deadline is 150 seconds for the added playlist/keyboard/Basic stages;
+the outer process timeout remains 270 seconds. This correction is pending hosted acceptance.
+
 ## UI-004 / UI-005 / UI-006 dialog and workflow checks
 
 Widget regressions cover: fixed footer geometry and sidebar navigation at 734×466, 1100×700, 1600×900 and 1920×1080 across `Add Input`, `Input Properties`, `Settings` and `Overlay Settings`; monitor gear / filter reset / offline visibility / removal cancellation with Preview/Program isolation; generator samples after source removal plus Settings draft cancellation; horizontal T-Bar endpoint hold/release; and `overlay_settings_stage_slot_edits_and_apply_only_on_apply` (staged per-slot edits, slot switching, Cancel discard, Apply commit, bottom-bar `output.overlay.settings` gear, Audio strip `audio.input.1.settings` routing shortcut, `dialog.properties.audioSettings`, and `Multiview` Split/Grid layout presets).

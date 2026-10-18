@@ -1,0 +1,183 @@
+# Audit seluruh temuan referensi
+
+Tanggal: 2026-10-18. **Kesimpulan: belum semua fitur sesuai.** Audit ini mencakup seluruh 30 area inventaris, 40 tipe input, 20 efek transisi, 16 kanal overlay/stinger, dan 9 tujuan audio. Jumlah ini adalah cakupan pemeriksaan, bukan jumlah fitur yang sudah tersedia.
+
+Snapshot sumber: `rustmix-reference/vmix`, studi versi 29.0.0.48. Katalog memuat 777 nama fungsi publik; RustMix belum memiliki endpoint/protokol yang kompatibel. Engine Rust yang memiliki perintah internal tidak sama dengan implementasi 777 fungsi tersebut. Referensi Rust sendiri adalah model domain/API dengan backend tertentu dinyatakan unavailable, sehingga daftar enum tidak dipakai sebagai bukti perangkat/codec berjalan.
+
+Status: `experimental` = sebagian alur prototipe berjalan; `stub` = hanya simulasi/kendali; `not_started` = belum ada backend/alur kerja. Tidak ada area di bawah yang diklaim setara penuh atau production-ready.
+
+## Semua area yang diperiksa
+
+| # | Area referensi | Status RustMix | Yang benar-benar ada | Kekurangan terhadap temuan | Bukti sumber / pengujian |
+|---|---|---|---|---|---|
+| 1 | Preview / Program | experimental | Independent Preview, Program, explicit Cut/Take and source exchange | Synthetic/PNG reference raster only; no qualified broadcast output | [kode](../crates/engine/src/lib.rs) / [uji](../crates/engine/tests/workflow.rs) |
+| 2 | Transitions | experimental | Four independent saved slots and 12 CPU effects | 8 observed effects and stingers absent; no vendor-pixel parity or GPU parity | [kode](../crates/engine/src/render.rs) / [uji](../crates/engine/tests/transitions.rs) |
+| 3 | Inputs | experimental | Seven own generators plus bounded external PNG | 40 observed wire types are not 40 working backends; video/capture/network/browser absent | [kode](../crates/ui-egui/src/media.rs) / [uji](../crates/engine/tests/inputs.rs) |
+| 4 | Overlays | experimental | Four Program title panels and staged text/position edits | Not 8 standard source overlays plus 8 stingers; no channel fade/duration/border/key-fill | [kode](../crates/engine/src/lib.rs) / [uji](../crates/ui-egui/src/smoke.rs) |
+| 5 | Multiview | experimental | In-app Split and full source grid layouts | No two independent multiview outputs or all five observed layout contracts | [kode](../crates/ui-egui/src/panels.rs) / [uji](../crates/ui-egui/src/smoke.rs) |
+| 6 | Titles / GT graphics | experimental | Original title/subtitle panels and generated graphics | No GT/XAML compatibility, animation templates, ticker or editable production clock | [kode](../crates/ui-egui/src/panels.rs) / [uji](../crates/ui-egui/src/smoke.rs) |
+| 7 | Audio mixer / matrix | stub | Gain/mute/solo and Master/A/B meter-control simulation | No sample blocks, device audio, nine destinations, DSP, mix-minus or AV sync | [kode](../crates/engine/src/audio.rs) / [uji](../crates/engine/tests/workflow.rs) |
+| 8 | Routing / external outputs | not_started | Unavailable starts remain gated | No SDI/virtual camera/NDI/OMT/SRT routing or four independent hardware outputs | [kode](../crates/ui-egui/src/lib.rs) / [uji](../crates/ui-egui/src/smoke.rs) |
+| 9 | Streaming | not_started | Unavailable starts remain gated | No encoder, RTMP/RTMPS transport, profiles, reconnect or five destinations | [kode](../crates/ui-egui/src/lib.rs) / [uji](../crates/ui-egui/src/smoke.rs) |
+| 10 | Recording | not_started | Unavailable starts remain gated | No Program recording, independent WAV, splitting, recovery or two recording outputs | [kode](../crates/ui-egui/src/lib.rs) / [uji](../crates/ui-egui/src/smoke.rs) |
+| 11 | Replay | not_started | None | No replay storage, camera channels, events, marks, speed control or exports | [kode](../Cargo.toml) |
+| 12 | PTZ camera control | not_started | None | No VISCA/vendor/UVC PTZ provider, movement or presets | [kode](../Cargo.toml) |
+| 13 | Shortcuts / MIDI / surfaces | experimental | Saved keyboard action/key/modifier mappings with validation and repeat/focus guards | No MIDI, activators, controllers, voice or 19 input trigger events | [kode](../crates/engine/src/shortcuts.rs) / [uji](../crates/ui-egui/src/smoke.rs) |
+| 14 | Presets / sessions | experimental | Own schema 3, migration, atomic saves, backups and checkpoints | No .vmix import/export or media packaging; physical fault/power-loss qualification absent | [kode](../crates/engine/src/persistence.rs) / [uji](../crates/engine/tests/inputs.rs) |
+| 15 | Settings | experimental | Validated project preferences, layout and keyboard drafts | 256 observed properties are not implemented; theme/color/display and advanced fields include unavailable/scaffold controls | [kode](../crates/ui-egui/src/dialogs.rs) / [uji](../crates/ui-egui/src/smoke.rs) |
+| 16 | HTTP / TCP / WebSocket API | not_started | Headless typed Rust commands only | No HTTP listener, XML state document, public function dispatcher, TCP or WebSocket protocol | [kode](../Cargo.toml) |
+| 17 | Scripting | not_started | None | No scripts, timers, runtime sandbox or script permissions | [kode](../Cargo.toml) |
+| 18 | Data sources | not_started | None | No database/CSV/JSON/browser/social connector or live title binding | [kode](../Cargo.toml) |
+| 19 | Browser inputs | not_started | None | No embedded browser engine or texture/audio integration | [kode](../Cargo.toml) |
+| 20 | Virtual sets | not_started | Procedural studio picture is a generator | Not a composited camera/talent/virtual-set workflow; no imported set assets | [kode](../crates/engine/src/render.rs) |
+| 21 | Video call / guests | not_started | None | No WebRTC, guest sessions, consent workflow or mix-minus return | [kode](../Cargo.toml) |
+| 22 | Voice control | not_started | None | No speech engine, microphone source or confidence/test behavior | [kode](../Cargo.toml) |
+| 23 | Tally lights | not_started | None | No hardware/network tally backend or controller status | [kode](../Cargo.toml) |
+| 24 | Statistics / diagnostics | experimental | Measured reference Program cadence, process memory and local status counters | Hosted cadence targets failed; no full media/QoS/GPU/AV/hardware diagnostics | [kode](../crates/ui-egui/src/profile.rs) / [uji](../crates/ui-egui/src/program.rs) |
+| 25 | Production clocks | stub | Fixed one-minute procedural countdown and independent source transports | No editable production clock/countdown engine or title countdown API | [kode](../crates/engine/src/render.rs) / [uji](../crates/engine/tests/workflow.rs) |
+| 26 | VST3 audio plugins | not_started | None | No real audio/plugin hosting or license-reviewed VST3 adapter | [kode](../Cargo.toml) |
+| 27 | NDI | not_started | None | No SDK/runtime integration, sender, receiver or passthrough recording | [kode](../Cargo.toml) |
+| 28 | OMT | not_started | None | No protocol/runtime adapter, input or output | [kode](../Cargo.toml) |
+| 29 | Color correction / LUT | experimental | Persisted lift/gain/saturation, mirror/sharpen, approximate chroma key and PIP | No full CC family, LUT/masks, ten-layer crop/rotation/animation graph or color-managed GPU pipeline | [kode](../crates/ui-egui/src/panels.rs) / [uji](../crates/ui-egui/src/smoke.rs) |
+| 30 | Social / cloud destinations | not_started | None | No authenticated provider integration; no credentials requested or internet Program sent | [kode](../Cargo.toml) |
+
+## 40 tipe input
+
+| Temuan | Status | Batas aktual |
+|---|---|---|
+| Video | not_started | No corresponding working source backend |
+| VideoList | not_started | No corresponding working source backend |
+| VideoLoop | not_started | No corresponding working source backend |
+| Image | experimental | External PNG only; no generic still-image format parity |
+| Photos | not_started | No corresponding working source backend |
+| ImageSequence | not_started | No corresponding working source backend |
+| AudioFile | not_started | No corresponding working source backend |
+| Audio | not_started | No corresponding working source backend |
+| DVD | not_started | No corresponding working source backend |
+| PowerPoint | not_started | No corresponding working source backend |
+| Flash | not_started | No corresponding working source backend |
+| Xaml | not_started | No corresponding working source backend |
+| Waveform | not_started | No corresponding working source backend |
+| Capture | not_started | No corresponding working source backend |
+| DesktopCapture | not_started | No corresponding working source backend |
+| NDI | not_started | No corresponding working source backend |
+| OMT | not_started | No corresponding working source backend |
+| SRT | not_started | No corresponding working source backend |
+| VLC | not_started | No corresponding working source backend |
+| Stream | not_started | No corresponding working source backend |
+| Zoom | not_started | No corresponding working source backend |
+| VideoCall | not_started | No corresponding working source backend |
+| Telestrator | not_started | No corresponding working source backend |
+| Browser | not_started | No corresponding working source backend |
+| Title | experimental | Own Program title panels, not a general title/template input |
+| GT | not_started | No corresponding working source backend |
+| Colour | experimental | Own solid-color generator |
+| VirtualSet | not_started | No corresponding working source backend |
+| Virtual | not_started | No corresponding working source backend |
+| Mix | not_started | No corresponding working source backend |
+| Output | not_started | No corresponding working source backend |
+| Preview | not_started | No corresponding working source backend |
+| Blank | not_started | No corresponding working source backend |
+| Placeholder | not_started | No corresponding working source backend |
+| Signal | experimental | Own procedural color bars |
+| VideoDelay | not_started | No corresponding working source backend |
+| ProductionClocks | not_started | No corresponding working source backend |
+| Replay | not_started | No corresponding working source backend |
+| ReplayPreview | not_started | No corresponding working source backend |
+| ReplayOverlay | not_started | No corresponding working source backend |
+
+## 20 efek transisi
+
+| Temuan | Status | Batas aktual |
+|---|---|---|
+| Fade | experimental | Own CPU algorithm with endpoint/direction tests; no cross-vendor pixel parity |
+| Zoom | not_started | No implementation; must not alias to another effect |
+| Wipe | experimental | Own CPU algorithm with endpoint/direction tests; no cross-vendor pixel parity |
+| Slide | experimental | Own CPU algorithm with endpoint/direction tests; no cross-vendor pixel parity |
+| Fly | not_started | No implementation; must not alias to another effect |
+| CrossZoom | not_started | No implementation; must not alias to another effect |
+| FlyRotate | not_started | No implementation; must not alias to another effect |
+| Cube | not_started | No implementation; must not alias to another effect |
+| CubeZoom | not_started | No implementation; must not alias to another effect |
+| VerticalWipe | experimental | Own CPU algorithm with endpoint/direction tests; no cross-vendor pixel parity |
+| VerticalSlide | experimental | Own CPU algorithm with endpoint/direction tests; no cross-vendor pixel parity |
+| Merge | not_started | No implementation; must not alias to another effect |
+| WipeReverse | experimental | Own CPU algorithm with endpoint/direction tests; no cross-vendor pixel parity |
+| SlideReverse | experimental | Own CPU algorithm with endpoint/direction tests; no cross-vendor pixel parity |
+| VerticalWipeReverse | experimental | Own CPU algorithm with endpoint/direction tests; no cross-vendor pixel parity |
+| VerticalSlideReverse | experimental | Own CPU algorithm with endpoint/direction tests; no cross-vendor pixel parity |
+| BarnDoor | experimental | Own CPU algorithm with endpoint/direction tests; no cross-vendor pixel parity |
+| RollerDoor | experimental | Own CPU algorithm with endpoint/direction tests; no cross-vendor pixel parity |
+| AlphaFade | not_started | No implementation; must not alias to another effect |
+| Cut | experimental | Own CPU algorithm with endpoint/direction tests; no cross-vendor pixel parity |
+
+## 16 kanal overlay/stinger
+
+| Temuan | Status | Batas aktual |
+|---|---|---|
+| 1 | experimental | Title panel only |
+| 2 | experimental | Title panel only |
+| 3 | experimental | Title panel only |
+| 4 | experimental | Title panel only |
+| 5 | not_started | No source overlay/stinger implementation |
+| 6 | not_started | No source overlay/stinger implementation |
+| 7 | not_started | No source overlay/stinger implementation |
+| 8 | not_started | No source overlay/stinger implementation |
+| 9 | not_started | No source overlay/stinger implementation |
+| 10 | not_started | No source overlay/stinger implementation |
+| 11 | not_started | No source overlay/stinger implementation |
+| 12 | not_started | No source overlay/stinger implementation |
+| 13 | not_started | No source overlay/stinger implementation |
+| 14 | not_started | No source overlay/stinger implementation |
+| 15 | not_started | No source overlay/stinger implementation |
+| 16 | not_started | No source overlay/stinger implementation |
+
+## 9 tujuan audio
+
+| Temuan | Status | Batas aktual |
+|---|---|---|
+| Master | stub | Control/meter simulation only; no samples or device sound |
+| Headphones | not_started | No bus/device implementation |
+| A | stub | Control/meter simulation only; no samples or device sound |
+| B | stub | Control/meter simulation only; no samples or device sound |
+| C | not_started | No bus/device implementation |
+| D | not_started | No bus/device implementation |
+| E | not_started | No bus/device implementation |
+| F | not_started | No bus/device implementation |
+| G | not_started | No bus/device implementation |
+
+## Kontrak alur UI yang diperiksa terpisah
+
+| Alur | Status | Perilaku aktual | Batas terhadap temuan |
+|---|---|---|---|
+| Basic / Advanced presentation | experimental | Independent persisted UI mode; Basic retains both monitors, Quick Play, input selection/cut/overlays 1-4, Add Input, audio mixer and lock. Does not change Program or multiview choice. | New correction awaits hosted acceptance; overlays/audio/inputs retain the general prototype limitations. |
+| Named input playlist | experimental | 1-16 saved lists, at most 128 items, independent effects/hold times, reorder, loop/manual/selected start/clear-on-start, start/stop/next/previous and offline alarms. | Explicit synthetic/PNG holds only; no file-duration inference, video end events, pause/seek or media playback engine. |
+| Keyboard bindings / palette | experimental | Validated persisted logical key/modifier/action mappings, focus/repeat guards and quick action palette. | At most 64 bindings and the implemented engine action subset; no 777-function dispatcher, MIDI or control surfaces. |
+| Four transition slots | experimental | Each saved slot has a real CPU effect and duration; in-flight transition pins its configuration. | 12 of 20 observed effects; no stingers/GPU equivalence or vendor-pixel parity. |
+| Manual T-bar | experimental | Engine-owned manual transition, endpoint latch and defined source exchange. | CPU raster only; no external controller calibration, routing modes or hardware qualification. |
+| Input Settings transactions | experimental | Staged persisted PNG/generator effects, Cancel discard, bounded loading/relink, duplicate and source lifecycle. | No ten-layer transform/crop/rotation animation graph, full color tools or real video/device properties. |
+| Input category filter | stub | Colored chips currently filter generator kinds. | Reference categories are arbitrary per-input group assignments; six colors/custom categories and category editor are absent. |
+| Input search | experimental | Inline case-insensitive input number/name filter and clear action. | No reference-style search modal, shortcut integration or arbitrary category search. |
+| Theme and Preview/Program colors | stub | Original static dark palette. | No configurable theme variables or persisted per-role colors; Appearance scaffolding is not a working theme engine. |
+| Fullscreen Program outputs | stub | Fullscreen button expands the application window; menu stores a selected slot in UI memory. | No independent Program-only monitor window, two routed fullscreen outputs, display selection or hotplug handling. |
+| Audio Mixer pane toggle | stub | Docked audio pane, right-side focus shortcut and saved workspace. | Focus is not collapse/show; reference Audio Mixer pane toggle and independent monitoring destinations are absent. |
+| Settings categories and fields | stub | Project preferences/layout/key mapping have validated draft application. | The 256 observed properties are not implemented. Several advanced/display/output fields are scaffold or unavailable; OK/Cancel geometry is not backend proof. |
+
+## Katalog seluruh fungsi publik
+
+Semua 777 identifier dari laporan referensi dicatat per kelompok di `public_function_contract.groups` dalam [data audit](reference-audit.json). Seluruhnya berstatus `not_started` untuk kontrak protokol karena belum ada dispatcher HTTP/XML/TCP/WebSocket. Beberapa perintah Rust internal mempunyai kegunaan serupa, tetapi tidak disamakan dengan fungsi/protokol referensi. Pemeriksa menghitung nama unik dan mencocokkan hash himpunan nama, bukan hanya membaca angka 777.
+
+## Bukti dan keputusan penerimaan
+
+- Run Windows `39110320365` pada kode `3150eb6`: 74 tes lulus, build, lima proses native, save/reopen dan packaging lulus. Dua pasangan JSON save/reopen identik; stderr native kosong. Screenshot workspace 1100/1600/1920, playlist, palette, Settings dan reopen telah ditinjau. Capture native Keyboard Settings juga telah ditinjau. Perbaikan Basic mode memerlukan run sesudah kode ini.
+- Target cadence **gagal** pada runner: 50 → 35.82 fps, 59.94 → 39.84 fps, 60 → 36.12 fps; raster aktual 640×360. Hasil ini bukan tolok ukur GPU/perangkat operator dan tidak membuktikan broadcast real-time.
+- Kesetaraan penuh belum bisa diterima: backend video/capture/audio/record/stream/replay/SDK dan sebagian besar kontrol referensi belum tersedia. Perubahan UI-012 menutup beberapa celah, bukan seluruh inventaris.
+- Data terstruktur ada di [reference-audit.json](reference-audit.json). Pemeriksa inventaris hanya memeriksa kelengkapan katalog dan konsistensi batas kode; bukan pengganti tes runtime setiap fitur. Mode `-RequireFullMatch` harus menolak keadaan saat ini, sehingga lulus inventaris tidak disamakan dengan kesetaraan penuh.
+
+## Urutan pekerjaan berikutnya
+
+1. Jadikan jalur picture-and-sound nyata: sumber audio 48 kHz, routing/impulse/mix-minus; video/file input berlisensi jelas, timestamp dan pengukuran default 30 fps.
+2. Bangun 8 kanal overlay sumber dan 8 stinger dengan waktu cut/alpha yang diuji; lengkapi efek yang belum ada dan graph layer/crop/rotation.
+3. Tambahkan output/encoder terisolasi, recording yang dapat dipulihkan dan stream ke server lokal; lakukan kajian lisensi sebelum runtime codec/SDK.
+4. Tambahkan API/CLI/control schemas, kategori input, tema/warna, MIDI/triggers dan otomasi yang benar-benar dieksekusi.
+5. Integrasi kamera/network/PTZ/tally/guests/NDI/OMT/VST3 hanya diterima setelah backend, izin lisensi dan perangkat yang diperlukan diuji. Tidak ada streaming publik atau lisensi berbayar yang diasumsikan disetujui.

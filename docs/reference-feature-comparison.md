@@ -1,5 +1,8 @@
 # Reference findings mapped to RustMix
 
+**Full audit: [all 30 areas plus the 40 input / 20 effect / 16 overlay / 9 audio contracts](reference-audit.md).**
+The full-match acceptance gate currently fails; neither this comparison nor a green functional CI run means all reference features are implemented.
+
 2026-10-18 · UI-012 · Source inspection at baseline `11a1fb3`, followed by this working-tree change.
 Reference: `C:\Users\WORKPLUS\Documents\WEB\rustmix-reference\vmix`.
 Behavioral reports and the playlist screenshot were inspected; no reference code/assets were copied.
@@ -12,6 +15,7 @@ Windows tests, native launch, screenshot review and reopen pass for this exact c
 | Four configurable transition slots | Former UI-only names with shared duration | Persisted independent effects/durations; twelve actual CPU effects including Cut; 3D/Merge/stingers absent |
 | Named playlists over current inputs | Former temporary UI sequence | Add/rename/delete, add/remove/reorder references, per-item hold/effect/time, selected start, loop/manual, start/stop/previous/next, offline alarm, project persistence |
 | Keyboard shortcuts and command families | Former fixed keys and enable switch | Editable persisted key/action/modifier rows; conflict validation, exact modifiers, repeat/focus guards; MIDI/control surfaces/API/scripting absent |
+| Basic / Advanced mode | Former Basic-to-Multiview alias | Independent persisted presentation state and reduced controls; buses/revision/multiview preservation tests and native Basic capture prepared; hosted acceptance pending |
 | Input categories/search | Existing kind filters and search | Arbitrary custom color categories remain absent |
 | Local media/stills | Bounded PNG files and seven procedural sources | No general video/audio decoding, playlist seek or file-duration inference |
 | Device/network inputs | No backend | Webcam, capture card, desktop capture, RTSP/SRT/NDI/OMT/browser/guest inputs remain absent |

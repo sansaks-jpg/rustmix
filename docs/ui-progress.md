@@ -238,3 +238,30 @@ review follows. The native proof is being strengthened further: selecting Previe
 custom X key ensures its assertion cannot pass merely because taking input 9 already selected
 input 8; native Keyboard Settings also gets its own required capture. These harness-only changes
 require another exact-code run; product behavior and passing assertions are retained.
+
+UI-012 fourth hosted run [39110320365](https://github.com/sansaks-jpg/rustmix/actions/runs/39110320365),
+code `3150eb6`, passed formatting, repository guard, locked compilation, warnings-as-errors Clippy,
+all 74 tests (36 engine / 38 UI), release build, five native processes, save/reopen and packaging.
+Both pairs of saved/reopened JSON are byte-identical and all five native stderr files are empty.
+Downloaded native workspace/dialog/playlist/palette/reopen screenshots were reviewed, including
+the required Keyboard Settings capture and the distinct Preview 1 → X → Preview 8 assertion.
+
+Cadence qualification still **failed**: actual 35.82 / 39.84 / 36.12 fps for targets 50 / 59.94 / 60,
+with 118 / 167 / 199 skipped frames, at 640×360. Hosted Hyper-V results do not qualify the owner's
+GPU, physical input/output, AV synchronization, endurance or full-HD production. Peak working set
+across the five short processes was 136.32 MiB and maximum private bytes 365.45 MiB; dedicated
+VRAM and long-run stabilization were not measured.
+
+The latest user request triggered a complete reference audit: all 30 feature areas, 40 input names,
+20 effects, 16 overlay/stinger channels, 9 audio destinations, 12 UI workflow contracts and 777
+public function identifiers in 29 groups. See [reference-audit.md](reference-audit.md). Full parity
+is explicitly false; compatible wire-function count is zero. Local inventory checking passes,
+while the strict full-match gate rejects the current project. Negative source checks rejected a
+false all-complete claim, string qualification flag, duplicate effect and substituted function name.
+These are source/inventory results, not media runtime tests.
+
+The audit also found Basic incorrectly opened Multiview. Code `9da4efd` now gives Basic its own
+persisted UI presentation state, retains core controls and hides advanced surfaces, preserving
+Program/Preview/revision and the previous multiview choice. New widget coverage and required
+`input-basic.png` native evidence await a fresh exact-code hosted run. No local compile/test or
+native launch was performed.

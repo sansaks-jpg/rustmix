@@ -1,5 +1,10 @@
 # Known gaps
 
+The [complete reference audit](reference-audit.md) enumerates all observed areas, input/effect/
+overlay/audio contracts, UI workflows and public function names. Full-match acceptance is false:
+major media/audio/output/API backends are absent, and hosted cadence/hardware qualification
+does not pass. The Basic-to-Multiview alias is corrected in source; hosted acceptance is pending.
+
 UI-012 (2026-10-18), source implemented / acceptance pending: the fixed-key limitation in G07 is
 addressed by persisted remapping, and UI-owned playlist/slot state moves into the headless engine.
 Four independent transition slots, twelve CPU effects and named input playlists now have prepared

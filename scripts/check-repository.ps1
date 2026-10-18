@@ -18,4 +18,5 @@ if (Test-Path assets) {
         if (-not (Select-String -LiteralPath ATTRIBUTION.md -SimpleMatch $asset.Name -Quiet)) { throw "Missing asset index row: $($asset.Name)" }
     }
 }
-Write-Output 'Repository layer and asset inventory checks passed'
+& (Join-Path $PSScriptRoot 'check-reference-coverage.ps1')
+Write-Output 'Repository layer, asset and reference inventory checks passed (not full feature acceptance)'
