@@ -49,3 +49,5 @@ UI-004 through UI-006 refine the broadcast operator workflow across all four bou
 - [ADR 0001](docs/adr/0001-native-demo-ui.md), [ADR 0004](docs/adr/0004-main-window-control-fidelity.md), [ADR 0005](docs/adr/0005-overlay-and-reference-dialogs.md), [licensing](docs/licensing.md)
 
 No production readiness, hardware support, GPU compositor parity, long-run timing or live output continuity is claimed.
+
+UI-010 adds persisted PNG references and processing settings, ordered insertion, source duplication, transactional Input Settings and bounded asynchronous PNG loading. Schema 1 projects migrate to schema 2; older builds cannot open new schema 2 files. Images remain external references: keep the original files available. Missing images retain their input and show black with a relink warning. Hosted acceptance for this change is pending; see docs/ui-progress.md.

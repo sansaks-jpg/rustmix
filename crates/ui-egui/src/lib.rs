@@ -36,11 +36,13 @@ pub(crate) const CHIP_BG: Color32 = Color32::from_rgb(32, 39, 49);
 pub(crate) const FORM_LIGHT: Color32 = Color32::from_rgb(24, 30, 39);
 pub(crate) const FORM_TEXT: Color32 = Color32::from_rgb(232, 238, 245);
 
+type CachedRgba = (u32, u32, Arc<Vec<[u8; 4]>>);
+
 /// Decoded image cache plus the engine's committed processing configuration.
 #[derive(Clone, Default)]
 pub(crate) struct InputFx {
     pub config: InputConfig,
-    pub custom_rgba: Option<(u32, u32, Arc<Vec<[u8; 4]>>)>,
+    pub custom_rgba: Option<CachedRgba>,
     pub image_size: Option<[u32; 2]>,
     pub image_error: Option<String>,
     pub image_pending: bool,
@@ -460,6 +462,8 @@ pub struct RustMixApp {
     pub(crate) last_program_rgba: Vec<u8>,
     pub(crate) input_fx: HashMap<InputId, InputFx>,
     media_loader: media::MediaLoader,
+    image_picker: Option<Receiver<media::PickerDone>>,
+    add_image: Option<InputFx>,
     properties_fx: Option<InputFx>,
     properties_audio_original: Option<AudioChannel>,
     properties_token: u64,
@@ -667,6 +671,8 @@ impl RustMixApp {
             last_program_rgba: Vec::new(),
             input_fx,
             media_loader: media::MediaLoader::default(),
+            image_picker: None,
+            add_image: None,
             properties_fx: None,
             properties_audio_original: None,
             properties_token: 0,
@@ -856,6 +862,7 @@ impl RustMixApp {
 
     fn reset_editors(&mut self) {
         self.add_open = false;
+        self.add_image = None;
         self.add_loading = false;
         self.add_token = self.add_token.wrapping_add(1);
         self.close_properties();

@@ -167,3 +167,9 @@ Native evidence: 60 stable idle monitor frames; 35 paused Program frames with id
 Runner: hosted Windows Server 20348 / MSVC / Rust 1.94.1; Microsoft Hyper-V Video driver 10.0.20348.1. UI FPS from this software/hosted surface is not hardware throughput qualification. No laptop executable was built or run. The owner's AMD GPU, physical capture/audio, independent output scheduling, real media decode/encode, long-run reliability and complete vMix feature coverage remain unqualified or unimplemented.
 
 [Windows package](https://github.com/sansaks-jpg/rustmix/actions/runs/39089212707/artifacts/12121704067) · [Native evidence](https://github.com/sansaks-jpg/rustmix/actions/runs/39089212707/artifacts/12122445350). The final downloaded executable checksum matches the runner manifest: `0439407EC6ADF102D31421BA4D65C2F8AD5E817F8CAEA358A768C1C3E7F19474`. Local delivery: `C:\Users\WORKPLUS\Downloads\RustMix-UI009-final\rustmix.exe`. The main branch is unchanged; code is reviewable in draft PR #1. Subsequent edits are acceptance documentation only.
+
+## UI-010 — persisted inputs and source lifecycle (2026-10-18)
+
+Implemented pending hosted acceptance: schema 2 source/effect settings with schema 1 migration, ordered Add Input, PNG preview, duplication with muted audio, transactional OK/Cancel, validated layer graphs, missing-file black/status/relink, and bounded asynchronous pick/decode paths. New unit/widget/native acceptance covers imported pixels through a saved project and second-process reopen.
+
+First hosted run [39090739282](https://github.com/sansaks-jpg/rustmix/actions/runs/39090739282), code `45f4c6b`, passed formatting, repository guard and workspace compilation, then failed Clippy on nested condition/type complexity. Tests/build/native checks were not run. Both findings were corrected without disabling lint gates; a replacement run is required.

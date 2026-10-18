@@ -338,6 +338,28 @@ impl RustMixApp {
     }
 
     fn prepare_add_preview(&mut self, ctx: &egui::Context) {
+        if let Some(fx) = &self.add_image
+            && fx.media_path.as_deref() == Some(self.add_name.as_str())
+        {
+            if self.add_preview.is_none() {
+                let pixels = panels::process_source_pixels(
+                    &vec![[0, 0, 0, 255]; 320 * 180],
+                    320,
+                    180,
+                    fx,
+                    None,
+                );
+                let image = egui::ColorImage::from_rgba_unmultiplied(
+                    [320, 180],
+                    &pixels.into_iter().flatten().collect::<Vec<_>>(),
+                );
+                self.add_preview = Some((
+                    InputKind::Color,
+                    ctx.load_texture("dialog.add.png", image, egui::TextureOptions::LINEAR),
+                ));
+            }
+            return;
+        }
         if self
             .add_preview
             .as_ref()
@@ -444,25 +466,12 @@ impl RustMixApp {
                                     .hint_text("Generator name or PNG file path"),
                             );
                             app.automation.insert("dialog.add.name".into(), name.rect);
+                            if name.changed() { app.add_image = None; app.add_preview = None; }
                             if ui
                                 .add_sized([80.0, 22.0], egui::Button::new("Browse"))
-                                .clicked()
+                                .clicked() && app.smoke.is_none() && !app.add_loading
                             {
-                                let picked = if app.smoke.is_none() {
-                                    rfd::FileDialog::new()
-                                        .add_filter(
-                                            "PNG image",
-                                            &["png"],
-                                        )
-                                        .pick_file()
-                                } else {
-                                    None
-                                };
-                                if let Some(path) = picked {
-                                    app.add_name = path.display().to_string();
-                                    app.add_tab = 1;
-                                    app.add_kind = InputKind::Color;
-                                }
+                                app.start_png_picker(media::MediaTarget::AddPreview { token: app.add_token });
                             }
                         });
                         ui.add_space(6.0);
@@ -492,6 +501,8 @@ impl RustMixApp {
                                             if r.clicked() {
                                                 app.add_kind = kind;
                                                 app.add_name = path.into();
+                                                app.add_tab = match kind { InputKind::Grid => 0, InputKind::Geometry => 3, InputKind::Studio => 4, InputKind::Bars => 6, InputKind::Color => 11, InputKind::Graphics => 14, InputKind::Countdown => 15 };
+                                                app.add_image = None; app.add_preview = None;
                                             }
                                         }
                                     });
@@ -502,7 +513,7 @@ impl RustMixApp {
                                         .stroke(Stroke::new(1.0, FORM_BORDER))
                                         .inner_margin(4.0)
                                         .show(ui, |ui| {
-                                            if app.add_tab == 1 || Path::new(&app.add_name).extension().is_some() {
+                                            if app.add_image.is_none() && (app.add_tab == 1 || Path::new(&app.add_name).extension().is_some()) {
                                                 ui.allocate_space(egui::vec2(180.0, 95.0));
                                                 ui.label("PNG is validated on import");
                                             } else if let Some((_, texture)) = &app.add_preview {
@@ -685,27 +696,14 @@ impl RustMixApp {
                                     .and_then(|f| f.media_path.as_deref())
                                     .map(str::to_owned)
                                     .unwrap_or_else(|| format!("{} · synthetic {}", draft.name, draft.kind.label()));
-                                ui.label(
-                                    RichText::new(path_lbl)
-                                        .color(Color32::WHITE)
-                                        .size(12.0),
-                                );
+                                let label_w = (ui.available_width() - 84.0).max(120.0);
+                                ui.add_sized([label_w, 20.0], egui::Label::new(RichText::new(&path_lbl).color(Color32::WHITE).size(12.0)).truncate())
+                                    .on_hover_text(&path_lbl);
                                 ui.with_layout(egui::Layout::right_to_left(Align::Center), |ui| {
-                                    if ui
-                                        .add_sized(
-                                            [68.0, 20.0],
-                                            egui::Button::new("Change").fill(CHIP_BG),
-                                        )
-                                        .clicked()
-                                        && app.smoke.is_none()
-                                        && let Some(path) = rfd::FileDialog::new()
-                                            .add_filter(
-                                                "PNG image",
-                                                &["png"],
-                                            )
-                                            .pick_file()
-                                    {
-                                        app.request_property_png(id, path);
+                                    let change = ui.add_enabled(!app.properties_loading, egui::Button::new("Change").fill(CHIP_BG));
+                                    app.automation.insert("dialog.properties.change".into(), change.rect);
+                                    if change.clicked() && app.smoke.is_none() {
+                                        app.start_png_picker(media::MediaTarget::Properties { id, token: app.properties_token });
                                     }
                                 });
                             });
@@ -914,12 +912,10 @@ impl RustMixApp {
                                             [240.0, 24.0],
                                             egui::Button::new("Duplicate Input"),
                                         )
-                                        .clicked()
+                                        .clicked() && app.apply_properties(draft.clone())
                                     {
-                                        if app.apply_properties(draft.clone()) {
-                                            app.actions.push(Action::Engine(Command::DuplicateInput(id)));
-                                            cancel_clicked = true;
-                                        }
+                                        app.actions.push(Action::Engine(Command::DuplicateInput(id)));
+                                        cancel_clicked = true;
                                     }
                                 }
                             });

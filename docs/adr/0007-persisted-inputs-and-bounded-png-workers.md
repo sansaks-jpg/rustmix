@@ -22,7 +22,7 @@ and matching cache together; Cancel discards them. Invalid Apply leaves the
 editor open. The renderer uses committed state, while the editor shows its own
 preview. Imported images offer Contain/Cover/Stretch and alpha over black.
 
-PNG decode runs on one worker with a capacity-32 request queue and one result
+Source pickers run on a separate worker and cancellation preserves selection. PNG decode runs on one worker with a capacity-32 request queue and one result
 slot. File reads stop at 32 MiB + 1, dimensions are restricted to 4096 per axis,
 and the decoder allocation budget is 64 MiB (upstream documents allocation
 limits as best effort). Cached rasters fit 640x360; shared buffers avoid copying

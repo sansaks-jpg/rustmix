@@ -9,7 +9,7 @@ UI-009 audit (2026-10-18): the UI-008 GPU/output labels were not evidence of med
 | G01 | P0 for broadcast | Program is a native UI demo, without a dedicated real-time output scheduler. Introduce immutable frame metadata and an independent Program consumer before live claims. |
 | G02 | P0 for broadcast | No actual audio graph/device output. Add 48 kHz synthetic stereo samples, Master/Aux routing and impulse/mix-minus tests. |
 | G03 | P1 | No custom GPU compositor or CPU/GPU golden parity. Current CPU demo uploads to egui's wgpu surface. |
-| G04 | P1 | No file/image/camera inputs or real capture lifecycle. Add bounded still-image ingest first. |
+| G04 | P1 | UI-010 implements bounded PNG ingest, persistence, relink and source edits (hosted acceptance pending). Local video decode, camera/device capture and network ingest remain absent. |
 | G05 | P1 | No encoders, recoverable recording or network streams. Controls remain disabled. |
 | G06 | P1 | Crash recovery is manual checkpoint/backup loading; abrupt power-loss durability and filesystem fault injection need dedicated tests. |
 | G07 | P2 | Shortcut enable/disable exists; custom key remapping does not. Full per-widget automation metadata, command JSON schemas and accessibility review remain incomplete. |

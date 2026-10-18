@@ -17,3 +17,5 @@ Last verified 2026-10-17 · Owner/tasks UI-001 / UI-002 / UI-005. [Accepted evid
 # UI-009 verification boundary
 
 2026-10-18: independent source clocks, horizontal manual transition, bounded monitor geometry and processed Program surfaces are implemented with regression coverage prepared. Hosted acceptance passed in [run 39089212707](https://github.com/sansaks-jpg/rustmix/actions/runs/39089212707) at code `3a36cf2`: 32 tests, native captures, stable/frozen state checks and save/reopen. GPU display remains distinct from CPU media composition; hardware decode/encode, real audio, capture, recording, streaming and production readiness are unimplemented/unqualified. The recording/stream/external/MultiCorder controls cannot start simulated live sessions.
+
+UI-010 input extension: PNG references/effects and fit persist in schema 2 (schema 1 migration), ordered insertion, duplication, staged Properties OK/Cancel, bounded PNG workers and missing-source relink are implemented. Hosted acceptance pending. External image files are not embedded; raster remains 640x360 Program / 384x216 source preview. Video/capture backends are still absent.

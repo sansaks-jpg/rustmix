@@ -1738,4 +1738,61 @@ mod tests {
         assert!(!app.media_loader.busy());
         assert_eq!(app.input_fx.len(), 32);
     }
+    #[test]
+    fn png_browse_preview_and_cancel_preserve_selection_without_blocking_the_ui() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("preview.png");
+        fixture(&path, [50, 100, 150, 255]);
+        let mut app = RustMixApp::headless();
+        let ctx = egui::Context::default();
+        app.theme(&ctx);
+        app.dispatch(Action::Add, &ctx);
+        let original = app.add_name.clone();
+        let (tx, rx) = mpsc::sync_channel(1);
+        app.image_picker = Some(rx);
+        app.add_loading = true;
+        tx.send(media::PickerDone {
+            target: media::MediaTarget::AddPreview {
+                token: app.add_token,
+            },
+            path: None,
+        })
+        .unwrap();
+        finish_media(&mut app);
+        assert_eq!(app.add_name, original);
+        assert!(!app.add_loading);
+        let (tx, rx) = mpsc::sync_channel(1);
+        app.image_picker = Some(rx);
+        app.add_loading = true;
+        tx.send(media::PickerDone {
+            target: media::MediaTarget::AddPreview {
+                token: app.add_token,
+            },
+            path: Some(path),
+        })
+        .unwrap();
+        finish_media(&mut app);
+        assert!(app.add_image.is_some());
+        assert_eq!(app.engine.project().inputs.len(), 7);
+        frame(&mut app, &ctx, vec![], [1600.0, 900.0]);
+        assert!(app.automation.contains_key("dialog.add.preview"));
+        let selected = app.add_name.clone();
+        let (tx, rx) = mpsc::sync_channel(1);
+        app.image_picker = Some(rx);
+        app.add_loading = true;
+        tx.send(media::PickerDone {
+            target: media::MediaTarget::AddPreview {
+                token: app.add_token,
+            },
+            path: None,
+        })
+        .unwrap();
+        finish_media(&mut app);
+        assert_eq!(app.add_name, selected);
+        assert!(app.add_image.is_some());
+        click(&mut app, &ctx, "dialog.add.confirm", [1600.0, 900.0]);
+        assert_eq!(app.engine.project().inputs.len(), 8);
+        assert!(!app.add_open);
+        assert!(app.input_fx.get(&InputId(8)).unwrap().custom_rgba.is_some());
+    }
 }

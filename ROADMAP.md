@@ -14,3 +14,5 @@
 - M5+: complete automation schemas, hardware/accessibility/soak matrix, secondary outputs and packaging.
 
 Later milestones in AGENTS.md are plans, not shipped capabilities.
+
+- M2/UI-010: persisted still-image input lifecycle, staged effects, insertion order, duplication, relink and bounded PNG workers implemented. Hosted acceptance pending. File video/capture and hardware qualification remain open.

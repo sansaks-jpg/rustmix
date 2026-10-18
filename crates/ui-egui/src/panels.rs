@@ -187,7 +187,7 @@ pub(crate) fn process_source_pixels(
     out
 }
 
-fn processed_sources(
+pub(crate) fn processed_sources(
     project: &ProjectState,
     raw: &HashMap<InputId, Vec<[u8; 4]>>,
     fx: &HashMap<InputId, InputFx>,
@@ -1950,6 +1950,7 @@ impl RustMixApp {
 
 #[cfg(test)]
 mod processing_tests {
+    #![allow(clippy::unwrap_used)]
     use super::*;
     #[test]
     fn custom_images_reach_program_size_and_sharpen_changes_edges() {
@@ -1971,5 +1972,55 @@ mod processing_tests {
             ..Default::default()
         };
         assert_ne!(process_source_pixels(&edge, 3, 1, &fx, None), edge);
+    }
+    #[test]
+    fn image_fit_preserves_aspect_and_composites_alpha_over_black() {
+        let mut fx = InputFx {
+            custom_rgba: Some((2, 1, vec![[200, 0, 0, 128], [0, 100, 0, 255]].into())),
+            ..Default::default()
+        };
+        let base = vec![[0, 0, 0, 255]; 16];
+        let contain = process_source_pixels(&base, 4, 4, &fx, None);
+        assert_eq!(contain.first(), Some(&[0, 0, 0, 255]));
+        assert_eq!(contain.get(4), Some(&[100, 0, 0, 255]));
+        fx.image_fit = ImageFit::Stretch;
+        let stretch = process_source_pixels(&base, 4, 4, &fx, None);
+        assert_eq!(stretch.first(), Some(&[100, 0, 0, 255]));
+        fx.image_fit = ImageFit::Cover;
+        assert_ne!(process_source_pixels(&base, 4, 4, &fx, None), contain);
+    }
+    #[test]
+    fn pip_uses_the_imported_and_processed_dependency() {
+        let mut project = ProjectState::demo();
+        if let Some(input) = project.inputs.first_mut() {
+            input.config.pip_source = Some(InputId(2));
+        }
+        if let Some(input) = project.inputs.get_mut(1) {
+            input.config.media_path = Some("fixture.png".into());
+            input.config.gain = 0.5;
+        }
+        project.validate().unwrap();
+        let mut fx = HashMap::new();
+        for input in &project.inputs {
+            fx.insert(
+                input.id,
+                InputFx {
+                    config: input.config.clone(),
+                    ..Default::default()
+                },
+            );
+        }
+        if let Some(effect) = fx.get_mut(&InputId(2)) {
+            effect.custom_rgba = Some((16, 9, vec![[100, 40, 20, 255]; 16 * 9].into()));
+        }
+        let raw = HashMap::from([
+            (InputId(1), vec![[0, 0, 0, 255]; 160 * 90]),
+            (InputId(2), vec![[0, 0, 0, 255]; 160 * 90]),
+        ]);
+        let output = processed_sources(&project, &raw, &fx, 160, 90);
+        assert_eq!(
+            output.get(&InputId(1)).and_then(|p| p.get(22 * 160 + 125)),
+            Some(&[50, 20, 10, 255])
+        );
     }
 }

@@ -104,6 +104,11 @@ impl RustMixApp {
             return false;
         }
         if is_file {
+            if let Some(fx) = self.add_image.clone()
+                && fx.media_path.as_deref() == Some(name.as_str())
+            {
+                return self.commit_png_input(fx, index);
+            }
             if !path
                 .extension()
                 .and_then(|s| s.to_str())
@@ -136,6 +141,96 @@ impl RustMixApp {
         }
     }
 
+    fn commit_png_input(&mut self, fx: InputFx, index: usize) -> bool {
+        let mut name = String::new();
+        let path = fx.media_path.as_deref().unwrap_or("PNG image.png");
+        for ch in Path::new(path)
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or("PNG image")
+            .chars()
+        {
+            if name.len() + ch.len_utf8() > 64 {
+                break;
+            }
+            name.push(ch);
+        }
+        if let Some(result) = self.try_execute(Command::AddInputAt {
+            name,
+            kind: InputKind::Color,
+            config: fx.config.clone(),
+            index,
+        }) && let Some(id) = result.affected.first()
+        {
+            self.input_fx.insert(*id, fx);
+            return true;
+        }
+        false
+    }
+
+    pub(crate) fn start_png_picker(&mut self, target: media::MediaTarget) {
+        if self.image_picker.is_some() {
+            self.say("A source file dialog is already open".into(), true);
+            return;
+        }
+        match target {
+            media::MediaTarget::AddPreview { .. } => self.add_loading = true,
+            media::MediaTarget::Properties { .. } => self.properties_loading = true,
+            _ => return,
+        }
+        let (tx, rx) = mpsc::sync_channel(1);
+        self.image_picker = Some(rx);
+        std::thread::spawn(move || {
+            let path = rfd::FileDialog::new()
+                .add_filter("PNG image", &["png"])
+                .pick_file();
+            let _ = tx.send(media::PickerDone { target, path });
+        });
+    }
+
+    fn poll_image_picker(&mut self) {
+        let Some(receiver) = &self.image_picker else {
+            return;
+        };
+        let done = match receiver.try_recv() {
+            Ok(done) => done,
+            Err(mpsc::TryRecvError::Empty) => return,
+            Err(mpsc::TryRecvError::Disconnected) => {
+                self.image_picker = None;
+                self.add_loading = false;
+                self.properties_loading = false;
+                self.say(
+                    "Source file dialog closed unexpectedly; current source retained".into(),
+                    true,
+                );
+                return;
+            }
+        };
+        self.image_picker = None;
+        match done.target {
+            media::MediaTarget::AddPreview { token }
+                if self.add_open && token == self.add_token =>
+            {
+                self.add_loading = false;
+                if let Some(path) = done.path {
+                    self.add_loading = self
+                        .media_loader
+                        .enqueue(path, media::MediaTarget::AddPreview { token });
+                }
+            }
+            media::MediaTarget::Properties { id, token }
+                if self.properties.as_ref().is_some_and(|p| p.id == id)
+                    && token == self.properties_token =>
+            {
+                self.properties_loading = false;
+                if let Some(path) = done.path {
+                    self.request_property_png(id, path);
+                }
+            }
+            _ => {}
+        }
+    }
+
     pub(crate) fn request_property_png(&mut self, id: InputId, path: PathBuf) {
         if self.properties_loading {
             return;
@@ -156,6 +251,7 @@ impl RustMixApp {
     }
 
     pub(crate) fn poll_media(&mut self) {
+        self.poll_image_picker();
         self.sync_input_cache();
         for (id, fx) in &mut self.input_fx {
             if fx.custom_rgba.is_none()
@@ -173,36 +269,33 @@ impl RustMixApp {
             return;
         };
         match target {
+            media::MediaTarget::AddPreview { token }
+                if self.add_open && token == self.add_token =>
+            {
+                self.add_loading = false;
+                match result {
+                    Ok(image) => {
+                        self.add_name = image.path.clone();
+                        self.add_kind = InputKind::Color;
+                        self.add_tab = 1;
+                        let mut fx = InputFx::default();
+                        fx.set_image(image);
+                        self.add_image = Some(fx);
+                        self.add_preview = None;
+                        self.say("PNG ready · press OK to add input".into(), false);
+                    }
+                    Err(error) => self.say(format!("{error}; previous selection retained"), true),
+                }
+            }
             media::MediaTarget::Add { position, token }
                 if self.add_open && token == self.add_token =>
             {
                 self.add_loading = false;
                 match result {
                     Ok(image) => {
-                        let mut name = String::new();
-                        for ch in Path::new(&image.path)
-                            .file_stem()
-                            .and_then(|s| s.to_str())
-                            .unwrap_or("PNG image")
-                            .chars()
-                        {
-                            if name.len() + ch.len_utf8() > 64 {
-                                break;
-                            }
-                            name.push(ch);
-                        }
-                        let config = InputConfig {
-                            media_path: Some(image.path.clone()),
-                            ..Default::default()
-                        };
-                        if let Some(result) = self.try_execute(Command::AddInputAt {
-                            name,
-                            kind: InputKind::Color,
-                            config,
-                            index: position,
-                        }) && let Some(id) = result.affected.first()
-                        {
-                            self.input_fx.entry(*id).or_default().set_image(image);
+                        let mut fx = InputFx::default();
+                        fx.set_image(image);
+                        if self.commit_png_input(fx, position) {
                             self.add_open = false;
                         }
                     }
@@ -258,20 +351,38 @@ impl RustMixApp {
         ctx: &egui::Context,
         draft: &InputState,
     ) -> Option<egui::TextureId> {
-        let fx = self.properties_fx.as_ref()?;
-        let ms = self
-            .engine
-            .playback(draft.id)
-            .map_or(0, |p| p.position_ms());
-        let base = render::source(draft, 384, 216, ms).ok()?;
-        let pixels = if draft.online {
-            panels::process_source_pixels(&base, 384, 216, fx, None)
-        } else {
-            base
-        };
+        let fx = self.properties_fx.clone()?;
+        let mut project = self.engine.project().clone();
+        if let Some(input) = project.inputs.iter_mut().find(|i| i.id == draft.id) {
+            *input = draft.clone();
+            input.config = fx.config.clone();
+        }
+        let mut raw = HashMap::new();
+        let mut ids = vec![draft.id];
+        let mut cursor = 0;
+        while cursor < ids.len() && ids.len() <= 32 {
+            if let Some(pip) = ids
+                .get(cursor)
+                .and_then(|id| project.input(*id))
+                .and_then(|i| i.config.pip_source)
+                && !ids.contains(&pip)
+            {
+                ids.push(pip);
+            }
+            cursor += 1;
+        }
+        for id in ids {
+            let input = project.input(id)?;
+            let ms = self.engine.playback(id).map_or(0, |p| p.position_ms());
+            raw.insert(id, render::source(input, 384, 216, ms).ok()?);
+        }
+        let mut cache = self.input_fx.clone();
+        cache.insert(draft.id, fx);
+        let processed = panels::processed_sources(&project, &raw, &cache, 384, 216);
+        let pixels = processed.get(&draft.id)?;
         let image = egui::ColorImage::from_rgba_unmultiplied(
             [384, 216],
-            &pixels.into_iter().flatten().collect::<Vec<_>>(),
+            &pixels.iter().flatten().copied().collect::<Vec<_>>(),
         );
         if let Some(texture) = &mut self.properties_texture {
             texture.set(image, egui::TextureOptions::LINEAR);
