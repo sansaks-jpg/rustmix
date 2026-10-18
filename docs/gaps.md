@@ -13,6 +13,12 @@ G01 still needs production-clock/output qualification; hosted 50/59.94/60 cadenc
 G02–G05, hardware/API/accessibility/endurance and full parity remain open.
 See [reference comparison](reference-feature-comparison.md) for capabilities not implemented here.
 
+Task 1.1 port (2026-10-18), local headless verification only: the schema-5 sixteen-channel
+overlay/stinger bank, `overlay.stinger.*` commands, exactly-once cut-point Program/Preview
+exchange and the channels 1-8 UI are implemented and covered by engine/UI tests. Stinger clip
+compositing, `display_underneath_overlays` rasterisation and per-channel effects/timing remain
+open (G20); a hosted native run of this port had not passed when this entry was written.
+
 UI-009 audit (2026-10-18): the UI-008 GPU/output labels were not evidence of media backends. Composition/effects are CPU reference code, wgpu presents UI textures, recording/stream/external start paths were counter simulations, and real video decode/audio/hardware output remain absent. UI-009 prevents false live output state and repairs existing transport/composition/layout paths. It does not close G01–G05 or establish production readiness.
 
 2026-10-17 · UI-001. No feature is production-ready.
@@ -38,6 +44,7 @@ UI-009 audit (2026-10-18): the UI-008 GPU/output labels were not evidence of med
 | G17 | Closed in UI-006 | All eleven private reference screenshots (`Interface.png`, `Add Input.png`, `Input Settings.png`, `Settings.png`, `Overlay Settings.png`, `External.png`, `Multicoder.png`, `Playlist.png`, `Recording Setup.png`, `Shortcut.png`, `Streaming Setup.png`) were reviewed read-only and documented in [ui-reference.md](ui-reference.md). Unimplemented output/encoder dialogs remain disabled by design. |
 | G18 | Closed in UI-006 | Historical UI-006 label adjustment. Current tile control uses Audio with selected color for unmuted simulation; this is not real device audio or live-output status. |
 | G19 | Closed in UI-006 | Top toolbar `Open ▼`, `Save As ▼`, and `Settings ▼` carets now expose real actions (open, reload last saved, recover checkpoint, write immediate recovery checkpoint, and jump directly to individual Settings pages or Overlay Settings). |
+| G20 | P1 | Task 1.1 stinger channels (9-16) are configuration and Program/Preview bus exchange only: no stinger clip raster, no `display_underneath_overlays` compositing, no per-channel effects/alpha/timing, and no dedicated stinger UI (configured through `overlay.stinger.*` commands). Clip rendering depends on the media layer (G04). |
 
 Do not claim 1080p/4K processing based on the project-format selector; actual demo rasters are capped and only displayed in the native UI.
 
