@@ -1,5 +1,9 @@
 # rustmix-engine
 
+UI-013 source candidate: schema 4 categories/theme, atomic Settings, slot-defined T-Bar,
+real Input Search, temporary audio-pane visibility and worker snapshots. Unsupported scaffolds
+are explicitly unavailable. Hosted compile/tests/native captures are pending; see ADR 0011.
+
 UI-012: `production` provides persisted transition slots and named playlists over stable input
 IDs, with explicit item hold/effect/duration, manual/loop/selected start and bounded progression.
 Operator switching stops automation; stopping automation preserves an active take. Configuration

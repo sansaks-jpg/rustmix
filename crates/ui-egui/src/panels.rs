@@ -397,7 +397,11 @@ impl RustMixApp {
             ui.colored_label(RED, "Source missing");
             return;
         };
-        let color = if program { PROGRAM } else { PREVIEW };
+        let color = if program {
+            self.program_color()
+        } else {
+            self.preview_color()
+        };
         egui::Frame::new()
             .fill(color)
             .corner_radius(egui::CornerRadius {
@@ -1005,83 +1009,7 @@ impl RustMixApp {
     }
 
     pub(crate) fn inputs(&mut self, ui: &mut egui::Ui) {
-        ui.horizontal(|ui| {
-            ui.spacing_mut().item_spacing.x = 2.0;
-            let all_selected = self.category.is_none();
-            let all_btn = ui.add(
-                egui::Button::new("")
-                    .fill(if all_selected {
-                        Color32::from_rgb(76, 88, 102)
-                    } else {
-                        Color32::from_rgb(42, 50, 60)
-                    })
-                    .stroke(Stroke::new(
-                        1.0,
-                        if all_selected {
-                            Color32::WHITE
-                        } else {
-                            Color32::from_rgb(26, 32, 40)
-                        },
-                    ))
-                    .min_size(egui::vec2(20.0, 20.0)),
-            );
-            self.automation
-                .insert("inputs.category.all".into(), all_btn.rect);
-            if all_btn.on_hover_text("Show all categories").clicked() {
-                self.category = None;
-            }
-            for kind in InputKind::ALL {
-                let selected = self.category == Some(kind);
-                let fill = kind_color(kind);
-                let chip = ui.add(
-                    egui::Button::new("")
-                        .fill(fill)
-                        .stroke(Stroke::new(
-                            if selected { 1.5 } else { 1.0 },
-                            if selected {
-                                Color32::WHITE
-                            } else {
-                                Color32::from_rgb(20, 24, 28)
-                            },
-                        ))
-                        .min_size(egui::vec2(20.0, 20.0)),
-                );
-                self.automation
-                    .insert(format!("inputs.category.{kind:?}"), chip.rect);
-                if chip.on_hover_text(kind.label()).clicked() {
-                    self.category = if selected { None } else { Some(kind) };
-                }
-            }
-            let search_btn = vector_icon_button(
-                ui,
-                VectorIcon::Search,
-                egui::vec2(22.0, 20.0),
-                self.search_open,
-                None,
-            )
-            .on_hover_text("Search inputs");
-            if search_btn.clicked() {
-                self.search_open = !self.search_open;
-            }
-            if self.search_open || !self.input_filter.is_empty() {
-                let filter = ui.add_sized(
-                    [150.0, 20.0],
-                    egui::TextEdit::singleline(&mut self.input_filter)
-                        .char_limit(48)
-                        .hint_text("Search"),
-                );
-                self.automation.insert("inputs.filter".into(), filter.rect);
-            }
-            if self.category.is_some() || !self.input_filter.is_empty() {
-                let clear = ui.small_button("Clear");
-                self.automation
-                    .insert("inputs.filter.clear".into(), clear.rect);
-                if clear.clicked() {
-                    self.category = None;
-                    self.input_filter.clear();
-                }
-            }
-        });
+        self.category_filter(ui);
         ui.add_space(2.0);
         self.source_tiles(ui, false);
     }
@@ -1093,7 +1021,7 @@ impl RustMixApp {
             .inputs
             .iter()
             .filter(|i| {
-                self.category.is_none_or(|k| i.kind == k)
+                self.category.is_none_or(|id| i.category == Some(id))
                     && (needle.is_empty()
                         || i.name.to_lowercase().contains(&needle)
                         || i.kind.label().to_lowercase().contains(&needle)
@@ -1124,16 +1052,16 @@ impl RustMixApp {
                             let is_pgm = p.program == input.id;
                             let is_pvw = p.preview == input.id;
                             let border = if is_pgm {
-                                PROGRAM
+                                self.program_color()
                             } else if is_pvw {
-                                PREVIEW
+                                self.preview_color()
                             } else {
                                 Color32::from_rgb(56, 66, 78)
                             };
                             let header_fill = if is_pgm {
-                                PROGRAM
+                                self.program_color()
                             } else if is_pvw {
-                                PREVIEW
+                                self.preview_color()
                             } else {
                                 IDLE_TILE
                             };
@@ -1233,6 +1161,10 @@ impl RustMixApp {
                                                             );
                                                         });
                                                     });
+                                                if let Some(category)=input.category.and_then(|id|p.preferences.categories.iter().find(|c|c.id==id)) {
+                                                    let [r,g,b]=category.color;
+                                                    ui.colored_label(Color32::from_rgb(r,g,b),&category.name);
+                                                }
                                                 // 16:9 thumbnail
                                                 let size =
                                                     egui::vec2(inner_w, inner_w * 9.0 / 16.0);
@@ -1273,7 +1205,7 @@ impl RustMixApp {
                                                     && fx.media_path.is_some() && fx.custom_rgba.is_none() {
                                                     ui.painter().text(response.rect.center(), egui::Align2::CENTER_CENTER,
                                                         if fx.image_error.is_some() { "PNG UNAVAILABLE" } else { "LOADING PNG…" },
-                                                        egui::FontId::proportional(11.0), PREVIEW);
+                                                        egui::FontId::proportional(11.0), self.preview_color());
                                                     self.automation.insert(format!("input.{}.media-status", input.id.0), response.rect);
                                                 }
                                                 if response.clicked() {
@@ -1282,6 +1214,15 @@ impl RustMixApp {
                                                     ));
                                                 }
                                                 response.context_menu(|ui| {
+                                                    ui.menu_button("Category", |ui| {
+                                                        let clear=ui.button("Uncategorized");
+                                                        if clear.clicked(){ self.actions.push(Action::Engine(Command::SetInputCategory(input.id,None))); ui.close(); }
+                                                        for category in &p.preferences.categories {
+                                                            let row=ui.selectable_label(input.category==Some(category.id),&category.name);
+                                                            self.automation.insert(format!("input.{}.category.{}",input.id.0,category.id),row.rect);
+                                                            if row.clicked(){ self.actions.push(Action::Engine(Command::SetInputCategory(input.id,Some(category.id)))); ui.close(); }
+                                                        }
+                                                    });
                                                     self.command_button(
                                                         ui,
                                                         "preview.select",
@@ -1454,7 +1395,7 @@ impl RustMixApp {
                                                     )
                                                     .min_size(egui::vec2(audio_w, 20.0));
                                                     if !input.audio.muted {
-                                                        audio_btn = audio_btn.fill(PROGRAM);
+                                                        audio_btn = audio_btn.fill(self.program_color());
                                                     }
                                                     let audio_resp = ui
                                                         .add(audio_btn)
@@ -1533,7 +1474,7 @@ impl RustMixApp {
                                 true,
                                 None,
                             )
-                            .on_hover_text("Pin Audio Mixer");
+                            .on_hover_text("Docked mixer; pinning is unavailable");
                             mixer_rail(ui, (height - 22.0).max(80.0), "OUTPUTS");
                         },
                     );
@@ -1747,6 +1688,9 @@ impl RustMixApp {
                                 egui::vec2(18.0, 18.0),
                                 Sense::click_and_drag(),
                             );
+                            let dial_resp = dial_resp.on_hover_text(
+                                "Visual demonstration only; headphone audio output is unavailable",
+                            );
                             if dial_resp.dragged() {
                                 self.monitor_level = (self.monitor_level
                                     - dial_resp.drag_delta().y * 0.01)
@@ -1863,6 +1807,7 @@ impl RustMixApp {
     }
 
     pub(crate) fn dialogs(&mut self, ctx: &egui::Context) {
+        self.search_dialog(ctx);
         self.add_input_dialog(ctx);
         self.input_properties_dialog(ctx);
         self.settings_dialog(ctx);
@@ -1918,6 +1863,7 @@ impl RustMixApp {
                                     self.submit_program();
                                     self.theme(ctx);
                                     self.dock = default_dock(false);
+                                    self.audio_restore = None;
                                     self.path = None;
                                     self.saved_revision = 0;
                                     self.textures.clear();

@@ -53,6 +53,11 @@ Invoke-NativeSmoke @('--ui-input-smoke-reopen','artifacts/inputs.rustmix.json')
 foreach ($file in @('input-fixture.png','input-workflow.png','input-properties.png','input-playlist.png','input-keyboard.png','input-basic.png','input-reopened.png','input-smoke-ok.json','input-reopen-ok.json','inputs.rustmix.json')) {
     if (-not (Test-Path (Join-Path artifacts $file))) { throw "Missing PNG workflow evidence: $file" }
 }
+Invoke-NativeSmoke @('--ui-reference-smoke')
+Invoke-NativeSmoke @('--ui-reference-smoke-reopen','artifacts/reference.rustmix.json')
+foreach ($file in @('reference-categories.png','reference-search.png','reference-audio-hidden.png','reference-light.png','reference-reopened.png','reference-smoke-ok.json','reference-reopen-ok.json','reference.rustmix.json')) {
+    if (-not (Test-Path (Join-Path artifacts $file))) { throw "Missing reference workflow evidence: $file" }
+}
 Invoke-NativeSmoke @('--ui-perf')
 $cadence = Get-Content artifacts/program-cadence.json -Raw | ConvertFrom-Json
 if ($cadence.samples.Count -ne 3) { throw 'Missing frame-rate measurement samples' }

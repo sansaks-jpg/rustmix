@@ -16,11 +16,11 @@ const DIALOG_SHOTS: [(&str, [f32; 2], u8); 9] = [
 #[derive(Default)]
 pub(crate) struct Smoke {
     pub events: Vec<egui::Event>,
-    stage: u32,
+    pub(crate) stage: u32,
     frames: u32,
     last_stage: u32,
-    wait: u32,
-    captured: bool,
+    pub(crate) wait: u32,
+    pub(crate) captured: bool,
     bank_baseline: Option<Rect>,
     paused_program: Option<(u64, Vec<u8>, Rect)>,
     transport_target: Option<Rect>,
@@ -64,6 +64,11 @@ impl RustMixApp {
         self.smoke = Some(s);
     }
     fn smoke_run(&mut self, ctx: &egui::Context, s: &mut Smoke) -> Result<()> {
+        if std::env::args()
+            .any(|arg| arg == "--ui-reference-smoke" || arg == "--ui-reference-smoke-reopen")
+        {
+            return self.smoke_reference(ctx, s);
+        }
         if std::env::args().any(|s| s == "--ui-input-smoke" || s == "--ui-input-smoke-reopen") {
             return self.smoke_inputs(ctx, s);
         }
@@ -471,7 +476,7 @@ impl RustMixApp {
         Ok(())
     }
 
-    fn native_click(&self, s: &mut Smoke, id: &str) -> Result<()> {
+    pub(crate) fn native_click(&self, s: &mut Smoke, id: &str) -> Result<()> {
         let pos = self
             .automation
             .get(id)
@@ -1326,7 +1331,7 @@ mod tests {
             "Camera B"
         );
 
-        app.category = Some(InputKind::Bars);
+        app.category = Some(0);
         app.input_filter = "no matching source".into();
         frame(&mut app, &ctx, vec![], size);
         click(&mut app, &ctx, "inputs.filter.clear", size);

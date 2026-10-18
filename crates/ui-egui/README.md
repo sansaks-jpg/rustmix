@@ -1,5 +1,9 @@
 # rustmix-ui
 
+UI-013 source candidate: schema 4 categories/theme, atomic Settings, slot-defined T-Bar,
+real Input Search, temporary audio-pane visibility and worker snapshots. Unsupported scaffolds
+are explicitly unavailable. Hosted compile/tests/native captures are pending; see ADR 0011.
+
 UI-012: `controls` renders the engine-backed named playlist editor and staged keyboard mapping
 settings. Slot menus dispatch persisted effect/duration updates. Playlist Start/Stop/Next/Previous
 use engine commands; empty starts are disabled. Exact modifier/repeat/focus guards protect keys.

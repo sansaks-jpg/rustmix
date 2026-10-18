@@ -6,7 +6,10 @@ mod media;
 mod panels;
 mod profile;
 mod program;
+mod reference_controls;
+mod reference_smoke;
 mod smoke;
+mod snapshot;
 mod workspace;
 
 use eframe::egui::{self, Color32, Pos2, Rect, RichText, Sense, Stroke, Vec2};
@@ -376,6 +379,7 @@ pub(crate) enum SettingsPage {
     Outputs,
     Options,
     Appearance,
+    Categories,
     Decoders,
     Recording,
     ExternalOutput,
@@ -443,13 +447,14 @@ pub(crate) enum Action {
     Recover,
     ConfirmOpen,
     CloseDiscard,
-    FocusPanel(Panel),
+    ToggleAudioPane,
     PauseDemo,
     Last,
 }
 
 enum JobDone {
     Saved(PathBuf, u64, bool),
+    SnapshotSaved(PathBuf),
     Loaded(Box<ProjectState>, PathBuf),
     Cancelled,
     Failed(String),
@@ -522,28 +527,8 @@ pub struct RustMixApp {
     pub(crate) settings_draft: Option<Preferences>,
     pub(crate) settings_name: String,
     pub(crate) settings_layout: Option<bool>,
-    pub(crate) settings_advanced: bool,
-    pub(crate) settings_fullscreen_slot: u8,
-    pub(crate) settings_hide_cursor: bool,
-    pub(crate) settings_on_top: bool,
-    pub(crate) settings_minimise: bool,
     /// Staged Overlay Settings draft: selected slot plus its uncommitted copy.
     pub(crate) overlay_settings: Option<(usize, OverlayState)>,
-    pub(crate) overlay_type_idx: usize,
-    pub(crate) overlay_effect_idx: usize,
-    pub(crate) overlay_effect_ms: u32,
-    pub(crate) overlay_duration_val: u32,
-    pub(crate) overlay_duration_frames: bool,
-    pub(crate) overlay_stinger_cut: u32,
-    pub(crate) overlay_alpha: u8,
-    pub(crate) overlay_zoom: f32,
-    pub(crate) overlay_zoom_x: f32,
-    pub(crate) overlay_zoom_y: f32,
-    pub(crate) overlay_pan_x: f32,
-    pub(crate) overlay_pan_y: f32,
-    pub(crate) overlay_rotate_z: f32,
-    pub(crate) overlay_border_thickness: u32,
-    pub(crate) overlay_border_radius: u32,
     /// Reference dialogs and live production output engines.
     pub(crate) recording_setup: bool,
     pub(crate) rec_slot: u8,
@@ -588,6 +573,8 @@ pub struct RustMixApp {
     pub(crate) playlist_delete_confirm: bool,
     pub(crate) shortcuts_open: bool,
     pub(crate) search_open: bool,
+    pub(crate) search_draft: String,
+    pub(crate) audio_restore: Option<DockState<Panel>>,
     pub(crate) ui_locked: bool,
     pub(crate) basic_mode: bool,
     pub(crate) about: bool,
@@ -607,7 +594,7 @@ pub struct RustMixApp {
     pub(crate) input_filter: String,
     pub(crate) smoke: Option<smoke::Smoke>,
     pub(crate) automation: HashMap<String, egui::Rect>,
-    pub(crate) category: Option<InputKind>,
+    pub(crate) category: Option<u8>,
     pub(crate) tbar_latched: bool,
     monitor_view_height: Option<f32>,
 }
@@ -637,7 +624,12 @@ impl RustMixApp {
         if std::env::args().any(|s| {
             matches!(
                 s.as_str(),
-                "--ui-smoke" | "--ui-smoke-reopen" | "--ui-input-smoke" | "--ui-input-smoke-reopen"
+                "--ui-smoke"
+                    | "--ui-smoke-reopen"
+                    | "--ui-input-smoke"
+                    | "--ui-input-smoke-reopen"
+                    | "--ui-reference-smoke"
+                    | "--ui-reference-smoke-reopen"
             )
         }) {
             app.smoke = Some(smoke::Smoke::default());
@@ -750,27 +742,7 @@ impl RustMixApp {
             settings_draft: None,
             settings_name: String::new(),
             settings_layout: None,
-            settings_advanced: false,
-            settings_fullscreen_slot: 0,
-            settings_hide_cursor: false,
-            settings_on_top: false,
-            settings_minimise: false,
             overlay_settings: None,
-            overlay_type_idx: 0,
-            overlay_effect_idx: 0,
-            overlay_effect_ms: 500,
-            overlay_duration_val: 0,
-            overlay_duration_frames: false,
-            overlay_stinger_cut: 0,
-            overlay_alpha: 255,
-            overlay_zoom: 1.0,
-            overlay_zoom_x: 1.0,
-            overlay_zoom_y: 1.0,
-            overlay_pan_x: 0.0,
-            overlay_pan_y: 0.0,
-            overlay_rotate_z: 0.0,
-            overlay_border_thickness: 0,
-            overlay_border_radius: 0,
             recording_setup: false,
             rec_slot: 1,
             rec_format: 2,
@@ -815,7 +787,9 @@ impl RustMixApp {
             playlist_name: "Default".into(),
             playlist_delete_confirm: false,
             shortcuts_open: false,
-            search_open: true,
+            search_open: false,
+            search_draft: String::new(),
+            audio_restore: None,
             ui_locked: false,
             basic_mode: false,
             about: false,
@@ -888,6 +862,9 @@ impl RustMixApp {
     }
 
     fn reset_editors(&mut self) {
+        self.search_open = false;
+        self.category = None;
+        self.input_filter.clear();
         self.add_open = false;
         self.add_image = None;
         self.add_loading = false;
@@ -917,32 +894,44 @@ impl RustMixApp {
     }
 
     fn theme(&self, ctx: &egui::Context) {
+        let light = self.engine.project().preferences.ui_theme == UiTheme::Light;
         let mut style = egui::Style {
-            visuals: egui::Visuals::dark(),
+            visuals: if light {
+                egui::Visuals::light()
+            } else {
+                egui::Visuals::dark()
+            },
             ..Default::default()
         };
         style.spacing.item_spacing = egui::vec2(4.0, 3.0);
         style.spacing.button_padding = egui::vec2(7.0, 3.0);
-        style.visuals.panel_fill = BG;
-        style.visuals.window_fill = Color32::from_rgb(20, 25, 33);
-        style.visuals.window_stroke = Stroke::new(1.0, Color32::from_rgb(56, 68, 84));
-        style.visuals.window_corner_radius = egui::CornerRadius::same(6);
-        style.visuals.extreme_bg_color = Color32::from_rgb(12, 15, 20);
-        style.visuals.faint_bg_color = Color32::from_rgb(26, 32, 42);
-        style.visuals.widgets.inactive.bg_fill = CHIP_BG;
-        style.visuals.widgets.inactive.weak_bg_fill = Color32::from_rgb(30, 37, 47);
-        style.visuals.widgets.inactive.bg_stroke = Stroke::new(1.0, Color32::from_rgb(58, 70, 84));
-        style.visuals.widgets.hovered.bg_fill = Color32::from_rgb(52, 64, 78);
-        style.visuals.widgets.hovered.bg_stroke = Stroke::new(1.0, Color32::from_rgb(96, 114, 134));
-        style.visuals.widgets.active.bg_fill = PROGRAM;
-        style.visuals.selection.bg_fill = PROGRAM;
+        if !light {
+            style.visuals.panel_fill = BG;
+            style.visuals.window_fill = Color32::from_rgb(20, 25, 33);
+            style.visuals.window_stroke = Stroke::new(1.0, Color32::from_rgb(56, 68, 84));
+            style.visuals.window_corner_radius = egui::CornerRadius::same(6);
+            style.visuals.extreme_bg_color = Color32::from_rgb(12, 15, 20);
+            style.visuals.faint_bg_color = Color32::from_rgb(26, 32, 42);
+            style.visuals.widgets.inactive.bg_fill = CHIP_BG;
+            style.visuals.widgets.inactive.weak_bg_fill = Color32::from_rgb(30, 37, 47);
+            style.visuals.widgets.inactive.bg_stroke =
+                Stroke::new(1.0, Color32::from_rgb(58, 70, 84));
+            style.visuals.widgets.hovered.bg_fill = Color32::from_rgb(52, 64, 78);
+            style.visuals.widgets.hovered.bg_stroke =
+                Stroke::new(1.0, Color32::from_rgb(96, 114, 134));
+        }
+        style.visuals.widgets.active.bg_fill = self.program_color();
+        style.visuals.selection.bg_fill = self.program_color();
         style.visuals.selection.stroke = egui::Stroke::new(1.0, Color32::WHITE);
-        style.visuals.override_text_color =
+        style.visuals.override_text_color = if light {
+            Some(Color32::from_rgb(25, 31, 40))
+        } else {
             Some(if self.engine.project().preferences.high_contrast {
                 Color32::WHITE
             } else {
                 Color32::from_rgb(232, 238, 245)
-            });
+            })
+        };
         for v in [
             &mut style.visuals.widgets.inactive,
             &mut style.visuals.widgets.hovered,
@@ -956,8 +945,19 @@ impl RustMixApp {
         style
             .text_styles
             .insert(egui::TextStyle::Button, egui::FontId::proportional(12.0));
-        ctx.set_theme(egui::ThemePreference::Dark);
-        ctx.set_style_of(egui::Theme::Dark, style);
+        ctx.set_theme(if light {
+            egui::ThemePreference::Light
+        } else {
+            egui::ThemePreference::Dark
+        });
+        ctx.set_style_of(
+            if light {
+                egui::Theme::Light
+            } else {
+                egui::Theme::Dark
+            },
+            style,
+        );
         ctx.set_zoom_factor(self.engine.project().preferences.ui_scale);
     }
 
@@ -1056,7 +1056,7 @@ impl RustMixApp {
     }
 
     fn capture_workspace(&mut self) {
-        match serde_json::to_string(&self.dock) {
+        match serde_json::to_string(self.audio_restore.as_ref().unwrap_or(&self.dock)) {
             Ok(json) => {
                 let mut w = self.engine.project().workspace.clone();
                 w.dock_json = json;
@@ -1156,6 +1156,7 @@ impl RustMixApp {
                         );
                     }
                     JobDone::Loaded(project, path) => {
+                        self.audio_restore = None;
                         match Engine::from_project_at(*project, self.now) {
                             Ok(engine) => {
                                 let layout = engine.project().workspace.dock_json.clone();
@@ -1192,6 +1193,15 @@ impl RustMixApp {
                             Err(e) => self.say(e.to_string(), true),
                         }
                     }
+                    JobDone::SnapshotSaved(path) => self.say(
+                        format!(
+                            "Program snapshot saved: {} (temporary snapshots folder)",
+                            path.file_name()
+                                .map(|name| name.to_string_lossy().into_owned())
+                                .unwrap_or_else(|| "snapshot.png".into())
+                        ),
+                        false,
+                    ),
                     JobDone::Cancelled => self.say("File operation cancelled".into(), false),
                     JobDone::Failed(e) => self.say(format!("File operation failed: {e}"), true),
                 }
@@ -1211,7 +1221,10 @@ impl RustMixApp {
         match action {
             Action::Unavailable(reason) => self.say(reason.into(), true),
             Action::Engine(c) => {
-                let appearance = matches!(c, Command::SetPreferences(_));
+                let appearance = matches!(
+                    c,
+                    Command::SetPreferences(_) | Command::ApplySettings { .. }
+                );
                 self.execute(c);
                 if appearance {
                     self.theme(ctx);
@@ -1296,30 +1309,10 @@ impl RustMixApp {
             Action::ToggleRecordSim | Action::ToggleStreamSim | Action::ToggleExternalSim => {
                 self.say("Unavailable: this build has no encoder, network sender or external video backend".into(), true);
             }
-            Action::Snapshot => {
-                if self.last_program_rgba.len() == 640 * 360 * 4 {
-                    let snap_dir = std::env::temp_dir().join("rustmix-snapshots");
-                    let _ = std::fs::create_dir_all(&snap_dir);
-                    let file = snap_dir.join(format!("program-{}.png", self.now));
-                    match image::save_buffer(
-                        &file,
-                        &self.last_program_rgba,
-                        640,
-                        360,
-                        image::ColorType::Rgba8,
-                    ) {
-                        Ok(()) => self.say(
-                            format!("Program snapshot saved → {}", file.display()),
-                            false,
-                        ),
-                        Err(e) => self.say(format!("Snapshot failed: {e}"), true),
-                    }
-                } else {
-                    self.say("Program snapshot captured".into(), false);
-                }
-            }
+            Action::Snapshot => self.start_snapshot(std::env::temp_dir().join("rustmix-snapshots")),
             Action::About => self.about = true,
             Action::Workspace(audio) => {
+                self.audio_restore = None;
                 self.dock = default_dock(audio);
                 self.execute(Command::SetWorkspace(WorkspaceState {
                     name: if audio {
@@ -1350,14 +1343,7 @@ impl RustMixApp {
                 self.allow_close = true;
                 ctx.send_viewport_cmd(egui::ViewportCommand::Close);
             }
-            Action::FocusPanel(panel) => {
-                if let Some(path) = self.dock.find_tab(&panel) {
-                    match self.dock.set_active_tab(path) {
-                        Ok(()) => self.dock.set_focused_node_and_surface(path.node_path()),
-                        Err(e) => self.say(format!("Cannot focus panel: {e:?}"), true),
-                    }
-                }
-            }
+            Action::ToggleAudioPane => self.toggle_audio_pane(),
             Action::PauseDemo => {
                 self.execute(Command::SetInputsPaused(!self.engine.inputs_paused()));
             }
@@ -1375,10 +1361,14 @@ impl RustMixApp {
             ui.spacing_mut().item_spacing.x = 3.0;
             let brand = ui
                 .add(
-                    egui::Button::new(RichText::new("Preset").strong().color(Color32::WHITE))
-                        .fill(Color32::TRANSPARENT)
-                        .stroke(Stroke::NONE)
-                        .min_size(egui::vec2(52.0, 22.0)),
+                    egui::Button::new(
+                        RichText::new("Preset")
+                            .strong()
+                            .color(ui.visuals().text_color()),
+                    )
+                    .fill(Color32::TRANSPARENT)
+                    .stroke(Stroke::NONE)
+                    .min_size(egui::vec2(52.0, 22.0)),
                 )
                 .on_hover_text(format!(
                     "{}\nClick for About RustMix",
@@ -1505,26 +1495,16 @@ impl RustMixApp {
                         )
                         .min_size(egui::vec2(78.0, 22.0)),
                     )
-                    .on_hover_text("Toggle Fullscreen output");
+                    .on_hover_text(
+                        "Expand the application window; independent Program output is unavailable",
+                    );
                 self.automation
                     .insert("toolbar.fullscreen".into(), fullscreen.rect);
                 if fullscreen.clicked() {
                     self.actions.push(Action::Fullscreen);
                 }
                 caret_menu_button(ui, 22.0, |ui| {
-                    if ui.button("Fullscreen 1 → Program").clicked() {
-                        self.settings_fullscreen_slot = 0;
-                        ui.close();
-                    }
-                    if ui.button("Fullscreen 2 → Multiview").clicked() {
-                        self.settings_fullscreen_slot = 1;
-                        ui.close();
-                    }
-                    ui.separator();
-                    if ui.button("Display Settings…").clicked() {
-                        self.actions.push(Action::SettingsAt(SettingsPage::Display));
-                        ui.close();
-                    }
+                    ui.label("Independent fullscreen routing is unavailable.");
                 });
             }
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -1881,8 +1861,13 @@ impl RustMixApp {
                     );
                     ui.painter().rect_filled(bar, 1.0, col);
                 }
-                if audio_resp.on_hover_text("Focus Audio Mixer").clicked() {
-                    self.actions.push(Action::FocusPanel(Panel::Audio));
+                self.automation
+                    .insert("output.audioPane".into(), audio_resp.rect);
+                if audio_resp
+                    .on_hover_text("Show / hide Audio Mixer")
+                    .clicked()
+                {
+                    self.actions.push(Action::ToggleAudioPane);
                 }
                 let sc_btn = vector_icon_button(
                     ui,
@@ -1922,7 +1907,9 @@ impl RustMixApp {
             self.ui_locked,
             None,
         )
-        .on_hover_text("Lock workspace controls");
+        .on_hover_text(
+            "Lock production shortcuts and tab dragging (pointer switching stays available)",
+        );
         self.automation.insert("output.lock".into(), lock.rect);
         if lock.clicked() {
             self.ui_locked = !self.ui_locked;
@@ -1941,7 +1928,7 @@ impl RustMixApp {
             ui.label(
                 RichText::new("CPU mix · GPU display")
                     .strong()
-                    .color(Color32::WHITE),
+                    .color(ui.visuals().text_color()),
             );
             if self.program_worker.is_some() {
                 ui.label(
@@ -1953,9 +1940,12 @@ impl RustMixApp {
                 );
             }
             ui.label(RichText::new("UI FPS:").strong().color(DIM));
-            ui.label(RichText::new(format!("{:.0}", self.fps)).color(Color32::WHITE));
+            ui.label(RichText::new(format!("{:.0}", self.fps)).color(ui.visuals().text_color()));
             ui.label(RichText::new("CPU:").strong().color(DIM));
-            ui.label(RichText::new(format!("{:.1} ms", self.generation_ms)).color(Color32::WHITE));
+            ui.label(
+                RichText::new(format!("{:.1} ms", self.generation_ms))
+                    .color(ui.visuals().text_color()),
+            );
             if self.rec_active {
                 let s = self.now.saturating_sub(self.rec_started_ms) / 1000;
                 ui.label(
@@ -2021,6 +2011,7 @@ impl RustMixApp {
         if ctx.text_edit_focused()
             || self.properties.is_some()
             || self.settings
+            || self.search_open
             || self.overlay_settings.is_some()
             || self.recording_setup
             || self.streaming_setup
@@ -2073,8 +2064,10 @@ impl RustMixApp {
         self.shortcuts(&ctx);
         self.refresh_textures(&ctx);
         let dialog_busy = self.add_open
+            || self.search_open
             || self.properties.is_some()
             || self.settings
+            || self.search_open
             || self.overlay_settings.is_some()
             || self.recording_setup
             || self.streaming_setup
@@ -2149,6 +2142,7 @@ impl RustMixApp {
         style.separator.color_idle = Color32::from_rgb(42, 50, 62);
         style.separator.color_hovered = TEAL;
         DockArea::new(&mut dock)
+            .draggable_tabs(self.audio_restore.is_none() && !self.ui_locked)
             .style(style)
             .show_close_buttons(false)
             .show_leaf_close_all_buttons(false)
@@ -2234,7 +2228,7 @@ impl eframe::App for RustMixApp {
     }
     fn save(&mut self, storage: &mut dyn eframe::Storage) {
         storage.set_string("basic-mode.v1", self.basic_mode.to_string());
-        if let Ok(json) = serde_json::to_string(&self.dock) {
+        if let Ok(json) = serde_json::to_string(self.audio_restore.as_ref().unwrap_or(&self.dock)) {
             storage.set_string("workspace.v2", json);
         }
     }

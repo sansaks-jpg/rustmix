@@ -378,6 +378,7 @@ impl RustMixApp {
                 ..Default::default()
             },
             config: InputConfig::default(),
+            category: None,
         };
         match render::source(&input, 320, 180, 1500) {
             Ok(pixels) => {
@@ -860,15 +861,7 @@ impl RustMixApp {
                                                     .size(11.5)
                                                     .color(FORM_TEXT),
                                             );
-                                            egui::ComboBox::from_id_salt("prop.mouse_action")
-                                                .width(135.0)
-                                                .selected_text("Preview")
-                                                .show_ui(ui, |ui| {
-                                                    let _ = ui.selectable_label(true, "Preview");
-                                                    let _ =
-                                                        ui.selectable_label(false, "Quick Play");
-                                                    let _ = ui.selectable_label(false, "Cut");
-                                                });
+                                            ui.label("Preview (fixed)");
                                             ui.end_row();
 
                                             ui.label(
@@ -876,14 +869,7 @@ impl RustMixApp {
                                                     .size(11.5)
                                                     .color(FORM_TEXT),
                                             );
-                                            egui::ComboBox::from_id_salt("prop.go_action")
-                                                .width(135.0)
-                                                .selected_text("Quick Play")
-                                                .show_ui(ui, |ui| {
-                                                    let _ = ui.selectable_label(true, "Quick Play");
-                                                    let _ = ui.selectable_label(false, "Fade");
-                                                    let _ = ui.selectable_label(false, "Merge");
-                                                });
+                                            ui.label("Preview (fixed)");
                                             ui.end_row();
 
                                             for (k, v) in [
@@ -1233,6 +1219,7 @@ impl RustMixApp {
                         (SettingsPage::Outputs, "Outputs / NDI / OMT", "Outputs"),
                         (SettingsPage::Options, "Options", "Options"),
                         (SettingsPage::Appearance, "Performance", "Appearance"),
+                        (SettingsPage::Categories, "Input Categories", "Categories"),
                         (SettingsPage::Decoders, "Decoders", "Decoders"),
                         (SettingsPage::Recording, "Recording", "Recording"),
                         (
@@ -1260,11 +1247,7 @@ impl RustMixApp {
                     ui.add_space(4.0);
                     for action_lbl in ["Import", "Export", "Default"] {
                         if ui
-                            .add_sized(
-                                [152.0, 21.0],
-                                egui::Button::new(RichText::new(action_lbl).size(11.0))
-                                    .fill(CHIP_BG),
-                            )
+                            .add_enabled(action_lbl == "Default", egui::Button::new(RichText::new(action_lbl).size(11.0)).fill(CHIP_BG).min_size(Vec2::new(152.0,21.0)))
                             .clicked()
                             && action_lbl == "Default"
                         {
@@ -1280,34 +1263,7 @@ impl RustMixApp {
                                 .spacing([18.0, 6.0])
                                 .show(ui, |ui| {
                                     ui.label(RichText::new("Theme").size(11.5).color(FORM_TEXT));
-                                    egui::ComboBox::from_id_salt("settings.theme")
-                                        .width(210.0)
-                                        .selected_text("Charcoal8")
-                                        .show_ui(ui, |ui| {
-                                            let _ = ui.selectable_label(true, "Charcoal8");
-                                            let _ = ui.selectable_label(false, "Midnight");
-                                        });
-                                    ui.end_row();
-
-                                    ui.label(
-                                        RichText::new("Preview Colour").size(11.5).color(FORM_TEXT),
-                                    );
-                                    let (pvw_rect, _) = ui.allocate_exact_size(
-                                        Vec2::new(210.0, 18.0),
-                                        Sense::hover(),
-                                    );
-                                    ui.painter().rect_filled(pvw_rect, 1.0, PREVIEW);
-                                    ui.end_row();
-
-                                    ui.label(
-                                        RichText::new("Output Colour").size(11.5).color(FORM_TEXT),
-                                    );
-                                    let (pgm_rect, _) = ui.allocate_exact_size(
-                                        Vec2::new(210.0, 18.0),
-                                        Sense::hover(),
-                                    );
-                                    ui.painter().rect_filled(pgm_rect, 1.0, PROGRAM);
-                                    ui.end_row();
+                                    app.appearance_controls(ui, &mut draft);
 
                                     ui.label(
                                         RichText::new("Master Frame Rate")
@@ -1344,110 +1300,8 @@ impl RustMixApp {
                                         });
                                     ui.end_row();
 
-                                    ui.label(
-                                        RichText::new("Output Size").size(11.5).color(FORM_TEXT),
-                                    );
-                                    ui.vertical(|ui| {
-                                        egui::ComboBox::from_id_salt("settings.output_size")
-                                            .width(210.0)
-                                            .selected_text("1920x1080")
-                                            .show_ui(ui, |ui| {
-                                                let _ = ui.selectable_label(true, "1920x1080");
-                                                let _ = ui.selectable_label(false, "1280x720");
-                                                let _ = ui.selectable_label(false, "3840x2160");
-                                            });
-                                        let (bar, _) = ui.allocate_exact_size(
-                                            Vec2::new(210.0, 4.0),
-                                            Sense::hover(),
-                                        );
-                                        ui.painter().rect_filled(
-                                            bar,
-                                            0.0,
-                                            Color32::from_rgb(0, 68, 204),
-                                        );
-                                    });
-                                    ui.end_row();
-
-                                    ui.label(
-                                        RichText::new("Output Aspect Ratio")
-                                            .size(11.5)
-                                            .color(FORM_TEXT),
-                                    );
-                                    egui::ComboBox::from_id_salt("settings.aspect")
-                                        .width(210.0)
-                                        .selected_text("Widescreen")
-                                        .show_ui(ui, |ui| {
-                                            let _ = ui.selectable_label(true, "Widescreen");
-                                            let _ = ui.selectable_label(false, "Normal");
-                                        });
-                                    ui.end_row();
-
-                                    ui.label("");
-                                    ui.horizontal(|ui| {
-                                        for (slot, lbl) in
-                                            [(1_u8, "Fullscreen 1"), (2_u8, "Fullscreen 2")]
-                                        {
-                                            let active = app.settings_fullscreen_slot == slot;
-                                            if ui
-                                                .add_sized(
-                                                    [101.0, 22.0],
-                                                    egui::Button::new(
-                                                        RichText::new(lbl)
-                                                            .size(11.0)
-                                                            .color(Color32::WHITE),
-                                                    )
-                                                    .fill(if active { PROGRAM } else { CHIP_BG }),
-                                                )
-                                                .clicked()
-                                            {
-                                                app.settings_fullscreen_slot = slot;
-                                            }
-                                        }
-                                    });
-                                    ui.end_row();
-
-                                    ui.label(RichText::new("Display").size(11.5).color(FORM_TEXT));
-                                    egui::ComboBox::from_id_salt("settings.display_idx")
-                                        .width(210.0)
-                                        .selected_text("1")
-                                        .show_ui(ui, |ui| {
-                                            let _ = ui.selectable_label(true, "1");
-                                            let _ = ui.selectable_label(false, "2");
-                                        });
-                                    ui.end_row();
-
-                                    ui.label(RichText::new("Position").size(11.5).color(FORM_TEXT));
-                                    ui.horizontal(|ui| {
-                                        for val in ["0", "0", "0", "0"] {
-                                            let mut s = val.to_owned();
-                                            ui.add_sized(
-                                                [46.0, 20.0],
-                                                egui::TextEdit::singleline(&mut s),
-                                            );
-                                        }
-                                    });
-                                    ui.end_row();
-
-                                    ui.label("");
-                                    ui.horizontal(|ui| {
-                                        ui.checkbox(&mut app.settings_hide_cursor, "Hide Cursor");
-                                        ui.checkbox(&mut app.settings_on_top, "On Top");
-                                        ui.checkbox(&mut app.settings_minimise, "Minimise");
-                                    });
-                                    ui.end_row();
-
-                                    ui.label(
-                                        RichText::new("Input Size").size(11.5).color(FORM_TEXT),
-                                    );
-                                    egui::ComboBox::from_id_salt("settings.input_size")
-                                        .width(210.0)
-                                        .selected_text("1280x720 (720p)")
-                                        .show_ui(ui, |ui| {
-                                            let _ = ui.selectable_label(true, "1280x720 (720p)");
-                                            let _ = ui.selectable_label(false, "1920x1080 (1080p)");
-                                        });
-                                    ui.end_row();
-
+                                    ui.label("Actual Program raster"); ui.label("640×360 CPU reference"); ui.end_row();
+                                    ui.label("Independent fullscreen output"); ui.label("Unavailable: no output router"); ui.end_row();
                                     ui.label(
                                         RichText::new("Production Name")
                                             .size(11.5)
@@ -1511,9 +1365,10 @@ impl RustMixApp {
                                 app.settings_layout = Some(true);
                             }
                             ui.add_space(6.0);
-                            ui.label("Web Controller Address: http://127.0.0.1:8088");
+                            ui.label("Web Controller unavailable: no HTTP listener is running.");
                         }
                         SettingsPage::Shortcuts => app.shortcut_settings(ui, &mut draft),
+                        SettingsPage::Categories => app.category_settings(ui, &mut draft),
                         _ => {
                             ui.label(
                                 RichText::new(format!("{:?} Configuration", app.settings_page))
@@ -1521,7 +1376,7 @@ impl RustMixApp {
                                     .strong()
                                     .color(FORM_TEXT),
                             );
-                            ui.label("Configured for 1080p29,97 low-latency production routing.");
+                            ui.label("Unavailable in this build. This page does not configure a backend.");
                             ui.checkbox(
                                 &mut draft.shortcuts,
                                 "Enable single-key production shortcuts",
@@ -1532,12 +1387,7 @@ impl RustMixApp {
             );
             ui.separator();
             ui.horizontal(|ui| {
-                ui.checkbox(
-                    &mut self.settings_advanced,
-                    RichText::new("Show Advanced Settings")
-                        .size(11.5)
-                        .color(Color32::WHITE),
-                );
+                ui.label("Changes apply only with OK.");
                 ui.with_layout(egui::Layout::right_to_left(Align::Center), |ui| {
                     let cancel = ui.add(
                         egui::Button::new("Cancel")
@@ -1568,23 +1418,19 @@ impl RustMixApp {
         if apply_clicked {
             let mut candidate = self.engine.project().clone();
             candidate.preferences = draft.clone();
+            candidate.name = self.settings_name.trim().to_owned();
             if let Err(error) = candidate.validate() {
                 self.say(error.to_string(), true);
                 self.settings_draft = Some(draft);
                 return;
             }
-            if !self.settings_name.trim().is_empty()
-                && self.settings_name.trim() != self.engine.project().name
-            {
-                self.actions.push(Action::Engine(Command::RenameProject(
-                    self.settings_name.clone(),
-                )));
-            }
             if let Some(audio_focus) = self.settings_layout {
                 self.actions.push(Action::Workspace(audio_focus));
             }
-            self.actions
-                .push(Action::Engine(Command::SetPreferences(draft)));
+            self.actions.push(Action::Engine(Command::ApplySettings {
+                name: self.settings_name.trim().to_owned(),
+                preferences: draft,
+            }));
             self.settings = false;
             self.settings_draft = None;
             self.settings_layout = None;
@@ -1630,280 +1476,34 @@ impl RustMixApp {
                 .max_height(height)
                 .auto_shrink([false, false])
                 .show(&mut body_ui, |ui| {
-                    egui::Grid::new("overlay_top_form")
-                        .num_columns(4)
-                        .spacing([10.0, 4.0])
-                        .show(ui, |ui| {
-                            ui.label("Number");
-                            ui.horizontal(|ui| {
-                                egui::ComboBox::from_id_salt("overlay.number.combo")
-                                    .width(64.0)
-                                    .selected_text(format!("{}", slot + 1))
-                                    .show_ui(ui, |ui| {
-                                        for i in 0..4 {
-                                            if ui
-                                                .selectable_label(slot == i, format!("{}", i + 1))
-                                                .clicked()
-                                                && let Some(committed) =
-                                                    self.engine.project().overlays.get(i).cloned()
-                                            {
-                                                slot = i;
-                                                draft = committed;
-                                            }
-                                        }
-                                    });
-                                for i in 0..4 {
-                                    let r = ui.add_sized(
-                                        [24.0, 20.0],
-                                        egui::Button::new(format!("{}", i + 1))
-                                            .fill(if slot == i { PROGRAM } else { CHIP_BG }),
-                                    );
-                                    self.automation
-                                        .insert(format!("dialog.overlay.slot.{}", i + 1), r.rect);
-                                    if r.clicked()
-                                        && let Some(committed) =
-                                            self.engine.project().overlays.get(i).cloned()
-                                    {
-                                        slot = i;
-                                        draft = committed;
-                                    }
-                                }
-                            });
-                            let enabled = ui.checkbox(&mut draft.enabled, "Show on Program");
-                            self.automation
-                                .insert("dialog.overlay.enabled".into(), enabled.rect);
-                            ui.horizontal(|ui| {
-                                for position in
-                                    [Position::LowerLeft, Position::LowerRight, Position::TopLeft]
-                                {
-                                    let r = ui.selectable_value(
-                                        &mut draft.position,
-                                        position,
-                                        position_label(position),
-                                    );
-                                    self.automation.insert(
-                                        format!("dialog.overlay.position.{position:?}"),
-                                        r.rect,
-                                    );
-                                }
-                            });
-                            ui.end_row();
-
-                            ui.label("Type");
-                            let type_resp = egui::ComboBox::from_id_salt("overlay.type.combo")
-                                .width(175.0)
-                                .selected_text(
-                                    ["Picture In Picture", "Fullscreen", "Lower Third Title"]
-                                        .get(self.overlay_type_idx)
-                                        .copied()
-                                        .unwrap_or("Picture In Picture"),
-                                )
-                                .show_ui(ui, |ui| {
-                                    for (idx, lbl) in
-                                        ["Picture In Picture", "Fullscreen", "Lower Third Title"]
-                                            .into_iter()
-                                            .enumerate()
-                                    {
-                                        ui.selectable_value(&mut self.overlay_type_idx, idx, lbl);
-                                    }
-                                });
-                            self.automation
-                                .insert("dialog.overlay.type".into(), type_resp.response.rect);
-                            ui.label("Title / Sub");
-                            ui.horizontal(|ui| {
-                                let t = ui.add_sized(
-                                    [105.0, 20.0],
-                                    egui::TextEdit::singleline(&mut draft.title).char_limit(96),
-                                );
-                                self.automation
-                                    .insert("dialog.overlay.title".into(), t.rect);
-                                let s = ui.add_sized(
-                                    [105.0, 20.0],
-                                    egui::TextEdit::singleline(&mut draft.subtitle).char_limit(160),
-                                );
-                                self.automation
-                                    .insert("dialog.overlay.subtitle".into(), s.rect);
-                            });
-                            ui.end_row();
-
-                            ui.label("Effect");
-                            egui::ComboBox::from_id_salt("overlay.effect.combo")
-                                .width(175.0)
-                                .selected_text(
-                                    ["Fade", "Zoom", "Slide", "Fly"]
-                                        .get(self.overlay_effect_idx)
-                                        .copied()
-                                        .unwrap_or("Fade"),
-                                )
-                                .show_ui(ui, |ui| {
-                                    for (idx, lbl) in
-                                        ["Fade", "Zoom", "Slide", "Fly"].into_iter().enumerate()
-                                    {
-                                        ui.selectable_value(&mut self.overlay_effect_idx, idx, lbl);
-                                    }
-                                });
-                            ui.label("Effect Duration");
-                            ui.add(
-                                egui::DragValue::new(&mut self.overlay_effect_ms)
-                                    .range(0..=5000)
-                                    .suffix(" ms"),
-                            );
-                            ui.end_row();
-
-                            ui.label("Duration");
-                            ui.horizontal(|ui| {
-                                ui.add(
-                                    egui::DragValue::new(&mut self.overlay_duration_val)
-                                        .range(0..=60000),
-                                );
-                                ui.radio_value(
-                                    &mut self.overlay_duration_frames,
-                                    false,
-                                    "Milliseconds",
-                                );
-                                ui.radio_value(&mut self.overlay_duration_frames, true, "Frames");
-                            });
-                            ui.label("Stinger Input");
-                            egui::ComboBox::from_id_salt("overlay.stinger.combo")
-                                .width(140.0)
-                                .selected_text("None")
-                                .show_ui(ui, |ui| {
-                                    let _ = ui.selectable_label(true, "None");
-                                    let _ = ui.selectable_label(false, "Input 1");
-                                });
-                            ui.end_row();
-
-                            ui.label("Alpha");
-                            ui.horizontal(|ui| {
-                                ui.add(
-                                    egui::Slider::new(&mut self.overlay_alpha, 0..=255)
-                                        .show_value(false),
-                                );
-                                ui.label(format!("{}", self.overlay_alpha));
-                            });
-                            ui.label("Stinger Cut");
-                            ui.add(
-                                egui::DragValue::new(&mut self.overlay_stinger_cut).range(0..=5000),
-                            );
-                            ui.end_row();
-                        });
-                    ui.add_space(6.0);
-                    ui.columns(2, |cols| {
-                        if let [left_col, right_col, ..] = cols {
-                            light_form_frame(left_col, 8, |ui| {
-                                ui.label(
-                                    RichText::new("Picture In Picture Location")
-                                        .size(12.0)
-                                        .strong()
-                                        .color(FORM_TEXT),
-                                );
-                                egui::Grid::new("overlay_pip_sliders")
-                                    .num_columns(3)
-                                    .spacing([6.0, 4.0])
-                                    .show(ui, |ui| {
-                                        for (lbl, val, min_v, max_v, def_v) in [
-                                            ("Zoom", &mut self.overlay_zoom, 0.1_f32, 2.0, 0.4375),
-                                            ("Zoom X", &mut self.overlay_zoom_x, 0.1, 2.0, 0.4375),
-                                            ("Zoom Y", &mut self.overlay_zoom_y, 0.1, 2.0, 0.4375),
-                                            ("Pan X", &mut self.overlay_pan_x, -1.0, 1.0, 0.463),
-                                            ("Pan Y", &mut self.overlay_pan_y, -1.0, 1.0, -0.464),
-                                            (
-                                                "Rotate Z",
-                                                &mut self.overlay_rotate_z,
-                                                -std::f32::consts::PI,
-                                                std::f32::consts::PI,
-                                                0.0,
-                                            ),
-                                        ] {
-                                            ui.label(
-                                                RichText::new(lbl).size(11.0).color(FORM_TEXT),
-                                            );
-                                            ui.add(
-                                                egui::Slider::new(val, min_v..=max_v)
-                                                    .fixed_decimals(3),
-                                            );
-                                            if ui.small_button("Reset").clicked() {
-                                                *val = def_v;
-                                            }
-                                            ui.end_row();
-                                        }
-                                    });
-                                ui.separator();
-                                ui.horizontal(|ui| {
-                                    ui.label(
-                                        RichText::new("Border")
-                                            .size(11.5)
-                                            .strong()
-                                            .color(FORM_TEXT),
-                                    );
-                                    ui.label("Thickness");
-                                    ui.add(
-                                        egui::DragValue::new(&mut self.overlay_border_thickness)
-                                            .range(0..=20),
-                                    );
-                                    ui.label("Radius");
-                                    ui.add(
-                                        egui::DragValue::new(&mut self.overlay_border_radius)
-                                            .range(0..=40),
-                                    );
-                                });
-                            });
-                            right_col.vertical_centered(|ui| {
-                                let w = ui.available_width().clamp(200.0, 340.0);
-                                let h = w * 9.0 / 16.0;
-                                let (frame, _) = ui
-                                    .allocate_exact_size(Vec2::new(w, h), Sense::click_and_drag());
-                                ui.painter()
-                                    .rect_filled(frame, 0.0, Color32::from_rgb(33, 39, 45));
-                                ui.painter().rect_stroke(
-                                    frame,
-                                    0.0,
-                                    Stroke::new(1.0, Color32::WHITE),
-                                    egui::StrokeKind::Inside,
-                                );
-                                let pip_w = frame.width() * self.overlay_zoom.clamp(0.15, 0.9);
-                                let pip_h = frame.height() * self.overlay_zoom.clamp(0.15, 0.9);
-                                let cx =
-                                    frame.center().x + self.overlay_pan_x * frame.width() * 0.25;
-                                let cy =
-                                    frame.center().y - self.overlay_pan_y * frame.height() * 0.25;
-                                let pip = egui::Rect::from_center_size(
-                                    egui::pos2(cx, cy),
-                                    Vec2::new(pip_w, pip_h),
-                                )
-                                .intersect(frame.shrink(3.0));
-                                ui.painter()
-                                    .rect_filled(pip, 0.0, Color32::from_rgb(122, 0, 0));
-                                ui.painter().rect_stroke(
-                                    pip,
-                                    0.0,
-                                    Stroke::new(1.5, Color32::from_rgb(0, 120, 215)),
-                                    egui::StrokeKind::Inside,
-                                );
-                                let panel = overlay_panel_rect(frame, draft.position, slot);
-                                ui.painter().rect_filled(
-                                    panel,
-                                    2.0,
-                                    Color32::from_black_alpha(180),
-                                );
-                                ui.painter().text(
-                                    egui::pos2(panel.left() + 6.0, panel.center().y),
-                                    egui::Align2::LEFT_CENTER,
-                                    format!("O{} {}", slot + 1, draft.title),
-                                    egui::FontId::proportional(10.5),
-                                    Color32::WHITE,
-                                );
-                                self.automation
-                                    .insert("dialog.overlay.preview".into(), frame);
-                                ui.add_space(4.0);
-                                ui.label(
-                                    RichText::new("Click and drag inside box to move.")
-                                        .size(11.0)
-                                        .color(Color32::WHITE),
-                                );
-                            });
+                    ui.horizontal(|ui| {
+                        ui.label("Title panel");
+                        for i in 0..4 {
+                            let row=ui.selectable_label(slot==i,format!("{}",i+1));
+                            self.automation.insert(format!("dialog.overlay.slot.{}",i+1),row.rect);
+                            if row.clicked() && let Some(committed)=self.engine.project().overlays.get(i).cloned(){slot=i;draft=committed;}
                         }
                     });
+                    let enabled=ui.checkbox(&mut draft.enabled,"Show on Program");
+                    self.automation.insert("dialog.overlay.enabled".into(),enabled.rect);
+                    ui.horizontal(|ui|{
+                        for position in [Position::LowerLeft,Position::LowerRight,Position::TopLeft]{
+                            let r=ui.selectable_value(&mut draft.position,position,format!("{position:?}"));
+                            self.automation.insert(format!("dialog.overlay.position.{position:?}"),r.rect);
+                        }
+                    });
+                    ui.label("Title");let title=ui.add(egui::TextEdit::singleline(&mut draft.title).char_limit(96));
+                    self.automation.insert("dialog.overlay.title".into(),title.rect);
+                    ui.label("Subtitle");let subtitle=ui.add(egui::TextEdit::singleline(&mut draft.subtitle).char_limit(160));
+                    self.automation.insert("dialog.overlay.subtitle".into(),subtitle.rect);
+                    ui.label("Source overlays, stingers, channel effects/timing, alpha, free transforms and borders are unavailable. Only the title-panel fields above apply.");
+                    let w=ui.available_width().min(420.0);
+                    let (frame,_)=ui.allocate_exact_size(Vec2::new(w,w*9.0/16.0),Sense::hover());
+                    ui.painter().rect_filled(frame,0.0,Color32::from_rgb(18,23,30));
+                    let panel=overlay_panel_rect(frame,draft.position,slot);
+                    ui.painter().rect_filled(panel,2.0,Color32::from_black_alpha(180));
+                    ui.painter().text(panel.center(),egui::Align2::CENTER_CENTER,&draft.title,egui::FontId::proportional(11.0),Color32::WHITE);
+                    self.automation.insert("dialog.overlay.preview".into(),frame);
                 });
             self.automation.insert("dialog.overlay.body".into(), body);
             ui.separator();
@@ -1957,6 +1557,9 @@ impl RustMixApp {
             Vec2::new(680.0, 500.0),
         )
         .show(ctx, |ui| {
+            ui.label("Unavailable: no encoder/output backend. Settings below are read-only and are not saved.");
+            egui::ScrollArea::vertical().max_height((ctx.viewport_rect().height()-300.0).clamp(180.0,450.0)).show(ui,|ui| {
+            ui.add_enabled_ui(false,|ui| {
             ui.horizontal(|ui| {
                 for slot in [1_u8, 2_u8] {
                     let active = self.rec_slot == slot;
@@ -2159,12 +1762,15 @@ impl RustMixApp {
                     self.automation
                         .insert("dialog.recording.ok".into(), ok.rect);
                     if ok.clicked() {
-                        self.notice = format!("Recording Setup saved ({})", self.rec_filename);
+                        self.notice = "Recording backend unavailable; no settings were saved".into();
                         self.warning = false;
                         close_clicked = true;
                     }
                 });
             });
+            });
+            });
+            if ui.button("Close unavailable setup").clicked(){close_clicked=true;}
         });
         if close_clicked || !open {
             self.recording_setup = false;
@@ -2185,6 +1791,9 @@ impl RustMixApp {
             Vec2::new(660.0, 490.0),
         )
         .show(ctx, |ui| {
+            ui.label("Unavailable: no encoder/output backend. Settings below are read-only and are not saved.");
+            egui::ScrollArea::vertical().max_height((ctx.viewport_rect().height()-300.0).clamp(180.0,450.0)).show(ui,|ui| {
+            ui.add_enabled_ui(false,|ui| {
             ui.horizontal(|ui| {
                 ui.label("Channel");
                 for ch in 0..5 {
@@ -2375,12 +1984,15 @@ impl RustMixApp {
                     self.automation
                         .insert("dialog.streaming.save".into(), save.rect);
                     if save.clicked() {
-                        self.notice = "Streaming Settings saved".into();
+                        self.notice = "Streaming backend unavailable; no settings were saved".into();
                         self.warning = false;
                         close_clicked = true;
                     }
                 });
             });
+            });
+            });
+            if ui.button("Close unavailable setup").clicked(){close_clicked=true;}
         });
         if close_clicked || !open {
             self.streaming_setup = false;
@@ -2401,6 +2013,9 @@ impl RustMixApp {
             Vec2::new(690.0, 480.0),
         )
         .show(ctx, |ui| {
+            ui.label("Unavailable: no encoder/output backend. Settings below are read-only and are not saved.");
+            egui::ScrollArea::vertical().max_height((ctx.viewport_rect().height()-300.0).clamp(180.0,450.0)).show(ui,|ui| {
+            ui.add_enabled_ui(false,|ui| {
             ui.columns(2, |cols| {
                 if let [left_col, right_col, ..] = cols {
                     egui::Grid::new("mc_top_left")
@@ -2577,6 +2192,9 @@ impl RustMixApp {
                     }
                 });
             });
+            });
+            });
+            if ui.button("Close unavailable setup").clicked(){close_clicked=true;}
         });
         if close_clicked || !open {
             self.multicorder_open = false;
