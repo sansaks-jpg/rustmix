@@ -221,7 +221,7 @@ fn production_configuration_roundtrips_but_automation_never_restarts_on_load() {
         .remove("key_bindings");
     std::fs::write(&path, serde_json::to_vec(&legacy).unwrap()).unwrap();
     let loaded = persistence::load(&path).unwrap();
-    assert_eq!(loaded.schema, 3);
+    assert_eq!(loaded.schema, 4);
     assert!(loaded.playlists[0].items.is_empty());
     assert!(!loaded.preferences.key_bindings.is_empty());
     assert!(

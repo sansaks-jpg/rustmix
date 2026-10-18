@@ -4,7 +4,11 @@ pub mod input;
 pub use input::{ImageFit, InputConfig};
 pub mod persistence;
 pub mod playback;
+pub mod preferences;
 pub mod production;
+pub use preferences::{
+    CategoryDefinition, UiTheme, default_categories, default_preview_color, default_program_color,
+};
 pub use production::{
     Playlist, PlaylistItem, PlaylistRun, TransitionSlot, default_playlists,
     default_transition_slots,
@@ -130,6 +134,8 @@ pub struct InputState {
     pub audio: AudioChannel,
     #[serde(default)]
     pub config: InputConfig,
+    #[serde(default)]
+    pub category: Option<u8>,
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Position {
@@ -154,6 +160,14 @@ pub struct Preferences {
     pub shortcuts: bool,
     #[serde(default = "default_key_bindings")]
     pub key_bindings: Vec<ShortcutBinding>,
+    #[serde(default = "default_categories")]
+    pub categories: Vec<CategoryDefinition>,
+    #[serde(default)]
+    pub ui_theme: UiTheme,
+    #[serde(default = "default_preview_color")]
+    pub preview_color: [u8; 3],
+    #[serde(default = "default_program_color")]
+    pub program_color: [u8; 3],
 }
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct WorkspaceState {
@@ -214,10 +228,11 @@ impl ProjectState {
                     ..Default::default()
                 },
                 config: InputConfig::default(),
+                category: None,
             })
             .collect();
         Self {
-            schema: 3,
+            schema: 4,
             name: "Studio / Demo production".into(),
             revision: 0,
             inputs,
@@ -248,6 +263,10 @@ impl ProjectState {
                 ui_scale: 1.0,
                 shortcuts: true,
                 key_bindings: default_key_bindings(),
+                categories: default_categories(),
+                ui_theme: UiTheme::Dark,
+                preview_color: default_preview_color(),
+                program_color: default_program_color(),
             },
             workspace: WorkspaceState {
                 name: "Production".into(),
@@ -265,9 +284,9 @@ impl ProjectState {
             .map_or(0, |index| index + 1)
     }
     pub fn validate(&self) -> Result<()> {
-        if self.schema != 3 {
+        if self.schema != 4 {
             return Err(invalid(
-                "Unsupported project version; this application supports schema 3",
+                "Unsupported project version; this application supports schema 4",
             ));
         }
         valid_text(&self.name, 120)?;
@@ -330,6 +349,7 @@ impl ProjectState {
         if self.workspace.dock_json.len() > 65536 {
             return Err(invalid("Workspace layout exceeds 64 KiB"));
         }
+        preferences::validate(self)?;
         production::validate(self)?;
         shortcuts::validate(self)?;
         Ok(())
@@ -448,6 +468,7 @@ pub enum Command {
         input: InputState,
         audio: Option<AudioChannel>,
     },
+    SetInputCategory(InputId, Option<u8>),
     SetInputAudio(InputId, AudioChannel),
     SetBus(usize, AudioChannel),
     SetOverlay(usize, OverlayState),
@@ -600,6 +621,14 @@ impl Command {
                 "Inputs",
                 "",
                 false,
+                false,
+            ),
+            Self::SetInputCategory(..) => (
+                "input.category.set",
+                "Assign input category",
+                "Inputs",
+                "",
+                true,
                 false,
             ),
             Self::SetInputAudio(..) => (
@@ -758,6 +787,7 @@ impl Engine {
                 name,
                 kind,
                 config,
+                category: None,
                 color: [37, 160, 183],
                 online: true,
                 audio: AudioChannel {
@@ -785,6 +815,22 @@ impl Engine {
     }
     pub fn enabled(&self, command: &Command) -> Result<()> {
         match command {
+            Command::SetInputCategory(id, category) => {
+                if self.project.input(*id).is_none() {
+                    return Err(invalid("Input not found"));
+                }
+                if category.is_some_and(|id| {
+                    !self
+                        .project
+                        .preferences
+                        .categories
+                        .iter()
+                        .any(|c| c.id == id)
+                }) {
+                    return Err(invalid("Input references an unknown category"));
+                }
+                Ok(())
+            }
             Command::SelectPreview(id) | Command::TakeInput(id)
                 if self.project.input(*id).is_none() =>
             {
@@ -1092,6 +1138,7 @@ impl Engine {
                 let id =
                     Self::insert_input(&mut next, name, original.kind, original.config, index + 1)?;
                 if let Some(copy) = next.inputs.iter_mut().find(|i| i.id == id) {
+                    copy.category = original.category;
                     copy.color = original.color;
                     copy.online = original.online;
                     copy.audio = AudioChannel {
@@ -1142,6 +1189,15 @@ impl Engine {
                 *old = input;
             }
 
+            Command::SetInputCategory(id, category) => {
+                let input = next
+                    .inputs
+                    .iter_mut()
+                    .find(|input| input.id == id)
+                    .ok_or_else(|| invalid("Input not found"))?;
+                input.category = category;
+                affected.push(id);
+            }
             Command::SetInputAudio(id, a) => {
                 let input = next
                     .inputs
