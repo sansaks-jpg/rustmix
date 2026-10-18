@@ -26,10 +26,12 @@ fn decode(bytes: &[u8]) -> Result<ProjectState> {
     // Older descriptors retain source IDs, routing and layout. New production
     // configuration defaults to idle, with no playlist started during migration.
     if matches!(p.schema, 1 | 2) {
-        p.schema = 3;
         for slot in &mut p.transition_slots {
             slot.duration_ms = p.duration_ms;
         }
+    }
+    if matches!(p.schema, 1..=3) {
+        p.schema = 4;
     }
     p.validate()?;
     Ok(p)
