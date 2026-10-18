@@ -1,6 +1,6 @@
 # ADR 0006: Stable monitor geometry and independent source transport
 
-2026-10-18 · UI-009 · Accepted implementation; hosted execution pending.
+2026-10-18 · UI-009 · Accepted implementation; hosted checks passed in [run 39089212707](https://github.com/sansaks-jpg/rustmix/actions/runs/39089212707), code `3a36cf2`.
 
 The UI-008 monitor bank expanded without operator input because child layout
 minimum sizes were propagated back into the resizable panel's persisted size.

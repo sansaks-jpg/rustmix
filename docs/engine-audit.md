@@ -30,3 +30,5 @@ Hosted outcomes and artifact links are recorded in `ui-progress.md` after
 execution; unrun or failed checks must remain visible.
 
 Unsupported files are rejected without changing the existing input image or creating a generator under a video filename. A PNG decode failure retains the previous image; Browse cancellation retains the previous selection. Unsupported transition types cannot silently run as a different effect.
+
+Accepted prototype verification: [run 39089212707](https://github.com/sansaks-jpg/rustmix/actions/runs/39089212707), code `3a36cf2`: 32 tests, native 60-frame layout hold, 35-frame paused-picture/progress hold, 14 PNG captures, source save/reopen equality and empty native stderr. Windows portable executable SHA256: `0439407EC6ADF102D31421BA4D65C2F8AD5E817F8CAEA358A768C1C3E7F19474`. This evidence does not change the missing-backend or physical-device boundaries above.

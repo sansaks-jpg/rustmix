@@ -27,3 +27,5 @@ UI-009 audit (2026-10-18): the UI-008 GPU/output labels were not evidence of med
 | G19 | Closed in UI-006 | Top toolbar `Open ▼`, `Save As ▼`, and `Settings ▼` carets now expose real actions (open, reload last saved, recover checkpoint, write immediate recovery checkpoint, and jump directly to individual Settings pages or Overlay Settings). |
 
 Do not claim 1080p/4K processing based on the project-format selector; actual demo rasters are capped and only displayed in the native UI.
+
+UI-009 acceptance: [run 39089212707](https://github.com/sansaks-jpg/rustmix/actions/runs/39089212707), code `3a36cf2`, passed all 32 tests, native layout/pause/switch/save/reopen and review of 14 actual PNG captures. The reported idle-layout drift, vertical T-Bar and advancing paused-source progress are closed for the tested prototype. Real GPU media composition, decoding/capture/audio/output backends and hardware/endurance readiness remain open as detailed in the engine audit.
