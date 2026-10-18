@@ -3,14 +3,14 @@
 The [complete reference audit](reference-audit.md) enumerates all observed areas, input/effect/
 overlay/audio contracts, UI workflows and public function names. Full-match acceptance is false:
 major media/audio/output/API backends are absent, and hosted cadence/hardware qualification
-does not pass. The Basic-to-Multiview alias is corrected in source; hosted acceptance is pending.
+does not pass. The Basic-to-Multiview alias is corrected and functionally verified in hosted run 39111788801; complete interface parity is still partial.
 
-UI-012 (2026-10-18), source implemented / acceptance pending: the fixed-key limitation in G07 is
+UI-012 (2026-10-18), experimental functional acceptance: the fixed-key limitation in G07 is
 addressed by persisted remapping, and UI-owned playlist/slot state moves into the headless engine.
-Four independent transition slots, twelve CPU effects and named input playlists now have prepared
-regressions. G01 still needs production-clock/output qualification; the existing RGBA producer now
-acknowledges state with control generations to prevent UI rewind. Hosted verification of this
-change is open. G02–G05, hardware/API/accessibility/endurance and full parity remain open.
+Four independent transition slots, twelve CPU effects, named playlists, worker acknowledgment and
+Basic/Advanced passed hosted run 39111788801: 75 tests, native capture and save/reopen.
+G01 still needs production-clock/output qualification; hosted 50/59.94/60 cadence targets failed.
+G02–G05, hardware/API/accessibility/endurance and full parity remain open.
 See [reference comparison](reference-feature-comparison.md) for capabilities not implemented here.
 
 UI-009 audit (2026-10-18): the UI-008 GPU/output labels were not evidence of media backends. Composition/effects are CPU reference code, wgpu presents UI textures, recording/stream/external start paths were counter simulations, and real video decode/audio/hardware output remain absent. UI-009 prevents false live output state and repairs existing transport/composition/layout paths. It does not close G01–G05 or establish production readiness.

@@ -1,16 +1,21 @@
 # Feature matrix
 
-## UI-012 current working-tree scope (2026-10-18)
+## UI-012 verified prototype scope (2026-10-18)
 
-The historical evidence below does not verify this new patch. Local formatting/source/inventory
-checks are distinct from hosted compilation, tests, native capture and performance qualification.
+[Hosted run 39111788801](https://github.com/sansaks-jpg/rustmix/actions/runs/39111788801), runtime
+`a01f498`: 75 tests (36 engine / 39 UI), five native processes, configuration save/reopen and package
+passed. Changed captures were inspected. **Cadence qualification failed** and no row is production-ready.
+The [complete reference audit](reference-audit.md) covers every observed area and explicit missing
+capability; the strict full-match gate remains false. Hosted Hyper-V is not physical device proof.
 
 | Feature | Status | Scope | Test evidence | Platform | Hardware tested | Known limitations / failure behavior | Last verified date | Owner/task ID |
 |---|---|---|---|---|---|---|---|---|
-| Transition slots and effects | Experimental, acceptance pending | Four saved effect/duration slots; Cut, Fade, Wipe/Slide normal/reverse horizontal/vertical, Barn Door, Roller Door | Slot pinning and independent endpoint/directional pixel tests prepared, unrun | Rust portable core / Windows UI target | None for this patch | CPU reference raster; no Merge/3D/stingers/GPU parity | Not yet verified | UI-012 · G03 |
-| Named input playlists | Experimental, acceptance pending | Up to 16 lists × 128 references; reorder, item hold/effect/time, manual/loop/selected start, clear overlays on start, Start/Stop/Previous/Next | Core clock/atomic/offline/protection, widget and producer tests prepared; native PNG flow extended | Windows UI target | None for this patch | Explicit hold only; no file decode/seek; offline auto advance stops with alarm; Stop preserves active take | Not yet verified | UI-012 · G01/G04 |
-| Custom keyboard mappings | Experimental, acceptance pending | Persisted keys/modifiers/actions; positional defaults and stable explicit targets | Conflict/reserved/target, modifier/repeat/focus and Settings OK/Cancel tests prepared | Windows UI target | None for this patch | No MIDI, controller, network command endpoint or accessibility certification | Not yet verified | UI-012 · G07 |
-| Project schema 3 / producer feedback | Experimental, acceptance pending | Migrate 1/2, retain old duration/backups; never auto-resume; acknowledge control generations | Migration/save/reopen and worker-generation coverage prepared; native configuration reopen extended | Windows target | None for this patch | Old binaries reject schema 3; exact hosted checks and cadence comparison pending | Not yet verified | UI-012 · G01/G06 |
+| Transition slots and effects | Experimental | Four saved effect/duration slots; 12 original CPU effects | Hosted slot pinning and independent endpoint/directional pixel tests passed | Rust portable core / Windows x64 UI | Hosted Hyper-V only | CPU 640×360 reference raster; 8 effects, stingers and GPU parity absent | 2026-10-18 | UI-012 · G03 |
+| Named input playlists | Experimental | Up to 16 lists × 128 references; item hold/effect/time, reorder, manual/loop/selected start, clear on start, Start/Stop/Previous/Next | Core clock/atomic/offline/protection, widget and independent producer tests; native Start/Stop/save/reopen passed | Windows x64 | Hosted Hyper-V only | Explicit hold; no file decode/seek; offline advance stops with alarm; Stop preserves active take | 2026-10-18 | UI-012 · G01/G04 |
+| Custom keyboard mappings | Experimental | Saved logical keys/modifiers/actions; positional defaults and stable explicit targets | Conflict/reserved/target/modifier/repeat/focus and Settings OK/Cancel tests; native distinct selection → X → target passed | Windows x64 | Hosted injected events only | No MIDI/controllers/API; physical keyboard delivery and accessibility qualification open | 2026-10-18 | UI-012 · G07 |
+| Project schema 3 / producer feedback | Experimental | Migrate 1/2, retain duration/backups; no auto-resume; acknowledge control generations | Migration/roundtrip/worker/lifecycle tests passed; both native JSON save/reopen pairs identical | Windows x64 | Hosted only | Old binaries reject schema 3; output cadence/hardware continuity unqualified | 2026-10-18 | UI-012 · G01/G06 |
+| Basic / Advanced presentation | Experimental | Reduced controls, both monitors, Quick Play; independent of Program and remembered multiview | Widget tests at 1100/1600/1920; native project/revision preservation; Basic capture reviewed | Windows x64 | Hosted Hyper-V only | Media/overlay/audio prototype limits remain; global-mode restore has source coverage only | 2026-10-18 | UI-012 · ADR 0010 |
+| Complete reference inventory | Tested, inventory only | 30 areas, 40 inputs, 20 effects, 16 overlay/stinger channels, 9 audio destinations, 12 UI contracts, 777 function names | Source/CI inventory guard passed; strict full-match and four corrupt-claim cases rejected locally | PowerShell / Windows CI | None; source data only | Static inventory does not implement/test a backend; full reference acceptance is false | 2026-10-18 | UI-012-reference-audit |
 
 ## Historical accepted scope
 
@@ -32,4 +37,4 @@ Last verified 2026-10-17 · Owner/tasks UI-001 / UI-002 / UI-005. [Accepted evid
 
 2026-10-18: independent source clocks, horizontal manual transition, bounded monitor geometry and processed Program surfaces are implemented with regression coverage prepared. Hosted acceptance passed in [run 39089212707](https://github.com/sansaks-jpg/rustmix/actions/runs/39089212707) at code `3a36cf2`: 32 tests, native captures, stable/frozen state checks and save/reopen. GPU display remains distinct from CPU media composition; hardware decode/encode, real audio, capture, recording, streaming and production readiness are unimplemented/unqualified. The recording/stream/external/MultiCorder controls cannot start simulated live sessions.
 
-UI-010 input extension: PNG references/effects and fit persist in schema 2 (schema 1 migration), ordered insertion, duplication, staged Properties OK/Cancel, bounded PNG workers and missing-source relink are implemented. Hosted acceptance pending. External image files are not embedded; raster remains 640x360 Program / 384x216 source preview. Video/capture backends are still absent.
+UI-010 input extension: PNG references/effects and fit persist in schema 2 (schema 1 migration), ordered insertion, duplication, staged Properties OK/Cancel, bounded PNG workers and missing-source relink are implemented. Hosted functional PNG acceptance passed. External image files are not embedded; raster remains 640x360 Program / 384x216 source preview. Video/capture backends are still absent.

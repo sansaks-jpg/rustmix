@@ -1,6 +1,6 @@
 # ADR 0010: independent Basic operator presentation
 
-Date: 2026-10-18 · Task: UI-012-reference-audit · Status: implemented, hosted acceptance pending.
+Date: 2026-10-18 · Task: UI-012-reference-audit · Status: experimental functional acceptance in Windows run 39111788801 (`a01f498`).
 
 The complete reference audit found that RustMix's Basic button incorrectly dispatched the
 Multiview action. The supplied behavioral study (`SPEC.md`, D12) and the locally inspected
@@ -24,4 +24,4 @@ restoring advanced controls, multiview independence and unchanged committed proj
 when toggling. The native input workflow clicks the mode control, checks the project revision
 and buses, requires `input-basic.png`, then restores Advanced before save/reopen. Its bounded
 deadline increases from 120 to 150 seconds for these extra capture stages; the outer process
-deadline remains 270 seconds. Hosted compilation/tests and visual review are still required.
+deadline remains 270 seconds. Hosted compilation/tests/native gates passed and the Basic capture was visually reviewed. Global mode storage restore has source coverage only; native save/reopen verifies the project configuration.

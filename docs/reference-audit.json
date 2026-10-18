@@ -16,17 +16,17 @@
     "function_names_sha256": "804ae58059d823e96dffef86c9c2053c6fad5f746ccf5228ecc89643af4a99da"
   },
   "runtime_evidence": {
-    "run": "https://github.com/sansaks-jpg/rustmix/actions/runs/39110320365",
-    "code": "3150eb6",
-    "tests_passed": 74,
+    "run": "https://github.com/sansaks-jpg/rustmix/actions/runs/39111788801",
+    "code": "a01f498",
+    "tests_passed": 75,
     "tests_failed": 0,
     "platform": "Windows Server 20348, Rust 1.94.1 MSVC x64, hosted Microsoft Hyper-V Video",
     "hardware_qualified": false,
     "cadence_qualified": false,
     "cadence_actual_fps": [
-      35.81685352427322,
-      39.840195799035506,
-      36.12138937312085
+      28.57066276698104,
+      38.74915311909491,
+      34.456512844761505
     ],
     "cadence_target_fps": [
       50,
@@ -36,7 +36,25 @@
     "raster": [
       640,
       360
-    ]
+    ],
+    "native_processes_passed": 5,
+    "actual_screenshots": 20,
+    "native_evidence_artifact": 12130639014,
+    "windows_package_artifact": 12130624284,
+    "cadence_skipped_frames": [
+      177,
+      175,
+      212
+    ],
+    "reviewed_captures": [
+      "input-basic.png",
+      "workspace-1600.png",
+      "input-reopened.png",
+      "input-playlist.png",
+      "input-keyboard.png"
+    ],
+    "save_reopen_byte_identical": true,
+    "native_stderr_empty": true
   },
   "areas": [
     {
@@ -1997,7 +2015,7 @@
       "status": "experimental",
       "conformance": "partial",
       "scope": "Independent persisted UI mode; Basic retains both monitors, Quick Play, input selection/cut/overlays 1-4, Add Input, audio mixer and lock. Does not change Program or multiview choice.",
-      "gap": "New correction awaits hosted acceptance; overlays/audio/inputs retain the general prototype limitations."
+      "gap": "Hosted widget/native Basic correction passed; overlays/audio/inputs retain the general prototype limitations. Global-mode restore has source coverage only; native save/reopen verifies project configuration. The existing lock suppresses production keys; a complete pointer/layout lock contract is unverified."
     },
     {
       "id": "playlist",

@@ -265,3 +265,38 @@ persisted UI presentation state, retains core controls and hides advanced surfac
 Program/Preview/revision and the previous multiview choice. New widget coverage and required
 `input-basic.png` native evidence await a fresh exact-code hosted run. No local compile/test or
 native launch was performed.
+
+## UI-012 final functional acceptance / full reference acceptance failed (2026-10-18)
+
+[Run 39111788801](https://github.com/sansaks-jpg/rustmix/actions/runs/39111788801), runtime code
+`a01f498`, passed formatting, repository/reference inventory, locked workspace check, Clippy
+with `-D warnings`, **75 tests (36 engine / 39 UI, zero failed/ignored)**, release build, all five
+native processes, project/configuration reopen and packaging. The new Basic widget regression
+passed at 1100×700, 1600×900 and 1920×1080. Its native capture preserves Program/Preview/revision
+through Basic → Advanced and restores the advanced controls.
+
+Evidence contains 20 actual screenshots plus the procedural PNG fixture. Basic, workspace 1600,
+playlist, Keyboard Settings and input reopen were visually reviewed in this exact run. The
+Basic surface has one Quick Play control, both monitors, the reduced input control row, Add Input
+and lock. No clipping or displaced monitor was observed in these inspected captures. Both native
+saved/reopened JSON pairs match byte-for-byte; all five stderr files are empty. Saved schema 3
+retains slot 1 SlideReverse/250 ms, two manual playlist items (IDs 8/9, 3500 ms hold) and X → input 8.
+Global UI-mode storage restore has source coverage only; project reopen does not prove that flag.
+
+Performance qualification **failed**: 50 → 28.57 fps (177 skipped), 59.94 → 38.75 fps (175 skipped),
+60 → 34.46 fps (212 skipped), actual raster 640×360. The five native processes took 227.16 / 6.57 /
+112.03 / 8.47 / 37.71 seconds; peak working set across them was 145.20 MiB and max private bytes
+367.48 MiB. These are short hosted Windows/Hyper-V process samples, not dedicated VRAM,
+physical hardware, AV synchronization or endurance qualification. Runtime remains experimental.
+
+[Windows package](https://github.com/sansaks-jpg/rustmix/actions/runs/39111788801/artifacts/12130624284) ·
+[Native evidence](https://github.com/sansaks-jpg/rustmix/actions/runs/39111788801/artifacts/12130639014).
+Only evidence/logs were retrieved locally; no executable was built or launched on the laptop.
+Subsequent edits update documentation/audit results only; Rust source, lockfile, scripts and CI
+workflow remain identical to this tested runtime revision.
+
+Full reference acceptance remains **false**. The complete ledger records 30 areas, 40 input
+types, 20 effects, 16 overlay/stinger channels, 9 audio destinations, 12 UI contracts and all 777
+public function identifiers. Normal inventory consistency passes; the strict full-match command
+rejects this state. Missing backends and partial contracts remain explicit in
+[reference-audit.md](reference-audit.md). No merge, release or external live output was performed.

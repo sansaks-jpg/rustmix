@@ -6,8 +6,9 @@ The full-match acceptance gate currently fails; neither this comparison nor a gr
 2026-10-18 · UI-012 · Source inspection at baseline `11a1fb3`, followed by this working-tree change.
 Reference: `C:\Users\WORKPLUS\Documents\WEB\rustmix-reference\vmix`.
 Behavioral reports and the playlist screenshot were inspected; no reference code/assets were copied.
-This is a capability map, not a parity percentage. New features remain experimental until hosted
-Windows tests, native launch, screenshot review and reopen pass for this exact change.
+This is a capability map, not a parity percentage. Hosted Windows run 39111788801 (`a01f498`)
+passed 75 tests, native launch and configuration reopen; changed native captures were reviewed.
+Features remain experimental and performance/full-reference qualification did not pass.
 
 | Reference workflow | Current RustMix scope | UI-012 change / remaining gap |
 |---|---|---|
@@ -15,7 +16,7 @@ Windows tests, native launch, screenshot review and reopen pass for this exact c
 | Four configurable transition slots | Former UI-only names with shared duration | Persisted independent effects/durations; twelve actual CPU effects including Cut; 3D/Merge/stingers absent |
 | Named playlists over current inputs | Former temporary UI sequence | Add/rename/delete, add/remove/reorder references, per-item hold/effect/time, selected start, loop/manual, start/stop/previous/next, offline alarm, project persistence |
 | Keyboard shortcuts and command families | Former fixed keys and enable switch | Editable persisted key/action/modifier rows; conflict validation, exact modifiers, repeat/focus guards; MIDI/control surfaces/API/scripting absent |
-| Basic / Advanced mode | Former Basic-to-Multiview alias | Independent persisted presentation state and reduced controls; buses/revision/multiview preservation tests and native Basic capture prepared; hosted acceptance pending |
+| Basic / Advanced mode | Former Basic-to-Multiview alias | Independent persisted presentation state and reduced controls; buses/revision/multiview preservation tests and native Basic capture passed; global mode restore has source coverage only |
 | Input categories/search | Existing kind filters and search | Arbitrary custom color categories remain absent |
 | Local media/stills | Bounded PNG files and seven procedural sources | No general video/audio decoding, playlist seek or file-duration inference |
 | Device/network inputs | No backend | Webcam, capture card, desktop capture, RTSP/SRT/NDI/OMT/browser/guest inputs remain absent |
@@ -27,7 +28,7 @@ Windows tests, native launch, screenshot review and reopen pass for this exact c
 | Titles, data sources and virtual sets | Procedural graphics, title panels, PIP | No GT/proprietary templates, data connectors or virtual-set asset packages |
 | PTZ, tally, MIDI, voice | No backend | Hardware/license/protocol-specific work remains absent |
 | Presets, saved preferences and recovery | Own RustMix format | Schema 3; migrate 1/2, retain original backups; no `.vmix` compatibility claim |
-| Diagnostics / production qualification | Existing measured prototype counters | New worker acknowledgment needs hosted regression and cadence review; device-loss, AV sync and endurance remain open |
+| Diagnostics / production qualification | Existing measured prototype counters | Worker acknowledgment regressions passed; hosted cadence targets failed; device-loss, AV sync and endurance remain open |
 
 The public [playlist guide](https://hwww.vmix.com/help29/playlist.html) supports per-item durations,
 effects, named-project persistence, loop/manual/selected start and clearing overlays on start.

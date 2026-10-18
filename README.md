@@ -10,7 +10,9 @@ playlists with per-item timing and manual/loop controls, and editable keyboard m
 Settings → Shortcuts. The playlist gear configures the sequence; the adjacent button starts/stops
 it. Program state is acknowledged by the bounded producer instead of being overwritten on every
 UI repaint. Schema 3 migrates schemas 1/2 and preserves backup bytes; older binaries cannot open
-schema 3. These changes are **experimental, hosted acceptance pending**. See the
+schema 3. Basic now has its own operator presentation instead of toggling Multiview. These
+changes are **experimental, functionally tested** in [Windows run 39111788801](https://github.com/sansaks-jpg/rustmix/actions/runs/39111788801):
+75 tests, five native processes, save/reopen and required screenshots passed. See the
 [feature comparison](docs/reference-feature-comparison.md) and [ADR 0009](docs/adr/0009-engine-owned-production-controls.md).
 
 **Full reference parity is not achieved.** The [complete reference audit](docs/reference-audit.md)
@@ -27,7 +29,7 @@ Windows x64 builds and tests run **on GitHub Actions**, not on the owner's lapto
 
 `rustmix-ui-evidence` contains native rendered screenshots and smoke-state JSON when the graphics environment supports launch. A build is not accepted as a successful UI milestone until that smoke step passes.
 
-Verified UI-009: [Windows build and 32 passing tests](https://github.com/sansaks-jpg/rustmix/actions/runs/39089212707), code revision `3a36cf2`. Download [rustmix-windows-x64](https://github.com/sansaks-jpg/rustmix/actions/runs/39089212707/artifacts/12121704067). Native launch, layout stability, pause, switching, save/reopen and actual screenshot review passed on hosted Windows. Physical GPU/device qualification and broadcast production readiness remain open. See [verification details](docs/ui-progress.md) and [engine audit](docs/engine-audit.md).
+Latest verified prototype: [75 passing tests and native Windows acceptance](https://github.com/sansaks-jpg/rustmix/actions/runs/39111788801), runtime revision `a01f498`. Download [rustmix-windows-x64](https://github.com/sansaks-jpg/rustmix/actions/runs/39111788801/artifacts/12130624284) or [native evidence](https://github.com/sansaks-jpg/rustmix/actions/runs/39111788801/artifacts/12130639014). Basic/Advanced, playlist, key settings and reopened captures were reviewed. **Cadence targets failed** on hosted Hyper-V: 28.57 / 38.75 / 34.46 fps for 50 / 59.94 / 60 targets at 640×360. Physical GPU/devices, AV synchronization, endurance and broadcast readiness remain open. See [verification details](docs/ui-progress.md) and the [complete reference audit](docs/reference-audit.md).
 
 Developer commands (for CI / an authorized build machine with Rust 1.94.1 and Windows MSVC tools):
 
@@ -65,4 +67,4 @@ UI-004 through UI-006 refine the broadcast operator workflow across all four bou
 
 No production readiness, hardware support, GPU compositor parity, long-run timing or live output continuity is claimed.
 
-UI-010 adds persisted PNG references and processing settings, ordered insertion, source duplication, transactional Input Settings and bounded asynchronous PNG loading. Schema 1 projects migrate to schema 2; older builds cannot open new schema 2 files. Images remain external references: keep the original files available. Missing images retain their input and show black with a relink warning. Hosted acceptance for this change is pending; see docs/ui-progress.md.
+UI-010 adds persisted PNG references and processing settings, ordered insertion, source duplication, transactional Input Settings and bounded asynchronous PNG loading. These descriptors were introduced in schema 2; schemas 1/2 now migrate to schema 3, which older builds cannot open. Images remain external references: keep the original files available. Missing images retain their input and show black with a relink warning. This input workflow passed hosted acceptance and is included in the current schema 3 test run; see docs/ui-progress.md.

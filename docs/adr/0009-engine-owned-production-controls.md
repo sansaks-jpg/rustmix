@@ -1,6 +1,6 @@
 # ADR 0009: engine-owned transition slots, playlists and keyboard bindings
 
-Date: 2026-10-18 · Task: UI-012 · Status: implemented in source, hosted acceptance pending.
+Date: 2026-10-18 · Task: UI-012 · Status: experimental functional acceptance in Windows run 39111788801 (`a01f498`); full reference/performance qualification remains open.
 
 The supplied `rustmix-reference/vmix` project describes four configurable transition slots,
 named playlists over input references, per-item timing/effects, manual/loop options and configurable
@@ -43,7 +43,7 @@ applies at start; this takes precedence over the local summary's suggestion of c
 
 ## Verification and limits
 
-Prepared tests cover exact effect endpoints/directional pixels, slot pinning, playlist clocks,
+Passing tests cover exact effect endpoints/directional pixels, slot pinning, playlist clocks,
 loop/manual/selected start, empty/offline/invalid targets, protection/cleanup, atomic invalid edits,
 save/migration/reopen, key conflicts/modifiers/repeats, widget editing and bounded dialog footers.
 The producer test exercises progression without a UI consumer and generation acknowledgment.

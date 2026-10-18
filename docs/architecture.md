@@ -5,7 +5,10 @@ sequencing; `engine::shortcuts` owns portable binding validation and typed actio
 The UI stages keyboard preferences and dispatches playlist commands. Project schema 3 stores
 configuration only. The existing Program producer acknowledges its engine state with a control
 generation; the UI reads that state before commands and does not resubmit snapshots every paint.
-Old-generation frames cannot undo newer controls. See ADR 0009; hosted acceptance remains pending.
+Old-generation frames cannot undo newer controls. The Basic/Advanced flag is UI presentation
+stored separately from project/engine state and multiview selection; it does not publish a new
+Program snapshot. See ADRs 0009/0010 and the accepted functional run in docs/ui-progress.md.
+Performance and full reference acceptance remain open.
 
 UI-009: source transport is owned by the headless engine; monitors consume those positions. The UI renders a bounded bank and processed source surfaces are composed before overlays/FTB. See [ADR 0006](adr/0006-stable-monitor-bank-and-source-transports.md) and the [engine audit](engine-audit.md) for the actual CPU/GPU/backend boundary.
 
