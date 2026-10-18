@@ -1100,6 +1100,38 @@ mod tests {
     }
 
     #[test]
+    fn unavailable_shortcut_and_stream_controls_cannot_dispatch_fake_features() {
+        let mut app = RustMixApp::headless();
+        let ctx = egui::Context::default();
+        app.theme(&ctx);
+        let size = [1600.0, 900.0];
+        app.dispatch(Action::ShortcutsWindow, &ctx);
+        for _ in 0..3 {
+            frame(&mut app, &ctx, vec![], size);
+        }
+        let revision = app.engine.project().revision;
+        for index in [2, 10, 11] {
+            click(
+                &mut app,
+                &ctx,
+                &format!("dialog.shortcuts.action.{index}"),
+                size,
+            );
+        }
+        assert!(app.engine.transition().is_none());
+        assert!(!app.rec_active && !app.stream_active);
+        assert_eq!(app.engine.project().revision, revision);
+        click(&mut app, &ctx, "dialog.shortcuts.close", size);
+        app.dispatch(Action::StreamingSetup, &ctx);
+        for _ in 0..3 {
+            frame(&mut app, &ctx, vec![], size);
+        }
+        click(&mut app, &ctx, "dialog.streaming.start", size);
+        assert!(!app.stream_active);
+        assert_eq!(app.engine.project().revision, revision);
+    }
+
+    #[test]
     fn dragging_a_panel_tab_changes_docking_and_roundtrips() {
         let mut app = RustMixApp::headless();
         let ctx = egui::Context::default();

@@ -2,6 +2,8 @@
 
 UI-009 adds engine coverage for independent pause/resume/restart/loop, global pause with live transitions, late-created source origins, malformed surfaces and processed bus blending. Widget coverage checks 90 idle frames at each of four resize steps, horizontal T-Bar endpoint hold/release, actual monitor pause/restart clicks, frozen Program pixels, custom image resizing/sharpen and unavailable outputs. These tests are prepared; no local Rust test/build is permitted. Hosted execution and screenshot review are still required before acceptance.
 
+The final consistency regression also clicks the unavailable Merge/Record/Stream shortcut tiles and Streaming Start, requiring unchanged engine revision and no transition/record/stream activity. Native screenshot review covers the resulting disabled states and labels.
+
 ## Environment policy
 
 All compilation, Rust tests and executable generation run on GitHub-hosted Windows (`windows-2022`, MSVC x64, Rust 1.94.1). Local formatting and source review are permitted. Do not build the executable on the owner's laptop. Do not use cua-driver.

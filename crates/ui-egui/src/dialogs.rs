@@ -2289,17 +2289,20 @@ impl RustMixApp {
                             [310.0, 22.0],
                             egui::TextEdit::singleline(&mut self.stream_key).password(true),
                         );
-                        if ui
-                            .add_sized(
-                                [78.0, 22.0],
+                        let start = ui
+                            .add_enabled(
+                                false,
                                 egui::Button::new(if self.stream_active {
                                     format!("Stop {}", self.stream_channel + 1)
                                 } else {
                                     format!("Start {}", self.stream_channel + 1)
                                 })
-                                .fill(if self.stream_active { RED } else { PROGRAM }),
+                                .fill(if self.stream_active { RED } else { PROGRAM })
+                                .min_size(Vec2::new(78.0, 22.0)),
                             )
-                            .clicked()
+                            .on_disabled_hover_text("Unavailable: no streaming encoder or network backend");
+                        self.automation.insert("dialog.streaming.start".into(), start.rect);
+                        if start.clicked()
                         {
                             self.actions.push(Action::ToggleStreamSim);
                         }
@@ -2374,7 +2377,7 @@ impl RustMixApp {
                         ),
                     );
                 } else {
-                    ui.label(RichText::new("Status: Standby").color(DIM));
+                    ui.label(RichText::new("Unavailable: no encoder / network backend").color(DIM));
                 }
                 ui.with_layout(egui::Layout::right_to_left(Align::Center), |ui| {
                     let close = ui.add(
@@ -2813,16 +2816,16 @@ impl RustMixApp {
                     Action::Engine(Command::Transition(TransitionKind::Fade)),
                 ),
                 (
-                    "Merge\n[300 ms]",
-                    Action::Engine(Command::Transition(TransitionKind::Fade)),
+                    "Merge\n[Unavailable]",
+                    Action::Unavailable("Merge is not implemented; choose Fade or Wipe"),
                 ),
                 (
-                    "Wipe\n[300 ms]",
+                    "Wipe\n[Current duration]",
                     Action::Engine(Command::Transition(TransitionKind::Wipe)),
                 ),
                 ("FTB\n[Fade to Black]", Action::Engine(Command::FadeBlack)),
-                ("Overlay 1\n[F1]", Action::OverlaySettings(0)),
-                ("Overlay 2\n[F2]", Action::OverlaySettings(1)),
+                ("Overlay 1\n[Settings]", Action::OverlaySettings(0)),
+                ("Overlay 2\n[Settings]", Action::OverlaySettings(1)),
                 (
                     "Preview 1\n[Key 1]",
                     Action::Engine(Command::SelectPreview(InputId(1))),
@@ -2843,15 +2846,22 @@ impl RustMixApp {
                 .spacing([12.0, 12.0])
                 .show(ui, |ui| {
                     for (idx, (label, action)) in tiles.into_iter().enumerate() {
-                        if ui
-                            .add_sized(
-                                [182.0, 74.0],
+                        let enabled = match &action {
+                            Action::Unavailable(_) | Action::ToggleRecordSim | Action::ToggleStreamSim | Action::ToggleExternalSim => false,
+                            Action::Engine(command) => self.engine.enabled(command).is_ok(),
+                            _ => true,
+                        };
+                        let button = ui
+                            .add_enabled(
+                                enabled,
                                 egui::Button::new(
                                     RichText::new(label).size(13.0).color(Color32::WHITE),
                                 )
-                                .fill(CHIP_BG),
+                                .fill(CHIP_BG).min_size(Vec2::new(182.0, 74.0)),
                             )
-                            .clicked()
+                            .on_disabled_hover_text("Unavailable: finish the active transition or choose an implemented action");
+                        self.automation.insert(format!("dialog.shortcuts.action.{idx}"), button.rect);
+                        if button.clicked()
                         {
                             self.actions.push(action);
                         }

@@ -409,6 +409,7 @@ fn default_dock(audio_focus: bool) -> DockState<Panel> {
 }
 
 pub(crate) enum Action {
+    Unavailable(&'static str),
     Engine(Command),
     New,
     Open,
@@ -1132,6 +1133,7 @@ impl RustMixApp {
 
     fn dispatch(&mut self, action: Action, ctx: &egui::Context) {
         match action {
+            Action::Unavailable(reason) => self.say(reason.into(), true),
             Action::Engine(c) => {
                 let appearance = matches!(c, Command::SetPreferences(_));
                 self.execute(c);
