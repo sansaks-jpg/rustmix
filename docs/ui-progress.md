@@ -128,3 +128,22 @@ Following visual inspection of the native GPU screenshots from [run 39054073068]
 5. **CI WARP Readback Optimization (`smoke.rs`, `panels.rs::refresh_textures`, `scripts/ci-native-smoke.ps1`):**
    - Skips redundant per-frame texture re-uploads during static dialog screenshot stages (`Smoke::is_dialog_stage`) and captures the 9 distinct `1600×900` dialog screenshots plus `workspace-1600.png`, `workspace-1920.png`, and `reopened.png` without overflowing the D3D12 WARP software queue on GitHub-hosted Windows runners.
 
+# UI-009: monitor drift, horizontal T-Bar and source transport (2026-10-18)
+
+Working baseline: `52d3610`. The owner's two RustMix screenshots were inspected.
+The active checkout is `C:\Users\WORKPLUS\Documents\WEB\rustmix`; the chat's
+synced sources and older staged implementation were left unchanged.
+
+Implemented bounded child monitor layout/reserved inputs space, horizontal
+manual transition, engine-owned source clocks for pause/restart/loop, shared
+picture/timecode/progress timing, source effects before bus transitions, PNG
+resampling into Program, offline black preservation and truthful backend/FPS
+status. Unsupported output start paths cannot pretend to record or transmit.
+
+Local non-compiling validation: source diff review, rustfmt and repository
+layer/asset inventory. New engine/widget regressions and native acceptance are
+pending GitHub-hosted execution. No local build, test executable, Cua operation,
+vMix binary extraction, live stream or hardware output was performed. Real
+decode/audio/capture/encoding, GPU media composition, endurance/device loss and
+full vMix feature coverage remain open; no numerical readiness claim is made.
+

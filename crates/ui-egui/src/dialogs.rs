@@ -966,7 +966,7 @@ impl RustMixApp {
                         }
                         InputPage::ColourKey => {
                             ui.label(
-                                RichText::new("Real-Time GPU Chroma Key & Alpha Keying")
+                                RichText::new("CPU Chroma Key · experimental")
                                     .size(13.0)
                                     .strong()
                                     .color(FORM_TEXT),
@@ -2169,7 +2169,8 @@ impl RustMixApp {
             });
             ui.separator();
             ui.horizontal(|ui| {
-                let rec_btn = ui.add(
+                let rec_btn = ui.add_enabled(
+                    false,
                     egui::Button::new(
                         RichText::new(if self.rec_active {
                             "Stop Recording"
@@ -2527,26 +2528,28 @@ impl RustMixApp {
                                     .color(if self.mc_running { RED } else { FORM_TEXT }),
                                 );
                             });
-                        let toggle = ui.add_sized(
-                            [115.0, 56.0],
-                            egui::Button::new(
-                                RichText::new(if self.mc_running { "Stop" } else { "Start" })
-                                    .size(18.0)
-                                    .color(Color32::WHITE),
+                        let toggle = ui.add_enabled_ui(false, |ui| {
+                            ui.add_sized(
+                                [115.0, 56.0],
+                                egui::Button::new(
+                                    RichText::new(if self.mc_running { "Stop" } else { "Start" })
+                                        .size(18.0)
+                                        .color(Color32::WHITE),
+                                )
+                                .fill(if self.mc_running {
+                                    RED
+                                } else {
+                                    PROGRAM
+                                }),
                             )
-                            .fill(if self.mc_running {
-                                RED
-                            } else {
-                                PROGRAM
-                            }),
-                        );
+                        });
                         self.automation
-                            .insert("dialog.multicorder.toggle".into(), toggle.rect);
-                        if toggle.clicked() {
-                            self.mc_running = !self.mc_running;
-                            if self.mc_running {
-                                self.mc_started_ms = self.now;
-                            }
+                            .insert("dialog.multicorder.toggle".into(), toggle.inner.rect);
+                        if toggle.inner.clicked() {
+                            self.say(
+                                "Unavailable: MultiCorder has no recording backend".into(),
+                                true,
+                            );
                         }
                     });
                 }

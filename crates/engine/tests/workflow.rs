@@ -189,3 +189,61 @@ fn direct_take_is_explicit_atomic_and_rejects_busy_or_missing_input() {
     assert!(e.execute(Command::TakeInput(InputId(2)), 1).is_err());
     assert_eq!(e.project().program, InputId(7));
 }
+
+#[test]
+fn source_transport_is_independent_and_does_not_pause_transitions() {
+    let mut e = Engine::default();
+    e.tick(1250);
+    e.execute(Command::SetInputPaused(InputId(1), true), 1250)
+        .unwrap();
+    e.tick(3000);
+    e.execute(Command::SetInputPaused(InputId(2), true), 3000)
+        .unwrap();
+    e.tick(5000);
+    assert_eq!(e.playback(InputId(1)).unwrap().position_ms(), 1250);
+    assert_eq!(e.playback(InputId(2)).unwrap().position_ms(), 3000);
+    e.execute(Command::SetInputPaused(InputId(1), false), 5000)
+        .unwrap();
+    e.tick(5200);
+    assert_eq!(e.playback(InputId(1)).unwrap().position_ms(), 1450);
+    e.execute(Command::SetInputsPaused(true), 5200).unwrap();
+    e.execute(Command::Transition(TransitionKind::Fade), 5200)
+        .unwrap();
+    e.tick(8000);
+    assert_eq!(e.project().program, InputId(2));
+    assert_eq!(e.playback(InputId(1)).unwrap().position_ms(), 1450);
+    e.execute(Command::SetInputsPaused(false), 8000).unwrap();
+    e.tick(8100);
+    assert_eq!(e.playback(InputId(1)).unwrap().position_ms(), 1550);
+    assert_eq!(e.playback(InputId(2)).unwrap().position_ms(), 3000);
+    e.execute(Command::RestartInput(InputId(2)), 8100).unwrap();
+    e.tick(8200);
+    assert_eq!(e.playback(InputId(2)).unwrap().position_ms(), 0);
+    assert!(
+        e.execute(Command::RestartInput(InputId(999)), 8200)
+            .is_err()
+    );
+}
+
+#[test]
+fn loop_off_holds_last_frame_and_new_inputs_have_their_own_origin() {
+    let mut e = Engine::default();
+    e.execute(Command::SetInputLoop(InputId(1), false), 0)
+        .unwrap();
+    e.tick(65_000);
+    assert_eq!(e.playback(InputId(1)).unwrap().position_ms(), 60_000);
+    assert_eq!(e.playback(InputId(2)).unwrap().position_ms(), 5000);
+    e.execute(
+        Command::AddInput {
+            name: "Late source".into(),
+            kind: InputKind::Grid,
+        },
+        65_000,
+    )
+    .unwrap();
+    let id = e.project().inputs.last().unwrap().id;
+    e.tick(65_200);
+    assert_eq!(e.playback(id).unwrap().position_ms(), 200);
+    e.execute(Command::RemoveInput(id), 65_200).unwrap();
+    assert!(e.playback(id).is_none());
+}

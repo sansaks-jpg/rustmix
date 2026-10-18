@@ -20,7 +20,7 @@ fn mixer_rail(ui: &mut egui::Ui, height: f32, label: &str) {
     );
 }
 
-/// Apply per-input real-time GPU effects (Zoom, Pan, Mirror, Lift, Gain, Saturation, Chroma Key, Custom Image).
+/// CPU reference effects applied before bus composition.
 fn process_source_pixels(
     base: &[[u8; 4]],
     w: u32,
@@ -28,12 +28,31 @@ fn process_source_pixels(
     fx: &InputFx,
     pip_pixels: Option<&[[u8; 4]]>,
 ) -> Vec<[u8; 4]> {
+    let resized;
     let src = if let Some((cw, ch, custom)) = &fx.custom_rgba
-        && *cw == w
-        && *ch == h
-        && custom.len() == (w * h) as usize
+        && *cw > 0
+        && *ch > 0
+        && cw
+            .checked_mul(*ch)
+            .is_some_and(|size| custom.len() == size as usize)
     {
-        custom.as_slice()
+        if *cw == w && *ch == h {
+            custom.as_slice()
+        } else {
+            resized = (0..h)
+                .flat_map(|y| {
+                    (0..w).map(move |x| {
+                        let sx = u64::from(x) * u64::from(*cw) / u64::from(w.max(1));
+                        let sy = u64::from(y) * u64::from(*ch) / u64::from(h.max(1));
+                        custom
+                            .get((sy * u64::from(*cw) + sx) as usize)
+                            .copied()
+                            .unwrap_or([0, 0, 0, 255])
+                    })
+                })
+                .collect::<Vec<_>>();
+            resized.as_slice()
+        }
     } else {
         base
     };
@@ -41,6 +60,7 @@ fn process_source_pixels(
         && fx.pan_x.abs() < 0.005
         && fx.pan_y.abs() < 0.005
         && !fx.mirror
+        && !fx.sharpen
         && fx.lift.abs() < 0.005
         && (fx.gain - 1.0).abs() < 0.005
         && (fx.saturation - 1.0).abs() < 0.005
@@ -62,9 +82,29 @@ fn process_source_pixels(
             let mut px = if (0.0..1.0).contains(&nx) && (0.0..1.0).contains(&ny) {
                 let sx = ((nx * w as f32) as u32).min(w.saturating_sub(1));
                 let sy = ((ny * h as f32) as u32).min(h.saturating_sub(1));
-                src.get((sy * w + sx) as usize)
+                let mut sample = src
+                    .get((sy * w + sx) as usize)
                     .copied()
-                    .unwrap_or([0, 0, 0, 255])
+                    .unwrap_or([0, 0, 0, 255]);
+                if fx.sharpen {
+                    let neighbours = [
+                        (sx.saturating_sub(1), sy),
+                        ((sx + 1).min(w.saturating_sub(1)), sy),
+                        (sx, sy.saturating_sub(1)),
+                        (sx, (sy + 1).min(h.saturating_sub(1))),
+                    ];
+                    for (channel, value) in sample.iter_mut().take(3).enumerate() {
+                        let sum: u32 = neighbours
+                            .iter()
+                            .filter_map(|(x, y)| src.get((y * w + x) as usize))
+                            .map(|p| u32::from(p.get(channel).copied().unwrap_or(0)))
+                            .sum();
+                        *value = (f32::from(*value) * 2.0 - sum as f32 / 4.0)
+                            .clamp(0.0, 255.0)
+                            .round() as u8;
+                    }
+                }
+                sample
             } else {
                 [10, 14, 18, 255]
             };
@@ -142,20 +182,12 @@ impl RustMixApp {
         let start = Instant::now();
         let p = self.engine.project().clone();
         self.textures.retain(|id, _| p.input(*id).is_some());
-        let effective_ms = if self.demo_paused {
-            self.paused_at
-        } else {
-            self.now
-        };
-
         let mut raw_sources: HashMap<InputId, Vec<[u8; 4]>> = HashMap::new();
         for input in &p.inputs {
-            let fx = self.input_fx.get(&input.id).cloned().unwrap_or_default();
-            let input_ms = if fx.paused {
-                self.paused_at
-            } else {
-                effective_ms
-            };
+            let input_ms = self
+                .engine
+                .playback(input.id)
+                .map_or(0, |clock| clock.position_ms());
             if let Ok(pixels) = render::source(input, 384, 216, input_ms) {
                 raw_sources.insert(input.id, pixels);
             }
@@ -165,8 +197,11 @@ impl RustMixApp {
             let fx = self.input_fx.get(&input.id).cloned().unwrap_or_default();
             if let Some(base) = raw_sources.get(&input.id) {
                 let pip_buf = fx.pip_source.and_then(|pid| raw_sources.get(&pid));
-                let processed =
-                    process_source_pixels(base, 384, 216, &fx, pip_buf.map(Vec::as_slice));
+                let processed = if input.online {
+                    process_source_pixels(base, 384, 216, &fx, pip_buf.map(Vec::as_slice))
+                } else {
+                    base.clone()
+                };
                 let image = egui::ColorImage::from_rgba_unmultiplied(
                     [384, 216],
                     &processed.into_iter().flatten().collect::<Vec<_>>(),
@@ -185,18 +220,61 @@ impl RustMixApp {
                 }
             }
         }
-        match render::program(
-            &p,
-            self.engine.transition(),
-            self.engine.black_level(),
-            640,
-            360,
-            effective_ms,
-        ) {
+        let mut program_sources = HashMap::new();
+        let from = self.engine.transition().map_or(p.program, |t| t.from);
+        let to = self.engine.transition().map(|t| t.to);
+        let mut ids = vec![from];
+        if let Some(to) = to {
+            ids.push(to);
+        }
+        // PIP dependencies use their own transport, too, and never recurse.
+        for id in ids.clone() {
+            if let Some(pip) = self.input_fx.get(&id).and_then(|fx| fx.pip_source) {
+                ids.push(pip);
+            }
+        }
+        for id in ids {
+            if let Some(input) = p.input(id) {
+                let ms = self
+                    .engine
+                    .playback(id)
+                    .map_or(0, |clock| clock.position_ms());
+                if let Ok(pixels) = render::source(input, 640, 360, ms) {
+                    program_sources.insert(id, pixels);
+                }
+            }
+        }
+        let mut processed_sources = HashMap::new();
+        for id in [Some(from), to].into_iter().flatten() {
+            if let Some(base) = program_sources.get(&id) {
+                let fx = self.input_fx.get(&id).cloned().unwrap_or_default();
+                let pip = fx.pip_source.and_then(|id| program_sources.get(&id));
+                let pixels = if p.input(id).is_some_and(|i| i.online) {
+                    process_source_pixels(base, 640, 360, &fx, pip.map(Vec::as_slice))
+                } else {
+                    base.clone()
+                };
+                processed_sources.insert(id, pixels);
+            }
+        }
+        let composed = processed_sources
+            .get(&from)
+            .ok_or_else(|| Error::Invalid("Program source missing".into()))
+            .and_then(|from_pixels| {
+                render::program_from_sources(
+                    &p,
+                    self.engine.transition(),
+                    self.engine.black_level(),
+                    640,
+                    360,
+                    from_pixels,
+                    to.and_then(|id| processed_sources.get(&id))
+                        .map(Vec::as_slice),
+                )
+            });
+        match composed {
             Ok(pixels) => {
-                let pgm_fx = self.input_fx.get(&p.program).cloned().unwrap_or_default();
-                let processed = process_source_pixels(&pixels, 640, 360, &pgm_fx, None);
-                let flat: Vec<u8> = processed.into_iter().flatten().collect();
+                let flat: Vec<u8> = pixels.into_iter().flatten().collect();
                 self.last_program_rgba = flat.clone();
                 let image = egui::ColorImage::from_rgba_unmultiplied([640, 360], &flat);
                 if let Some(texture) = &mut self.program_texture {
@@ -325,7 +403,7 @@ impl RustMixApp {
                 });
             });
         let available = ui.available_size();
-        let transport_h = 24.0;
+        let transport_h = 28.0;
         let canvas_avail_h = (available.y - transport_h - 4.0).max(40.0);
         let width = available.x.max(16.0).min(canvas_avail_h * 16.0 / 9.0);
         let (letterbox, _) = ui.allocate_exact_size(
@@ -361,11 +439,10 @@ impl RustMixApp {
         if visible > 0.01 && input.online && (!program || self.engine.transition().is_none()) {
             let tint = Color32::WHITE.gamma_multiply(visible);
             if input.kind == InputKind::Countdown {
-                let clock = if self.demo_paused {
-                    self.paused_at
-                } else {
-                    self.now
-                };
+                let clock = self
+                    .engine
+                    .playback(id)
+                    .map_or(0, |clock| clock.position_ms());
                 let remaining = 60 - (clock / 1000) % 60;
                 ui.painter().text(
                     rect.center(),
@@ -413,7 +490,7 @@ impl RustMixApp {
         }
 
         // Modern live transport & timecode bar under Preview/Program monitor
-        egui::Frame::new()
+        let transport = egui::Frame::new()
             .fill(Color32::from_rgb(22, 28, 36))
             .corner_radius(egui::CornerRadius {
                 nw: 0,
@@ -426,8 +503,8 @@ impl RustMixApp {
                 ui.set_min_width((available.x - 12.0).max(40.0));
                 ui.horizontal(|ui| {
                     ui.spacing_mut().item_spacing.x = 4.0;
-                    let is_paused =
-                        self.input_fx.get(&id).is_some_and(|fx| fx.paused) || self.demo_paused;
+                    let is_paused = self.engine.inputs_paused()
+                        || self.engine.playback(id).is_some_and(|clock| clock.paused());
                     let play_btn = vector_icon_button(
                         ui,
                         if is_paused {
@@ -440,11 +517,17 @@ impl RustMixApp {
                         None,
                     )
                     .on_hover_text("Play / Pause source playback");
+                    self.automation.insert(
+                        format!(
+                            "monitor.{}.play",
+                            if program { "program" } else { "preview" }
+                        ),
+                        play_btn.rect,
+                    );
                     if play_btn.clicked() {
-                        let fx = self.input_fx.entry(id).or_default();
-                        fx.paused = !fx.paused;
-                        self.paused_at = self.now;
-                        self.last_demo_frame = None;
+                        let paused = self.engine.playback(id).is_some_and(|clock| clock.paused());
+                        self.actions
+                            .push(Action::Engine(Command::SetInputPaused(id, !paused)));
                     }
                     let restart_btn = vector_icon_button(
                         ui,
@@ -454,14 +537,30 @@ impl RustMixApp {
                         None,
                     )
                     .on_hover_text("Restart playback from 00:00:00");
+                    self.automation.insert(
+                        format!(
+                            "monitor.{}.restart",
+                            if program { "program" } else { "preview" }
+                        ),
+                        restart_btn.rect,
+                    );
                     if restart_btn.clicked() {
-                        self.paused_at = 0;
-                        self.last_demo_frame = None;
+                        self.actions.push(Action::Engine(Command::RestartInput(id)));
                     }
-                    let sec = (self.now / 1000) % 60;
-                    let frm = (self.now / 33) % 30;
-                    let prog_frac = ((self.now % 60_000) as f32 / 60_000.0).clamp(0.0, 1.0);
-                    let bar_w = (ui.available_width() - 140.0).max(36.0);
+                    let position = self
+                        .engine
+                        .playback(id)
+                        .map_or(0, |clock| clock.position_ms());
+                    let minutes = position / 60_000;
+                    let sec = (position / 1000) % 60;
+                    let frm = p
+                        .preferences
+                        .rate
+                        .frame_at(position)
+                        .saturating_sub(p.preferences.rate.frame_at(position / 1000 * 1000));
+                    let prog_frac =
+                        (position as f32 / playback::DEMO_DURATION_MS as f32).clamp(0.0, 1.0);
+                    let bar_w = (ui.available_width() - 100.0).max(12.0);
                     let (bar_rect, _) =
                         ui.allocate_exact_size(egui::vec2(bar_w, 6.0), Sense::hover());
                     ui.painter()
@@ -471,22 +570,44 @@ impl RustMixApp {
                         egui::vec2(bar_rect.width() * prog_frac, bar_rect.height()),
                     );
                     ui.painter().rect_filled(fill_rect, 3.0, color);
+                    self.automation.insert(
+                        format!(
+                            "monitor.{}.progress",
+                            if program { "program" } else { "preview" }
+                        ),
+                        fill_rect,
+                    );
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         ui.label(
-                            RichText::new(format!(
-                                "00:00:{sec:02}:{frm:02} · {}",
-                                input.kind.label()
-                            ))
-                            .size(10.5)
-                            .color(DIM),
+                            RichText::new(format!("00:{minutes:02}:{sec:02}:{frm:02}"))
+                                .size(10.5)
+                                .color(DIM),
                         );
                     });
                 });
             });
+        self.automation.insert(
+            format!(
+                "monitor.{}.transport",
+                if program { "program" } else { "preview" }
+            ),
+            transport.response.rect,
+        );
     }
 
     pub(crate) fn switcher(&mut self, ui: &mut egui::Ui) {
-        ui.set_min_height(ui.available_height());
+        // Allocate the bank once. Child minimum sizes must never feed back into
+        // persisted PanelState and grow the bank on every repaint.
+        let (bounds, _) = ui.allocate_exact_size(ui.available_size(), Sense::hover());
+        self.automation.insert("monitor.bank.bounds".into(), bounds);
+        let mut bounded = ui.new_child(
+            egui::UiBuilder::new()
+                .id_salt("switcher.bounded")
+                .max_rect(bounds)
+                .layout(egui::Layout::top_down(egui::Align::Min)),
+        );
+        bounded.set_clip_rect(bounds.intersect(ui.clip_rect()));
+        let ui = &mut bounded;
         if self.multiview {
             ui.horizontal(|ui| {
                 ui.label(
@@ -685,7 +806,7 @@ impl RustMixApp {
                         }
                     });
 
-                    // Vertical T-Bar fader with modern blue handle
+                    // Horizontal manual transition: left is Preview 0%, right 100%.
                     ui.add_space(2.0);
                     let mut progress = self
                         .engine
@@ -693,9 +814,8 @@ impl RustMixApp {
                         .map_or(if self.tbar_latched { 1.0 } else { 0.0 }, |t| t.progress);
                     let can_tbar = self.engine.project().program != self.engine.project().preview
                         && self.engine.transition().is_none_or(|t| t.manual);
-                    let tbar_h = (ui.available_height() - 6.0).clamp(52.0, 130.0);
                     let (tbar_rect, tbar) = ui.allocate_exact_size(
-                        egui::vec2(center, tbar_h),
+                        egui::vec2(center, 36.0),
                         if can_tbar {
                             Sense::click_and_drag()
                         } else {
@@ -703,8 +823,8 @@ impl RustMixApp {
                         },
                     );
                     let cyl_rect = Rect::from_min_size(
-                        egui::pos2(tbar_rect.left() + 6.0, tbar_rect.top() + 4.0),
-                        egui::vec2(14.0, (tbar_rect.height() - 8.0).max(20.0)),
+                        egui::pos2(tbar_rect.left() + 6.0, tbar_rect.center().y - 4.0),
+                        egui::vec2(tbar_rect.width() - 12.0, 8.0),
                     );
                     ui.painter()
                         .rect_filled(cyl_rect, 4.0, Color32::from_rgb(76, 86, 98));
@@ -714,29 +834,30 @@ impl RustMixApp {
                         Stroke::new(1.0, Color32::from_rgb(38, 44, 52)),
                         egui::StrokeKind::Inside,
                     );
-                    let handle_y = egui::lerp(
-                        (cyl_rect.top() + 3.0)..=(cyl_rect.bottom() - 3.0),
-                        progress.clamp(0.0, 1.0),
-                    );
-                    ui.painter().hline(
-                        (cyl_rect.right() + 1.0)..=(tbar_rect.left() + 68.0),
-                        handle_y,
-                        Stroke::new(2.0, Color32::from_rgb(190, 205, 220)),
-                    );
+                    let handle_x =
+                        egui::lerp(cyl_rect.left()..=cyl_rect.right(), progress.clamp(0.0, 1.0));
+                    for step in 0..=4 {
+                        let x = egui::lerp(cyl_rect.x_range(), step as f32 / 4.0);
+                        ui.painter().vline(
+                            x,
+                            (cyl_rect.bottom() + 3.0)..=(cyl_rect.bottom() + 6.0),
+                            Stroke::new(1.0, DIM),
+                        );
+                    }
                     let knob = Rect::from_center_size(
-                        egui::pos2(cyl_rect.center().x, handle_y),
-                        egui::vec2(20.0, 8.0),
+                        egui::pos2(handle_x, cyl_rect.center().y),
+                        egui::vec2(10.0, 24.0),
                     );
                     ui.painter()
                         .rect_filled(knob, 3.0, Color32::from_rgb(20, 130, 240));
                     self.automation.insert("switcher.tbar".into(), tbar_rect);
                     let tbar =
-                        tbar.on_hover_text("Manual T-Bar · drag vertically to blend PVW → PGM");
+                        tbar.on_hover_text("Manual T-Bar · drag left to right to blend PVW → PGM");
                     if can_tbar
                         && (tbar.is_pointer_button_down_on() || tbar.dragged() || tbar.clicked())
                     {
                         if let Some(pos) = tbar.interact_pointer_pos() {
-                            progress = ((pos.y - cyl_rect.top()) / cyl_rect.height().max(1.0))
+                            progress = ((pos.x - cyl_rect.left()) / cyl_rect.width().max(1.0))
                                 .clamp(0.0, 1.0);
                         }
                         if progress < 1.0 {
@@ -1149,10 +1270,7 @@ impl RustMixApp {
                                                     {
                                                         self.actions.push(Action::Engine(take));
                                                     }
-                                                    let looped = self
-                                                        .input_fx
-                                                        .get(&input.id)
-                                                        .is_none_or(|f| f.loop_playback);
+                                                    let looped = self.engine.playback(input.id).is_none_or(|clock| clock.looping());
                                                     let loop_btn = vector_icon_button(
                                                         ui,
                                                         VectorIcon::Loop,
@@ -1161,12 +1279,9 @@ impl RustMixApp {
                                                         None,
                                                     )
                                                     .on_hover_text("Toggle Loop playback");
+                                                    self.automation.insert(format!("input.{}.loop", input.id.0), loop_btn.rect);
                                                     if loop_btn.clicked() {
-                                                        let fx = self
-                                                            .input_fx
-                                                            .entry(input.id)
-                                                            .or_default();
-                                                        fx.loop_playback = !fx.loop_playback;
+                                                        self.actions.push(Action::Engine(Command::SetInputLoop(input.id, !looped)));
                                                     }
                                                 });
                                                 ui.horizontal(|ui| {
@@ -1630,7 +1745,7 @@ impl RustMixApp {
                 .collapsible(false)
                 .show(ctx, |ui| {
                     ui.heading(RichText::new("RustMix 0.1").color(TEAL));
-                    ui.label("Independent Rust native production switcher.\nModern procedural vector UI and real-time GPU composition pipeline.");
+                    ui.label("Independent Rust native offline switcher.\nCPU reference composition with wgpu display. Synthetic sources and PNG images; audio meters are simulated.");
                     ui.separator();
                     ui.collapsing("Session command log", |ui| {
                         for line in &self.history {
@@ -1710,5 +1825,28 @@ impl RustMixApp {
                     });
                 });
         }
+    }
+}
+
+#[cfg(test)]
+mod processing_tests {
+    use super::*;
+    #[test]
+    fn custom_images_reach_program_size_and_sharpen_changes_edges() {
+        let base = vec![[0, 0, 0, 255]; 16];
+        let image = InputFx {
+            custom_rgba: Some((2, 2, vec![[200, 40, 80, 255]; 4])),
+            ..Default::default()
+        };
+        assert_eq!(
+            process_source_pixels(&base, 4, 4, &image, None),
+            vec![[200, 40, 80, 255]; 16]
+        );
+        let edge = vec![[40, 40, 40, 255], [100, 100, 100, 255], [40, 40, 40, 255]];
+        let fx = InputFx {
+            sharpen: true,
+            ..Default::default()
+        };
+        assert_ne!(process_source_pixels(&edge, 3, 1, &fx, None), edge);
     }
 }

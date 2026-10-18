@@ -733,9 +733,11 @@ mod tests {
             frame(&mut app, &ctx, vec![], [1600.0, 900.0]);
         }
         let rect = app.automation.get("switcher.tbar").unwrap();
-        // The vMix-style T-Bar is vertical: the handle rests at the top and the
-        // transition completes when it is pulled to the bottom.
-        let pos = egui::pos2(rect.center().x, rect.bottom() - 1.0);
+        assert!(
+            rect.width() > rect.height() * 2.0,
+            "T-Bar must be horizontal"
+        );
+        let pos = egui::pos2(rect.right() - 1.0, rect.center().y);
         frame(
             &mut app,
             &ctx,
@@ -775,6 +777,92 @@ mod tests {
         assert!(app.engine.transition().is_none());
         assert_eq!(app.engine.project().program, InputId(2));
         assert_eq!(app.engine.project().preview, InputId(1));
+    }
+
+    #[test]
+    fn monitor_bank_does_not_creep_and_leaves_inputs_visible() {
+        let mut app = RustMixApp::headless();
+        let ctx = egui::Context::default();
+        app.theme(&ctx);
+        for size in [
+            [1600.0, 900.0],
+            [1920.0, 1080.0],
+            [1100.0, 700.0],
+            [1600.0, 900.0],
+        ] {
+            for _ in 0..4 {
+                frame(&mut app, &ctx, vec![], size);
+            }
+            let original = *app.automation.get("monitor.bank.bounds").unwrap();
+            for _ in 0..90 {
+                frame(&mut app, &ctx, vec![], size);
+            }
+            let settled = *app.automation.get("monitor.bank.bounds").unwrap();
+            assert!(
+                (settled.bottom() - original.bottom()).abs() < 1.0,
+                "Monitor bank grew without user input: {original:?} -> {settled:?}"
+            );
+            assert!(
+                size[1] - settled.bottom() >= 230.0,
+                "Input bank was pushed offscreen: {settled:?}"
+            );
+            for name in ["preview", "program"] {
+                let monitor = app.automation.get(&format!("monitor.{name}")).unwrap();
+                let transport = app
+                    .automation
+                    .get(&format!("monitor.{name}.transport"))
+                    .unwrap();
+                assert!(monitor.bottom() <= transport.top());
+                assert!(settled.contains_rect(*transport));
+            }
+        }
+    }
+
+    #[test]
+    fn monitor_transport_controls_pause_restart_and_share_source_state() {
+        let mut app = RustMixApp::headless();
+        let ctx = egui::Context::default();
+        app.theme(&ctx);
+        let size = [1600.0, 900.0];
+        for _ in 0..3 {
+            frame(&mut app, &ctx, vec![], size);
+        }
+        let id = app.engine.project().preview;
+        click(&mut app, &ctx, "monitor.preview.play", size);
+        assert!(app.engine.playback(id).unwrap().paused());
+        let paused = app.engine.playback(id).unwrap().position_ms();
+        app.engine.tick(app.now + 5000);
+        assert_eq!(app.engine.playback(id).unwrap().position_ms(), paused);
+        click(&mut app, &ctx, "monitor.preview.restart", size);
+        assert_eq!(app.engine.playback(id).unwrap().position_ms(), 0);
+        assert!(app.engine.playback(id).unwrap().paused());
+        click(&mut app, &ctx, "monitor.preview.play", size);
+        assert!(!app.engine.playback(id).unwrap().paused());
+    }
+
+    #[test]
+    fn paused_program_pixels_hold_and_unsupported_outputs_cannot_go_live() {
+        let mut app = RustMixApp::headless();
+        let ctx = egui::Context::default();
+        app.now = 1250;
+        app.engine.tick(app.now);
+        let id = app.engine.project().program;
+        app.execute(Command::SetInputPaused(id, true));
+        app.refresh_textures(&ctx);
+        let frozen = app.last_program_rgba.clone();
+        app.now = 5000;
+        app.engine.tick(app.now);
+        app.refresh_textures(&ctx);
+        assert_eq!(app.last_program_rgba, frozen);
+        for action in [
+            Action::ToggleRecordSim,
+            Action::ToggleStreamSim,
+            Action::ToggleExternalSim,
+        ] {
+            app.dispatch(action, &ctx);
+            assert!(app.warning);
+            assert!(!app.rec_active && !app.stream_active && !app.external_active);
+        }
     }
 
     #[test]

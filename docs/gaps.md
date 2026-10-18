@@ -1,5 +1,7 @@
 # Known gaps
 
+UI-009 audit (2026-10-18): the UI-008 GPU/output labels were not evidence of media backends. Composition/effects are CPU reference code, wgpu presents UI textures, recording/stream/external start paths were counter simulations, and real video decode/audio/hardware output remain absent. UI-009 prevents false live output state and repairs existing transport/composition/layout paths. It does not close G01–G05 or establish production readiness.
+
 2026-10-17 · UI-001. No feature is production-ready.
 
 | ID | Priority | Gap / next action |

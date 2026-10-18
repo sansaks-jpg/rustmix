@@ -135,17 +135,49 @@ pub fn program(
     h: u32,
     ms: u64,
 ) -> Result<Vec<[u8; 4]>> {
-    let size = dimensions(w, h)?;
-    let mut out = Vec::with_capacity(size);
     let from = p
         .input(t.map_or(p.program, |t| t.from))
         .ok_or_else(|| invalid("Program source missing"))?;
     let target = t.and_then(|t| p.input(t.to));
+    let from = source(from, w, h, ms)?;
+    let target = target.map(|input| source(input, w, h, ms)).transpose()?;
+    program_from_sources(p, t, black, w, h, &from, target.as_deref())
+}
+
+/// Composite already processed sources, with independent source clocks/effects.
+/// Titles/backgrounds and fade-to-black are applied after source processing.
+pub fn program_from_sources(
+    p: &ProjectState,
+    t: Option<&TransitionState>,
+    black: f32,
+    w: u32,
+    h: u32,
+    from: &[[u8; 4]],
+    target: Option<&[[u8; 4]]>,
+) -> Result<Vec<[u8; 4]>> {
+    let size = dimensions(w, h)?;
+    if from.len() != size
+        || target.is_some_and(|pixels| pixels.len() != size)
+        || (t.is_some() && target.is_none())
+        || !black.is_finite()
+        || !(0.0..=1.0).contains(&black)
+        || t.is_some_and(|t| !t.progress.is_finite() || !(0.0..=1.0).contains(&t.progress))
+    {
+        return Err(invalid("Invalid source surface or compositor state"));
+    }
+    let mut out = Vec::with_capacity(size);
     for y in 0..h {
         for x in 0..w {
-            let mut color = pixel(from, x, y, w, h, ms);
+            let index = (y * w + x) as usize;
+            let mut color = from
+                .get(index)
+                .copied()
+                .ok_or_else(|| invalid("Source surface truncated"))?;
             if let (Some(t), Some(to)) = (t, target) {
-                let b = pixel(to, x, y, w, h, ms);
+                let b = to
+                    .get(index)
+                    .copied()
+                    .ok_or_else(|| invalid("Target surface truncated"))?;
                 color = match t.kind {
                     TransitionKind::Fade => blend(color, b, t.progress),
                     TransitionKind::Wipe => {
@@ -203,5 +235,41 @@ mod tests {
             crate::audio::bus_peaks(&p, 0, 1234),
             crate::audio::bus_peaks(&p, 0, 1234)
         );
+    }
+    #[test]
+    fn processed_sources_keep_their_pixels_and_black_is_applied_last() {
+        let p = ProjectState::demo();
+        let from = [[200, 20, 80, 255]; 4];
+        let to = [[10, 180, 40, 255]; 4];
+        let mut t = TransitionState {
+            from: p.program,
+            to: p.preview,
+            kind: TransitionKind::Fade,
+            start_ms: 0,
+            duration_ms: 1000,
+            progress: 0.5,
+            manual: true,
+        };
+        assert_eq!(
+            program_from_sources(&p, Some(&t), 0.0, 2, 2, &from, Some(&to)).ok(),
+            Some(vec![[105, 100, 60, 255]; 4])
+        );
+        assert_eq!(
+            program_from_sources(&p, Some(&t), 1.0, 2, 2, &from, Some(&to)).ok(),
+            Some(vec![[0, 0, 0, 255]; 4])
+        );
+        t.kind = TransitionKind::Wipe;
+        assert_eq!(
+            program_from_sources(&p, Some(&t), 0.0, 2, 2, &from, Some(&to)).ok(),
+            Some(vec![
+                [10, 180, 40, 255],
+                [200, 20, 80, 255],
+                [10, 180, 40, 255],
+                [200, 20, 80, 255]
+            ])
+        );
+        assert!(program_from_sources(&p, Some(&t), 0.0, 2, 2, &from, None).is_err());
+        assert!(program_from_sources(&p, None, f32::NAN, 2, 2, &from, None).is_err());
+        assert!(program_from_sources(&p, None, 0.0, 3, 2, &from, None).is_err());
     }
 }

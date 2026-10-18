@@ -1,10 +1,11 @@
 #![forbid(unsafe_code)]
 pub mod audio;
 pub mod persistence;
+pub mod playback;
 pub mod render;
 
 use serde::{Deserialize, Serialize};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
@@ -341,6 +342,10 @@ pub enum Command {
     SetPreferences(Preferences),
     SetWorkspace(WorkspaceState),
     RenameProject(String),
+    SetInputPaused(InputId, bool),
+    RestartInput(InputId),
+    SetInputLoop(InputId, bool),
+    SetInputsPaused(bool),
 }
 #[derive(Debug, Clone, Serialize)]
 pub struct CommandDefinition {
@@ -450,6 +455,19 @@ impl Command {
                 true,
                 false,
             ),
+            Self::SetInputPaused(..) => {
+                ("input.pause", "Set source pause", "Inputs", "", true, true)
+            }
+            Self::RestartInput(_) => ("input.restart", "Restart source", "Inputs", "", true, true),
+            Self::SetInputLoop(..) => ("input.loop", "Set source loop", "Inputs", "", true, false),
+            Self::SetInputsPaused(_) => (
+                "inputs.pause",
+                "Pause all sources",
+                "Inputs",
+                "",
+                true,
+                true,
+            ),
         };
         CommandDefinition {
             id,
@@ -475,27 +493,44 @@ pub struct Engine {
     black: f32,
     black_ramp: Option<(u64, f32, f32)>,
     last_ms: u64,
+    playback: HashMap<InputId, playback::PlaybackClock>,
+    inputs_paused: bool,
 }
 impl Default for Engine {
     fn default() -> Self {
+        let project = ProjectState::demo();
+        let playback = project
+            .inputs
+            .iter()
+            .map(|i| (i.id, playback::PlaybackClock::new(0)))
+            .collect();
         Self {
-            project: ProjectState::demo(),
+            project,
             transition: None,
             black: 0.0,
             black_ramp: None,
             last_ms: 0,
+            playback,
+            inputs_paused: false,
         }
     }
 }
 impl Engine {
     pub fn from_project(project: ProjectState) -> Result<Self> {
         project.validate()?;
+        let playback = project
+            .inputs
+            .iter()
+            .map(|i| (i.id, playback::PlaybackClock::new(0)))
+            .collect();
         Ok(Self {
             project,
             transition: None,
             black: 0.0,
             black_ramp: None,
             last_ms: 0,
+            playback,
+            inputs_paused: false,
         })
     }
     pub fn project(&self) -> &ProjectState {
@@ -506,6 +541,12 @@ impl Engine {
     }
     pub fn black_level(&self) -> f32 {
         self.black
+    }
+    pub fn playback(&self, id: InputId) -> Option<&playback::PlaybackClock> {
+        self.playback.get(&id)
+    }
+    pub fn inputs_paused(&self) -> bool {
+        self.inputs_paused
     }
     pub fn enabled(&self, command: &Command) -> Result<()> {
         match command {
@@ -551,6 +592,7 @@ impl Engine {
         let mut transition = self.transition.clone();
         let mut black_ramp = self.black_ramp;
         let mut affected = Vec::new();
+        let transport = command.clone();
         match command {
             Command::SelectPreview(id) => {
                 if next.input(id).is_none() {
@@ -690,13 +732,49 @@ impl Engine {
             Command::RenameProject(name) => {
                 next.name = name;
             }
+            Command::SetInputPaused(id, _)
+            | Command::RestartInput(id)
+            | Command::SetInputLoop(id, _) => {
+                if next.input(id).is_none() {
+                    return Err(invalid("Input not found"));
+                }
+                affected.push(id);
+            }
+            Command::SetInputsPaused(_) => {}
         }
         next.revision = next
             .revision
             .checked_add(1)
             .ok_or_else(|| invalid("State revision limit reached"))?;
         next.validate()?;
+        self.tick_playback(now);
         self.project = next;
+        self.playback
+            .retain(|id, _| self.project.input(*id).is_some());
+        for input in &self.project.inputs {
+            self.playback
+                .entry(input.id)
+                .or_insert_with(|| playback::PlaybackClock::new(now.max(self.last_ms)));
+        }
+        match transport {
+            Command::SetInputPaused(id, paused) => {
+                if let Some(clock) = self.playback.get_mut(&id) {
+                    clock.set_paused(paused);
+                }
+            }
+            Command::RestartInput(id) => {
+                if let Some(clock) = self.playback.get_mut(&id) {
+                    clock.restart();
+                }
+            }
+            Command::SetInputLoop(id, looping) => {
+                if let Some(clock) = self.playback.get_mut(&id) {
+                    clock.set_looping(looping);
+                }
+            }
+            Command::SetInputsPaused(paused) => self.inputs_paused = paused,
+            _ => {}
+        }
         self.transition = transition;
         self.black_ramp = black_ramp;
         Ok(CommandResult {
@@ -707,6 +785,7 @@ impl Engine {
     }
     pub fn tick(&mut self, now: u64) {
         let now = now.max(self.last_ms);
+        self.tick_playback(now);
         self.last_ms = now;
         let mut completed = false;
         if let Some(t) = &mut self.transition
@@ -728,6 +807,11 @@ impl Engine {
             if p >= 1.0 {
                 self.black_ramp = None;
             }
+        }
+    }
+    fn tick_playback(&mut self, now: u64) {
+        for clock in self.playback.values_mut() {
+            clock.advance(now, self.inputs_paused);
         }
     }
 }

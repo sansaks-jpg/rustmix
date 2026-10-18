@@ -31,7 +31,7 @@ pub(crate) const CHIP_BG: Color32 = Color32::from_rgb(32, 39, 49);
 pub(crate) const FORM_LIGHT: Color32 = Color32::from_rgb(24, 30, 39);
 pub(crate) const FORM_TEXT: Color32 = Color32::from_rgb(232, 238, 245);
 
-/// Per-input real-time GPU processing, transform, grading, chroma-key, PIP layer, and custom image buffer.
+/// Per-input CPU reference processing and custom image buffer.
 #[derive(Clone)]
 pub(crate) struct InputFx {
     pub zoom: f32,
@@ -45,8 +45,6 @@ pub(crate) struct InputFx {
     pub chroma_key: bool,
     pub chroma_tolerance: f32,
     pub pip_source: Option<InputId>,
-    pub loop_playback: bool,
-    pub paused: bool,
     pub media_path: Option<String>,
     pub custom_rgba: Option<(u32, u32, Vec<[u8; 4]>)>,
 }
@@ -65,8 +63,6 @@ impl Default for InputFx {
             chroma_key: false,
             chroma_tolerance: 0.28,
             pip_source: None,
-            loop_playback: true,
-            paused: false,
             media_path: None,
             custom_rgba: None,
         }
@@ -594,8 +590,6 @@ pub struct RustMixApp {
     pub(crate) input_filter: String,
     pub(crate) smoke: Option<smoke::Smoke>,
     pub(crate) automation: HashMap<String, egui::Rect>,
-    pub(crate) demo_paused: bool,
-    pub(crate) paused_at: u64,
     pub(crate) category: Option<InputKind>,
     pub(crate) tbar_latched: bool,
     monitor_view_height: Option<f32>,
@@ -665,7 +659,7 @@ impl RustMixApp {
             transition_slots: ["Fade", "Merge", "Wipe", "CubeZoom"],
             monitor_level: 0.78,
             last_demo_frame: None,
-            notice: "Ready · 1080p29.97 GPU production workspace".into(),
+            notice: "Ready · offline synthetic workspace".into(),
             warning: false,
             history: VecDeque::new(),
             path: None,
@@ -791,8 +785,6 @@ impl RustMixApp {
             input_filter: String::new(),
             smoke: None,
             automation: HashMap::new(),
-            demo_paused: false,
-            paused_at: 0,
             category: None,
             tbar_latched: false,
             monitor_view_height: None,
@@ -1192,83 +1184,8 @@ impl RustMixApp {
             Action::MultiCorder => self.multicorder_open = true,
             Action::PlayList => self.playlist_open = true,
             Action::ShortcutsWindow => self.shortcuts_open = true,
-            Action::ToggleRecordSim => {
-                self.rec_active = !self.rec_active;
-                if self.rec_active {
-                    self.rec_started_ms = self.now;
-                    self.rec_frames = 0;
-                    self.rec_bytes = 0;
-                    let rec_dir = std::env::temp_dir().join("rustmix-recordings");
-                    let _ = std::fs::create_dir_all(&rec_dir);
-                    let manifest = rec_dir.join("active-recording-session.json");
-                    let _ = std::fs::write(
-                        &manifest,
-                        format!(
-                            "{{\"target\":{:?},\"bitrate_mbps\":{:?},\"hw_encoder\":{},\"started_ms\":{}}}",
-                            self.rec_filename, self.rec_bitrate, self.rec_hw_encoder, self.now
-                        ),
-                    );
-                    self.say(
-                        format!(
-                            "Recording started · {} ({} Mbps)",
-                            self.rec_filename, self.rec_bitrate
-                        ),
-                        false,
-                    );
-                } else {
-                    self.say(
-                        format!(
-                            "Recording finalized · {} frames ({:.1} MB)",
-                            self.rec_frames,
-                            self.rec_bytes as f64 / 1_048_576.0
-                        ),
-                        false,
-                    );
-                }
-            }
-            Action::ToggleStreamSim => {
-                self.stream_active = !self.stream_active;
-                if self.stream_active {
-                    self.stream_started_ms = self.now;
-                    self.stream_frames = 0;
-                    self.stream_kbps = match self.stream_quality {
-                        1 => 8000,
-                        2 => 3000,
-                        3 => 1500,
-                        _ => 4500,
-                    };
-                    self.say(
-                        format!(
-                            "Live stream active → {} (Channel {} · {} kbps)",
-                            self.stream_url, self.stream_channel, self.stream_kbps
-                        ),
-                        false,
-                    );
-                } else {
-                    self.say(
-                        format!(
-                            "Live stream stopped · {} packets transmitted",
-                            self.stream_frames
-                        ),
-                        false,
-                    );
-                }
-            }
-            Action::ToggleExternalSim => {
-                self.external_active = !self.external_active;
-                if self.external_active {
-                    self.external_started_ms = self.now;
-                    self.say(
-                        format!(
-                            "External Output active · {}x{} GPU feed",
-                            self.engine.project().preferences.width,
-                            self.engine.project().preferences.height
-                        ),
-                        false,
-                    );
-                } else {
-                    self.say("External Output stopped".into(), false);
-                }
+            Action::ToggleRecordSim | Action::ToggleStreamSim | Action::ToggleExternalSim => {
+                self.say("Unavailable: this build has no encoder, network sender or external video backend".into(), true);
             }
             Action::Snapshot => {
                 if self.last_program_rgba.len() == 640 * 360 * 4 {
@@ -1283,7 +1200,7 @@ impl RustMixApp {
                         image::ColorType::Rgba8,
                     ) {
                         Ok(()) => self.say(
-                            format!("Program GPU snapshot saved → {}", file.display()),
+                            format!("Program snapshot saved → {}", file.display()),
                             false,
                         ),
                         Err(e) => self.say(format!("Snapshot failed: {e}"), true),
@@ -1332,9 +1249,7 @@ impl RustMixApp {
                 }
             }
             Action::PauseDemo => {
-                self.demo_paused = !self.demo_paused;
-                self.paused_at = self.now;
-                self.last_demo_frame = None;
+                self.execute(Command::SetInputsPaused(!self.engine.inputs_paused()));
             }
             Action::Last => {
                 if let Some(path) = self.path.clone() {
@@ -1558,7 +1473,7 @@ impl RustMixApp {
                 if ui
                     .add(
                         egui::Button::new(RichText::new("Pause Inputs").strong())
-                            .selected(self.demo_paused)
+                            .selected(self.engine.inputs_paused())
                             .min_size(egui::vec2(84.0, 22.0)),
                     )
                     .on_hover_text("Freeze input motion while keeping switching active")
@@ -1634,7 +1549,9 @@ impl RustMixApp {
             if self.rec_active {
                 rec_btn_w = rec_btn_w.fill(Color32::from_rgb(200, 30, 30));
             }
-            let rec_btn = ui.add(rec_btn_w).on_hover_text("Start / Stop Recording");
+            let rec_btn = ui
+                .add_enabled(false, rec_btn_w)
+                .on_hover_text("Unavailable: no recording encoder backend");
             self.automation.insert("output.record".into(), rec_btn.rect);
             if rec_btn.clicked() {
                 self.actions.push(Action::ToggleRecordSim);
@@ -1686,7 +1603,9 @@ impl RustMixApp {
             if self.external_active {
                 ext_btn_w = ext_btn_w.fill(Color32::from_rgb(200, 30, 30));
             }
-            let ext_btn = ui.add(ext_btn_w).on_hover_text("Toggle External Output");
+            let ext_btn = ui
+                .add_enabled(false, ext_btn_w)
+                .on_hover_text("Unavailable: no external video backend");
             self.automation
                 .insert("output.external".into(), ext_btn.rect);
             if ext_btn.clicked() {
@@ -1718,7 +1637,9 @@ impl RustMixApp {
             if self.stream_active {
                 stm_btn_w = stm_btn_w.fill(Color32::from_rgb(200, 30, 30));
             }
-            let stm_btn = ui.add(stm_btn_w).on_hover_text("Start / Stop Live Stream");
+            let stm_btn = ui
+                .add_enabled(false, stm_btn_w)
+                .on_hover_text("Unavailable: no streaming sender backend");
             self.automation.insert("output.stream".into(), stm_btn.rect);
             if stm_btn.clicked() {
                 self.actions.push(Action::ToggleStreamSim);
@@ -1800,7 +1721,7 @@ impl RustMixApp {
                 }
                 let snap =
                     vector_icon_button(ui, VectorIcon::Camera, egui::vec2(26.0, 24.0), false, None)
-                        .on_hover_text("Save Program GPU snapshot to PNG");
+                        .on_hover_text("Save Program snapshot to PNG");
                 if snap.clicked() {
                     self.actions.push(Action::Snapshot);
                 }
@@ -1887,14 +1808,15 @@ impl RustMixApp {
                 .strong()
                 .color(TEAL),
             );
-            ui.label(RichText::new("GPU RGBA8").strong().color(Color32::WHITE));
-            ui.label(RichText::new("FPS:").strong().color(DIM));
-            ui.label(RichText::new(format!("{:.0}", self.fps.max(30.0))).color(Color32::WHITE));
-            ui.label(RichText::new("Render:").strong().color(DIM));
             ui.label(
-                RichText::new(format!("{:.1} ms", self.generation_ms.max(1.0)))
+                RichText::new("CPU mix · GPU display")
+                    .strong()
                     .color(Color32::WHITE),
             );
+            ui.label(RichText::new("FPS:").strong().color(DIM));
+            ui.label(RichText::new(format!("{:.0}", self.fps)).color(Color32::WHITE));
+            ui.label(RichText::new("Render:").strong().color(DIM));
+            ui.label(RichText::new(format!("{:.1} ms", self.generation_ms)).color(Color32::WHITE));
             if self.rec_active {
                 let s = self.now.saturating_sub(self.rec_started_ms) / 1000;
                 ui.label(
@@ -2019,14 +1941,6 @@ impl RustMixApp {
     }
 
     fn tick_live_outputs(&mut self) {
-        if self.rec_active {
-            self.rec_frames = self.rec_frames.saturating_add(1);
-            let mbps: u64 = self.rec_bitrate.trim().parse::<u64>().unwrap_or(12).max(1);
-            self.rec_bytes = self.rec_bytes.saturating_add(mbps * 125_000 / 30);
-        }
-        if self.stream_active {
-            self.stream_frames = self.stream_frames.saturating_add(1);
-        }
         if self.playlist_running
             && !self.playlist_manual
             && !self.playlist_items.is_empty()
@@ -2094,7 +2008,12 @@ impl RustMixApp {
             self.production_toolbar(ui);
         });
         let viewport_height = ctx.viewport_rect().height();
-        let monitor_height = (viewport_height * 0.47).max(340.0);
+        // Reserve an actual input/mixer working area after the toolbars, even
+        // when restoring an oversized bank from an older version.
+        let content_height = ui.available_height();
+        let monitor_max = (content_height - 240.0).max(260.0);
+        let monitor_min = 300.0_f32.min(monitor_max);
+        let monitor_height = (content_height * 0.55).clamp(monitor_min, monitor_max);
         let monitor_id = egui::Id::new("monitor.bank");
         if let Some(previous) = self.monitor_view_height
             && (previous - viewport_height).abs() > 1.0
@@ -2102,7 +2021,7 @@ impl RustMixApp {
             && let Some(mut state) = egui::containers::panel::PanelState::load(&ctx, monitor_id)
         {
             let height = (state.outer_rect.height() * viewport_height / previous)
-                .clamp(340.0, (viewport_height - 210.0).max(340.0));
+                .clamp(monitor_min, monitor_max);
             state.outer_rect.max.y = state.outer_rect.min.y + height;
             ctx.data_mut(|d| d.insert_persisted(monitor_id, state));
         }
@@ -2110,8 +2029,8 @@ impl RustMixApp {
         egui::Panel::top("monitor.bank")
             .resizable(true)
             .default_size(monitor_height)
-            .min_size(340.0)
-            .max_size((viewport_height - 210.0).max(340.0))
+            .min_size(monitor_min)
+            .max_size(monitor_max)
             .show(ui, |ui| {
                 if dialog_busy {
                     ui.disable();
