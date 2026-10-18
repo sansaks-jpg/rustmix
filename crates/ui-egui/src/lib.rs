@@ -3,6 +3,8 @@ mod dialogs;
 mod inputs;
 mod media;
 mod panels;
+mod profile;
+mod program;
 mod smoke;
 mod workspace;
 
@@ -460,6 +462,13 @@ pub struct RustMixApp {
     pub(crate) textures: HashMap<InputId, egui::TextureHandle>,
     pub(crate) program_texture: Option<egui::TextureHandle>,
     pub(crate) last_program_rgba: Vec<u8>,
+    program_worker: Option<program::ProgramWorker>,
+    program_renderer: program::ProgramRenderer,
+    program_pixels: Option<Arc<Vec<[u8; 4]>>>,
+    video_stats: program::VideoStats,
+    video_timing: Option<(video_clock::FrameTiming, Rate)>,
+    video_produced_ns: u64,
+    profile: Option<profile::Profile>,
     pub(crate) input_fx: HashMap<InputId, InputFx>,
     media_loader: media::MediaLoader,
     image_picker: Option<Receiver<media::PickerDone>>,
@@ -651,6 +660,17 @@ impl RustMixApp {
                 cc.egui_ctx.set_fonts(fonts);
             }
         }
+        app.program_worker = Some(program::ProgramWorker::spawn(
+            program::Snapshot {
+                engine: app.engine.clone(),
+                sources: app.input_fx.clone(),
+            },
+            app.start,
+            Some(cc.egui_ctx.clone()),
+        ));
+        if std::env::args().any(|s| s == "--ui-perf") {
+            app.profile = Some(profile::Profile::default());
+        }
         app
     }
 
@@ -669,6 +689,13 @@ impl RustMixApp {
             textures: HashMap::new(),
             program_texture: None,
             last_program_rgba: Vec::new(),
+            program_worker: None,
+            program_renderer: program::ProgramRenderer::default(),
+            program_pixels: None,
+            video_stats: program::VideoStats::default(),
+            video_timing: None,
+            video_produced_ns: 0,
+            profile: None,
             input_fx,
             media_loader: media::MediaLoader::default(),
             image_picker: None,
@@ -968,10 +995,23 @@ impl RustMixApp {
 
     fn execute(&mut self, c: Command) {
         let _ = self.try_execute(c);
+        self.submit_program();
+    }
+
+    fn submit_program(&self) {
+        if let Some(worker) = &self.program_worker {
+            worker.submit(program::Snapshot {
+                engine: self.engine.clone(),
+                sources: self.input_fx.clone(),
+            });
+        }
     }
 
     fn try_execute(&mut self, c: Command) -> Option<CommandResult> {
         let label = c.definition().label;
+        if self.program_worker.is_some() {
+            self.now = u64::try_from(self.start.elapsed().as_millis()).unwrap_or(u64::MAX);
+        }
         match self.engine.execute(c, self.now) {
             Ok(result) => {
                 self.say(format!("{label} completed"), false);
@@ -1094,40 +1134,42 @@ impl RustMixApp {
                             false,
                         );
                     }
-                    JobDone::Loaded(project, path) => match Engine::from_project(*project) {
-                        Ok(engine) => {
-                            let layout = engine.project().workspace.dock_json.clone();
-                            self.reset_editors();
-                            self.engine = engine;
-                            self.media_loader.reset();
-                            self.input_fx.clear();
-                            self.sync_input_cache();
-                            self.last_demo_frame = None;
-                            self.theme(ctx);
-                            self.path = Some(path);
-                            self.saved_revision = self.engine.project().revision;
-                            self.textures.clear();
-                            if !layout.is_empty() {
-                                match workspace::decode(&layout) {
-                                    Ok(dock) => self.dock = dock,
-                                    Err(_) => {
-                                        self.dock = default_dock(false);
-                                        self.say(
-                                            "Project loaded; invalid layout reset".into(),
-                                            true,
-                                        );
-                                        return;
+                    JobDone::Loaded(project, path) => {
+                        match Engine::from_project_at(*project, self.now) {
+                            Ok(engine) => {
+                                let layout = engine.project().workspace.dock_json.clone();
+                                self.reset_editors();
+                                self.engine = engine;
+                                self.media_loader.reset();
+                                self.input_fx.clear();
+                                self.sync_input_cache();
+                                self.last_demo_frame = None;
+                                self.theme(ctx);
+                                self.path = Some(path);
+                                self.saved_revision = self.engine.project().revision;
+                                self.textures.clear();
+                                if !layout.is_empty() {
+                                    match workspace::decode(&layout) {
+                                        Ok(dock) => self.dock = dock,
+                                        Err(_) => {
+                                            self.dock = default_dock(false);
+                                            self.say(
+                                                "Project loaded; invalid layout reset".into(),
+                                                true,
+                                            );
+                                            return;
+                                        }
                                     }
                                 }
+                                self.last_demo_frame = None;
+                                self.say(
+                                    "Project reopened · transient transitions and FTB reset".into(),
+                                    false,
+                                );
                             }
-                            self.last_demo_frame = None;
-                            self.say(
-                                "Project reopened · transient transitions and FTB reset".into(),
-                                false,
-                            );
+                            Err(e) => self.say(e.to_string(), true),
                         }
-                        Err(e) => self.say(e.to_string(), true),
-                    },
+                    }
                     JobDone::Cancelled => self.say("File operation cancelled".into(), false),
                     JobDone::Failed(e) => self.say(format!("File operation failed: {e}"), true),
                 }
@@ -1845,19 +1887,24 @@ impl RustMixApp {
         ui.horizontal(|ui| {
             ui.spacing_mut().item_spacing.x = 8.0;
             ui.label(
-                RichText::new(format!(
-                    "{}p{}",
-                    p.preferences.height,
-                    p.preferences.rate.label()
-                ))
-                .strong()
-                .color(TEAL),
+                RichText::new(format!("640×360/{}p", p.preferences.rate.label()))
+                    .strong()
+                    .color(TEAL),
             );
             ui.label(
                 RichText::new("CPU mix · GPU display")
                     .strong()
                     .color(Color32::WHITE),
             );
+            if self.program_worker.is_some() {
+                ui.label(
+                    RichText::new(format!(
+                        "PGM {:.1} fps · drop {}",
+                        self.video_stats.fps, self.video_stats.skipped
+                    ))
+                    .color(DIM),
+                );
+            }
             ui.label(RichText::new("UI FPS:").strong().color(DIM));
             ui.label(RichText::new(format!("{:.0}", self.fps)).color(Color32::WHITE));
             ui.label(RichText::new("CPU:").strong().color(DIM));
@@ -2127,6 +2174,9 @@ impl RustMixApp {
             ctx.request_repaint();
         } else {
             ctx.request_repaint_after(Duration::from_millis(33));
+        }
+        if self.profile.is_some() {
+            self.profile_step(&ctx);
         }
     }
 }

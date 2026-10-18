@@ -21,6 +21,29 @@ fn mixer_rail(ui: &mut egui::Ui, height: f32, label: &str) {
 }
 
 /// CPU reference effects applied before bus composition.
+pub(crate) fn colour_image(size: [usize; 2], pixels: &[[u8; 4]]) -> egui::ColorImage {
+    egui::ColorImage::new(
+        size,
+        pixels
+            .iter()
+            .map(|[r, g, b, a]| Color32::from_rgba_unmultiplied(*r, *g, *b, *a))
+            .collect(),
+    )
+}
+
+pub(crate) fn identity_processing(fx: &InputConfig, has_pip: bool) -> bool {
+    (fx.zoom - 1.0).abs() < 0.005
+        && fx.pan_x.abs() < 0.005
+        && fx.pan_y.abs() < 0.005
+        && !fx.mirror
+        && !fx.sharpen
+        && fx.lift.abs() < 0.005
+        && (fx.gain - 1.0).abs() < 0.005
+        && (fx.saturation - 1.0).abs() < 0.005
+        && !fx.chroma_key
+        && !has_pip
+}
+
 pub(crate) fn process_source_pixels(
     base: &[[u8; 4]],
     w: u32,
@@ -78,16 +101,7 @@ pub(crate) fn process_source_pixels(
     } else {
         base
     };
-    let identity = (fx.zoom - 1.0).abs() < 0.005
-        && fx.pan_x.abs() < 0.005
-        && fx.pan_y.abs() < 0.005
-        && !fx.mirror
-        && !fx.sharpen
-        && fx.lift.abs() < 0.005
-        && (fx.gain - 1.0).abs() < 0.005
-        && (fx.saturation - 1.0).abs() < 0.005
-        && !fx.chroma_key
-        && pip_pixels.is_none();
+    let identity = identity_processing(fx, pip_pixels.is_some());
     if identity {
         return src.to_vec();
     }
@@ -244,6 +258,28 @@ pub(crate) fn processed_sources(
 
 impl RustMixApp {
     pub(crate) fn refresh_textures(&mut self, ctx: &egui::Context) {
+        if let Some(worker) = &self.program_worker {
+            worker.submit(program::Snapshot {
+                engine: self.engine.clone(),
+                sources: self.input_fx.clone(),
+            });
+            if let Some(frame) = worker.take() {
+                match frame {
+                    Ok(frame) => {
+                        self.video_stats = frame.stats;
+                        self.video_timing = Some((frame.timing, frame.rate));
+                        self.video_produced_ns = frame.produced_ns;
+                        self.generation_ms = frame.stats.render_ms as f32;
+                        self.upload_program(ctx, frame.pixels);
+                    }
+                    Err(error) => {
+                        self.notice = format!("Program retained last valid frame: {error}");
+                        self.warning = true;
+                    }
+                }
+            }
+        }
+
         // Avoid flooding the software WARP command queue with 8 texture uploads per frame
         // while static dialog screenshots are being read back in CI smoke mode.
         if self.smoke.as_ref().is_some_and(|s| s.is_dialog_stage())
@@ -261,7 +297,12 @@ impl RustMixApp {
                 .engine
                 .playback(input.id)
                 .map_or(0, |clock| clock.position_ms());
-            project.preferences.rate.frame_at(ms).hash(&mut stamp);
+            let frame = if self.program_worker.is_some() {
+                ms.saturating_mul(15) / 1000
+            } else {
+                project.preferences.rate.frame_at(ms)
+            };
+            frame.hash(&mut stamp);
         }
         let black = self.engine.black_level();
         let black_state = if black <= 0.0 {
@@ -274,7 +315,7 @@ impl RustMixApp {
         black_state.hash(&mut stamp);
         let automatic = self.engine.transition().is_some_and(|t| !t.manual) || black_state == 2;
         automatic.hash(&mut stamp);
-        if automatic {
+        if automatic && self.program_worker.is_none() {
             project.preferences.rate.frame_at(self.now).hash(&mut stamp);
         }
         let frame = stamp.finish();
@@ -298,10 +339,7 @@ impl RustMixApp {
         let processed_preview = processed_sources(&p, &raw_sources, &self.input_fx, 384, 216);
         for input in &p.inputs {
             if let Some(processed) = processed_preview.get(&input.id) {
-                let image = egui::ColorImage::from_rgba_unmultiplied(
-                    [384, 216],
-                    &processed.iter().flatten().copied().collect::<Vec<_>>(),
-                );
+                let image = colour_image([384, 216], processed);
                 if let Some(texture) = self.textures.get_mut(&input.id) {
                     texture.set(image, egui::TextureOptions::LINEAR);
                 } else {
@@ -316,75 +354,38 @@ impl RustMixApp {
                 }
             }
         }
-        let mut program_sources = HashMap::new();
-        let from = self.engine.transition().map_or(p.program, |t| t.from);
-        let to = self.engine.transition().map(|t| t.to);
-        let mut ids = vec![from];
-        if let Some(to) = to {
-            ids.push(to);
-        }
-        // Bounded, validated layer dependencies include their own image/effects.
-        let mut cursor = 0;
-        while cursor < ids.len() && ids.len() <= 32 {
-            if let Some(pip) = ids
-                .get(cursor)
-                .and_then(|id| p.input(*id))
-                .and_then(|i| i.config.pip_source)
-                && !ids.contains(&pip)
-            {
-                ids.push(pip);
-            }
-            cursor += 1;
-        }
-        for id in ids {
-            if let Some(input) = p.input(id) {
-                let ms = self
-                    .engine
-                    .playback(id)
-                    .map_or(0, |clock| clock.position_ms());
-                if let Ok(pixels) = render::source(input, 640, 360, ms) {
-                    program_sources.insert(id, pixels);
+        if self.program_worker.is_none() {
+            match self.program_renderer.render(&self.engine, &self.input_fx) {
+                Ok(pixels) => self.upload_program(ctx, pixels),
+                Err(error) => {
+                    self.notice = format!("Program retained last valid frame: {error}");
+                    self.warning = true;
                 }
             }
-        }
-        let processed_sources = processed_sources(&p, &program_sources, &self.input_fx, 640, 360);
-        let composed = processed_sources
-            .get(&from)
-            .ok_or_else(|| Error::Invalid("Program source missing".into()))
-            .and_then(|from_pixels| {
-                render::program_from_sources(
-                    &p,
-                    self.engine.transition(),
-                    self.engine.black_level(),
-                    640,
-                    360,
-                    from_pixels,
-                    to.and_then(|id| processed_sources.get(&id))
-                        .map(Vec::as_slice),
-                )
-            });
-        match composed {
-            Ok(pixels) => {
-                let flat: Vec<u8> = pixels.into_iter().flatten().collect();
-                self.last_program_rgba = flat.clone();
-                let image = egui::ColorImage::from_rgba_unmultiplied([640, 360], &flat);
-                if let Some(texture) = &mut self.program_texture {
-                    texture.set(image, egui::TextureOptions::LINEAR);
-                } else {
-                    self.program_texture = Some(ctx.load_texture(
-                        "program.composite",
-                        image,
-                        egui::TextureOptions::LINEAR,
-                    ));
-                }
-            }
-            Err(e) => {
-                self.notice = format!("Program retained last valid frame: {e}");
-                self.warning = true;
-            }
+            self.generation_ms = start.elapsed().as_secs_f32() * 1000.0;
         }
         self.last_demo_frame = Some(frame);
-        self.generation_ms = start.elapsed().as_secs_f32() * 1000.0;
+    }
+
+    fn upload_program(&mut self, ctx: &egui::Context, pixels: Arc<Vec<[u8; 4]>>) {
+        if self
+            .program_pixels
+            .as_ref()
+            .is_some_and(|old| Arc::ptr_eq(old, &pixels))
+        {
+            return;
+        }
+        self.last_program_rgba.clear();
+        self.last_program_rgba
+            .extend(pixels.iter().flatten().copied());
+        let image = colour_image([640, 360], &pixels);
+        if let Some(texture) = &mut self.program_texture {
+            texture.set(image, egui::TextureOptions::LINEAR);
+        } else {
+            self.program_texture =
+                Some(ctx.load_texture("program.composite", image, egui::TextureOptions::LINEAR));
+        }
+        self.program_pixels = Some(pixels);
     }
 
     fn monitor(&mut self, ui: &mut egui::Ui, program: bool) {
@@ -1888,16 +1889,21 @@ impl RustMixApp {
                             .add_enabled(self.job.is_none(), egui::Button::new("Create new preset"))
                             .clicked()
                         {
-                            self.reset_editors();
-                            self.engine = Engine::default();
-                            self.media_loader.reset();
-                            self.input_fx.clear();
-                            self.dock = default_dock(false);
-                            self.path = None;
-                            self.saved_revision = 0;
-                            self.textures.clear();
-                            self.last_demo_frame = None;
-                            self.confirm_new = false;
+                            match Engine::from_project_at(ProjectState::demo(), self.now) {
+                                Ok(engine) => {
+                                    self.reset_editors();
+                                    self.engine = engine;
+                                    self.media_loader.reset();
+                                    self.input_fx.clear();
+                                    self.dock = default_dock(false);
+                                    self.path = None;
+                                    self.saved_revision = 0;
+                                    self.textures.clear();
+                                    self.last_demo_frame = None;
+                                    self.confirm_new = false;
+                                }
+                                Err(error) => self.say(error.to_string(), true),
+                            }
                         }
                         if ui.button("Cancel").clicked() {
                             self.confirm_new = false;

@@ -106,14 +106,26 @@ fn dimensions(w: u32, h: u32) -> Result<usize> {
         .ok_or_else(|| invalid("Render allocation overflow"))
 }
 pub fn source(input: &InputState, w: u32, h: u32, ms: u64) -> Result<Vec<[u8; 4]>> {
+    let mut out = Vec::new();
+    source_into(input, w, h, ms, &mut out)?;
+    Ok(out)
+}
+pub fn source_into(
+    input: &InputState,
+    w: u32,
+    h: u32,
+    ms: u64,
+    out: &mut Vec<[u8; 4]>,
+) -> Result<()> {
     let size = dimensions(w, h)?;
-    let mut out = Vec::with_capacity(size);
+    out.clear();
+    out.reserve(size);
     for y in 0..h {
         for x in 0..w {
             out.push(pixel(input, x, y, w, h, ms));
         }
     }
-    Ok(out)
+    Ok(())
 }
 pub fn blend(a: [u8; 4], b: [u8; 4], p: f32) -> [u8; 4] {
     let p = if p.is_finite() {
@@ -164,6 +176,9 @@ pub fn program_from_sources(
         || t.is_some_and(|t| !t.progress.is_finite() || !(0.0..=1.0).contains(&t.progress))
     {
         return Err(invalid("Invalid source surface or compositor state"));
+    }
+    if t.is_none() && black == 0.0 && !p.overlays.iter().any(|o| o.enabled) {
+        return Ok(from.to_vec());
     }
     let mut out = Vec::with_capacity(size);
     for y in 0..h {

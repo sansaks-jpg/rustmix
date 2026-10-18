@@ -1316,7 +1316,7 @@ impl RustMixApp {
                                     );
                                     egui::ComboBox::from_id_salt("settings.rate")
                                         .width(210.0)
-                                        .selected_text(format!("NTSC {}p", draft.rate.label()))
+                                        .selected_text(format!("{}p", draft.rate.label()))
                                         .show_ui(ui, |ui| {
                                             for (num, den, lbl) in [
                                                 (24, 1, "24p"),

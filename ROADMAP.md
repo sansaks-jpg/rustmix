@@ -16,3 +16,5 @@
 Later milestones in AGENTS.md are plans, not shipped capabilities.
 
 - M2/UI-010: persisted still-image input lifecycle, staged effects, insertion order, duplication, relink and bounded PNG workers implemented. Hosted acceptance pending. File video/capture and hardware qualification remain open.
+
+- UI-011: bounded independent RGBA Program producer, rational deadlines, cached surfaces, reduced preview updates and process-memory/cadence evidence — implemented, hosted verification pending; 1080p60/hardware broadcast qualification remains open.

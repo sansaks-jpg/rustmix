@@ -190,3 +190,23 @@ fn migrating_save_keeps_the_original_schema_one_backup_bytes() {
         original
     );
 }
+
+#[test]
+fn loaded_project_origins_and_reusable_surfaces_do_not_accumulate_old_time_or_buffers() {
+    let mut engine = Engine::from_project_at(ProjectState::demo(), 50_000).unwrap();
+    engine.tick(50_000);
+    assert_eq!(engine.playback(InputId(1)).unwrap().position_ms(), 0);
+    engine.tick(50_100);
+    assert_eq!(engine.playback(InputId(1)).unwrap().position_ms(), 100);
+    let input = &engine.project().inputs[0];
+    let mut pixels = Vec::new();
+    render::source_into(input, 64, 36, 0, &mut pixels).unwrap();
+    let pointer = pixels.as_ptr();
+    for ms in 0..100 {
+        render::source_into(input, 64, 36, ms, &mut pixels).unwrap();
+        assert_eq!(pixels.as_ptr(), pointer);
+    }
+    let before = pixels.clone();
+    assert!(render::source_into(input, 0, 36, 0, &mut pixels).is_err());
+    assert_eq!(pixels, before);
+}

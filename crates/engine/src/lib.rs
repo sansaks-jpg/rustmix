@@ -5,6 +5,7 @@ pub use input::{ImageFit, InputConfig};
 pub mod persistence;
 pub mod playback;
 pub mod render;
+pub mod video_clock;
 
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
@@ -531,6 +532,7 @@ pub struct CommandResult {
     pub revision: u64,
     pub affected: Vec<InputId>,
 }
+#[derive(Clone)]
 pub struct Engine {
     project: ProjectState,
     transition: Option<TransitionState>,
@@ -561,18 +563,21 @@ impl Default for Engine {
 }
 impl Engine {
     pub fn from_project(project: ProjectState) -> Result<Self> {
+        Self::from_project_at(project, 0)
+    }
+    pub fn from_project_at(project: ProjectState, now: u64) -> Result<Self> {
         project.validate()?;
         let playback = project
             .inputs
             .iter()
-            .map(|i| (i.id, playback::PlaybackClock::new(0)))
+            .map(|i| (i.id, playback::PlaybackClock::new(now)))
             .collect();
         Ok(Self {
             project,
             transition: None,
             black: 0.0,
             black_ramp: None,
-            last_ms: 0,
+            last_ms: now,
             playback,
             inputs_paused: false,
         })

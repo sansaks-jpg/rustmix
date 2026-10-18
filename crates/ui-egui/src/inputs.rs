@@ -66,6 +66,7 @@ impl RustMixApp {
             return false;
         }
         self.input_fx.insert(draft.id, fx);
+        self.submit_program();
         self.close_properties();
         true
     }
@@ -163,6 +164,7 @@ impl RustMixApp {
         }) && let Some(id) = result.affected.first()
         {
             self.input_fx.insert(*id, fx);
+            self.submit_program();
             return true;
         }
         false
@@ -356,6 +358,7 @@ impl RustMixApp {
             fx.image_error = current.image_error.clone();
         }
         self.last_demo_frame = None;
+        self.submit_program();
     }
 
     pub(crate) fn draft_texture(

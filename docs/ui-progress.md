@@ -175,3 +175,9 @@ Implemented pending hosted acceptance: schema 2 source/effect settings with sche
 First hosted run [39090739282](https://github.com/sansaks-jpg/rustmix/actions/runs/39090739282), code `45f4c6b`, passed formatting, repository guard and workspace compilation, then failed Clippy on nested condition/type complexity. Tests/build/native checks were not run. Both findings were corrected without disabling lint gates; a replacement run is required.
 
 Second hosted run [39091168445](https://github.com/sansaks-jpg/rustmix/actions/runs/39091168445), code `ff78447`, passed compilation and Clippy. All 22 engine tests and 26/27 UI tests passed; PNG duplicate/render acceptance found a real mirror-edge defect. Sampling x=0 before mirroring produced nx=1 and a dark column. Pixel-center sampling fixes the boundary, with an independent 3x2 full-edge mirror vector regression. Native/build gates were not reached. Additional source-busy and removal-confirmation guards are included in the next candidate.
+
+## UI-010 accepted / UI-011 pending (2026-10-18)
+
+Input lifecycle accepted in hosted Windows [run 39091600404](https://github.com/sansaks-jpg/rustmix/actions/runs/39091600404), code `c7b78c8`: 53 tests and all four native processes passed, including PNG import/Cancel/Apply/duplicate/save/reopen. Original schema 1 backup bytes are retained. User subsequently requested resource/cadence work and consolidation: `main` now contains all repair commits, PR #1 is merged, and the repair branch is deleted locally/remotely.
+
+UI-011 pending: independent bounded Program producer, exact rational deadlines, static surface reuse, 15 fps thumbnail limit, removal of redundant flatten copies, actual raster/Program FPS/drop reporting, source-load time origins, and hosted process-memory/cadence measurements. These are not yet accepted; no broadcast 1080p60 or low-RAM guarantee is claimed.
