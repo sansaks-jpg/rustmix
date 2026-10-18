@@ -547,6 +547,8 @@ impl RustMixApp {
                     "input-properties"
                 } else if s.stage == 20 {
                     "input-playlist"
+                } else if s.stage == 24 {
+                    "input-keyboard"
                 } else {
                     "input-workflow"
                 };
@@ -761,6 +763,9 @@ impl RustMixApp {
             }
             21 => {
                 self.execute(Command::TakeInput(InputId(9)));
+                // Taking 9 already puts 8 on Preview. Force a distinct initial
+                // selection so the X assertion proves actual shortcut dispatch.
+                self.execute(Command::SelectPreview(InputId(1)));
                 s.events = key(egui::Key::X);
                 s.stage = 22;
             }
@@ -768,6 +773,25 @@ impl RustMixApp {
                 if self.engine.project().preview != InputId(8) {
                     return Err(Error::Invalid(
                         "Native remapped shortcut did not select its input".into(),
+                    ));
+                }
+                self.dispatch(Action::SettingsAt(SettingsPage::Shortcuts), ctx);
+                s.stage = 23;
+            }
+            23 => {
+                self.validate_dialog_geometry(ctx, "dialog.settings")?;
+                ctx.send_viewport_cmd(egui::ViewportCommand::Screenshot(egui::UserData::default()));
+                s.captured = false;
+                s.stage = 24;
+            }
+            24 if s.captured => {
+                self.native_click(s, "dialog.settings.cancel")?;
+                s.stage = 25;
+            }
+            25 => {
+                if self.settings {
+                    return Err(Error::Invalid(
+                        "Native keyboard settings did not close".into(),
                     ));
                 }
                 s.stage = 7;

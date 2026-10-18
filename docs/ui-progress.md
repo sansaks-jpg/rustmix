@@ -230,3 +230,11 @@ New Preset were relying on the removed per-paint snapshot. These paths now submi
 state explicitly, and preset replacement resets editors against the new project. A running-worker
 regression covers all three paths; legacy migration additionally checks a custom old duration.
 No lint/test gate is disabled. Another exact-code hosted run is required.
+
+
+UI-012 third hosted run [39109670436](https://github.com/sansaks-jpg/rustmix/actions/runs/39109670436),
+code `d9f78b2`, passed all compile/lint/test/release/native/reopen/package gates. Artifact screenshot
+review follows. The native proof is being strengthened further: selecting Preview 1 before the
+custom X key ensures its assertion cannot pass merely because taking input 9 already selected
+input 8; native Keyboard Settings also gets its own required capture. These harness-only changes
+require another exact-code run; product behavior and passing assertions are retained.
