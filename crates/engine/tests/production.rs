@@ -254,3 +254,53 @@ fn shortcut_conflicts_reserved_keys_and_missing_targets_are_rejected_atomically(
             .is_err()
     );
 }
+
+#[test]
+fn manual_transition_uses_first_slot_and_pins_effect_for_the_gesture() {
+    let mut engine = Engine::default();
+    engine
+        .execute(
+            Command::SetTransitionSlot(
+                0,
+                TransitionSlot {
+                    kind: TransitionKind::WipeReverse,
+                    duration_ms: 450,
+                },
+            ),
+            0,
+        )
+        .unwrap();
+    engine
+        .execute(Command::SetManualProgress(0.25), 10)
+        .unwrap();
+    let first = engine.transition().unwrap();
+    assert_eq!(first.kind, TransitionKind::WipeReverse);
+    assert_eq!(first.duration_ms, 450);
+    assert_eq!(first.start_ms, 10);
+    engine
+        .execute(
+            Command::SetTransitionSlot(
+                0,
+                TransitionSlot {
+                    kind: TransitionKind::Slide,
+                    duration_ms: 800,
+                },
+            ),
+            20,
+        )
+        .unwrap();
+    engine.execute(Command::SetManualProgress(0.6), 30).unwrap();
+    let held = engine.transition().unwrap();
+    assert_eq!(held.kind, TransitionKind::WipeReverse);
+    assert_eq!(held.duration_ms, 450);
+    assert_eq!(held.start_ms, 10);
+    assert_eq!(held.progress, 0.6);
+    engine.execute(Command::SetManualProgress(0.0), 40).unwrap();
+    assert_eq!(engine.project().program, InputId(1));
+    engine.execute(Command::SetManualProgress(0.2), 50).unwrap();
+    assert_eq!(engine.transition().unwrap().kind, TransitionKind::Slide);
+    assert_eq!(engine.transition().unwrap().duration_ms, 800);
+    engine.execute(Command::SetManualProgress(1.0), 60).unwrap();
+    assert_eq!(engine.project().program, InputId(2));
+    assert!(engine.transition().is_none());
+}

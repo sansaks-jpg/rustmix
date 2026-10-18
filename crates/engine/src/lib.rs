@@ -1078,15 +1078,25 @@ impl Engine {
                     std::mem::swap(&mut next.program, &mut next.preview);
                     transition = None;
                 } else {
-                    transition = Some(TransitionState {
-                        from: next.program,
-                        to: next.preview,
-                        kind: TransitionKind::Fade,
-                        start_ms: now,
-                        duration_ms: next.duration_ms,
-                        progress: p,
-                        manual: true,
-                    });
+                    if let Some(active) = transition.as_mut() {
+                        // A gesture owns its effect and source identities until release.
+                        active.progress = p;
+                    } else {
+                        let slot = next
+                            .transition_slots
+                            .first()
+                            .copied()
+                            .ok_or_else(|| invalid("First transition slot is missing"))?;
+                        transition = Some(TransitionState {
+                            from: next.program,
+                            to: next.preview,
+                            kind: slot.kind,
+                            start_ms: now,
+                            duration_ms: slot.duration_ms,
+                            progress: p,
+                            manual: true,
+                        });
+                    }
                 }
             }
             Command::CancelTransition => {
