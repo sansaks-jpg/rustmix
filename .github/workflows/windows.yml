@@ -34,7 +34,10 @@ jobs:
       - name: Clippy (warnings are errors)
         run: cargo clippy --workspace --all-targets --locked -- -D warnings
       - name: Unit, integration and widget tests
-        run: cargo test --workspace --all-targets --locked
+        shell: pwsh
+        run: |
+          ./scripts/ci-video-fixture.ps1
+          cargo test --workspace --all-targets --locked
       - name: Build release on GitHub only
         run: cargo build --release --workspace --locked
       - name: Native launch, keyboard and fader smoke, GPU screenshots, reopen

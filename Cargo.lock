@@ -2910,7 +2910,9 @@ version = "0.1.0"
 dependencies = [
  "cpal",
  "rtrb",
+ "tempfile",
  "thiserror 2.0.21",
+ "windows",
 ]
 
 [[package]]
@@ -2920,6 +2922,7 @@ dependencies = [
  "eframe",
  "egui_dock",
  "image",
+ "raw-window-handle",
  "rfd",
  "rustmix-engine",
  "rustmix-platform",
