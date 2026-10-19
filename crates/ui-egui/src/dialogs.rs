@@ -164,7 +164,7 @@ fn sidebar_row(
     .inner
 }
 
-const ADD_CATEGORIES: [(&str, InputKind, &str); 20] = [
+const ADD_CATEGORIES: [(&str, InputKind, &str); 21] = [
     (
         "Generators / PNG",
         InputKind::Grid,
@@ -265,7 +265,17 @@ const ADD_CATEGORIES: [(&str, InputKind, &str); 20] = [
         InputKind::Studio,
         "Connect a Zoom meeting participant feed.",
     ),
+    (
+        VIDEO_TAB_LABEL,
+        InputKind::Color,
+        "Select a local MP4 video file (video only, Windows Media Foundation).",
+    ),
 ];
+
+/// Add-dialog category index for the local MP4 video-file source. Appended so
+/// the observed reference categories keep their existing ordinals.
+pub(crate) const VIDEO_TAB: usize = 20;
+const VIDEO_TAB_LABEL: &str = "Video file";
 
 const GENERATOR_SAMPLES: [(&str, InputKind); 7] = [
     ("Motion grid", InputKind::Grid),
@@ -397,7 +407,7 @@ impl RustMixApp {
         if !self.add_open {
             return;
         }
-        if !matches!(self.add_tab, 12 | 13) {
+        if !matches!(self.add_tab, 12 | 13 | VIDEO_TAB) {
             self.prepare_add_preview(ctx);
         }
         let mut open = self.add_open;
@@ -420,10 +430,12 @@ impl RustMixApp {
                     ui.spacing_mut().item_spacing.y = 1.0;
                     for (idx, (label, kind, _)) in ADD_CATEGORIES.into_iter().enumerate() {
                         let active = app.add_tab == idx && app.add_kind == kind;
-                        let supported = matches!(idx, 0 | 1 | 3 | 4 | 6 | 11 | 12 | 13 | 14 | 15);
+                        let supported = matches!(idx, 0 | 1 | 3 | 4 | 6 | 11 | 12 | 13 | 14 | 15 | VIDEO_TAB);
                         let r = ui.add_enabled_ui(supported, |ui| sidebar_row(ui, active, label, 21.0, Some(idx))).inner
                             .on_disabled_hover_text("Unavailable: no media/device backend for this source type");
-                        if matches!(idx, 0 | 1 | 3 | 4 | 6 | 11 | 14 | 15) {
+                        if idx == VIDEO_TAB {
+                            app.automation.insert("dialog.add.video".into(), r.rect);
+                        } else if matches!(idx, 0 | 1 | 3 | 4 | 6 | 11 | 14 | 15) {
                             app.automation.insert(if idx == 1 { "dialog.add.image".into() } else { format!("dialog.add.kind.{kind:?}") }, r.rect);
                         }
                         if matches!(idx, 12 | 13) {
@@ -441,6 +453,10 @@ impl RustMixApp {
                         app.audio_add_page(ui, ctx);
                         return;
                     }
+                    if app.add_tab == VIDEO_TAB {
+                        app.video_add_page(ui, ctx);
+                        return;
+                    }
                     let (_, _, banner_text) = ADD_CATEGORIES.get(app.add_tab).copied().unwrap_or((
                         "Video",
                         InputKind::Grid,
@@ -452,7 +468,7 @@ impl RustMixApp {
                         .show(ui, |ui| {
                             ui.set_min_width((ui.available_width() - 2.0).max(80.0));
                             ui.label(RichText::new(banner_text).color(Color32::WHITE).size(15.0));
-                            ui.label(RichText::new("Synthetic sources / PNG only · video and capture backends unavailable").size(10.5).color(DIM));
+                            ui.label(RichText::new("Synthetic sources / PNG / local video · capture and network backends unavailable").size(10.5).color(DIM));
                         });
                     light_form_frame(ui, 10, |ui| {
                         ui.horizontal(|ui| {
@@ -575,7 +591,7 @@ impl RustMixApp {
                         }
                     });
                 });
-                if !matches!(self.add_tab, 12 | 13) && self.add_name.trim().is_empty() {
+                if !matches!(self.add_tab, 12 | 13 | VIDEO_TAB) && self.add_name.trim().is_empty() {
                     ui.colored_label(PREVIEW, "Enter a non-empty source label.");
                 }
                 ui.with_layout(egui::Layout::right_to_left(Align::Center), |ui| {
@@ -599,7 +615,11 @@ impl RustMixApp {
                     if confirm.clicked() && !self.add_loading {
                         close_requested = if matches!(self.add_tab, 12 | 13) {
                             self.confirm_audio_input(ctx)
-                        } else { self.request_add_input() };
+                        } else if self.add_tab == VIDEO_TAB {
+                            self.confirm_video_input(ctx)
+                        } else {
+                            self.request_add_input()
+                        };
                     }
                     if self.add_loading { ui.label("Loading PNG…"); }
                 });
@@ -610,6 +630,7 @@ impl RustMixApp {
             self.add_loading = false;
             self.add_token = self.add_token.wrapping_add(1);
             self.cancel_audio_add();
+            self.cancel_video_add();
         }
     }
 
@@ -1033,6 +1054,30 @@ impl RustMixApp {
                                 &mut draft.online,
                                 "Source online (off = black)",
                             );
+                            if let Some(VideoSource::File { path }) = &draft.config.video_source {
+                                ui.label("Source type: MP4 video, decoded on its own owner worker. MP4 audio is not decoded.");
+                                ui.label(format!("Path: {path}"));
+                                if let Some(fx) = app.input_fx.get(&id) {
+                                    match (&fx.image_error, fx.custom_rgba.is_some()) {
+                                        (Some(error), _) => {
+                                            ui.colored_label(RED, format!("Decode: {error}"));
+                                        }
+                                        (None, true) => {
+                                            ui.colored_label(
+                                                TEAL,
+                                                "Decode: running; the newest accepted frame is presented",
+                                            );
+                                        }
+                                        (None, false) if fx.image_pending => {
+                                            ui.label("Decode: opening the owner worker…");
+                                        }
+                                        (None, false) => {
+                                            ui.label("Decode: waiting for the first frame");
+                                        }
+                                    }
+                                }
+                                ui.label("Relinking a different file requires removing and re-adding this input in this build.");
+                            }
                             let p = app.engine.project();
                             let tally = if p.program == id {
                                 "ON AIR — PROGRAM"

@@ -16,6 +16,9 @@ mod reference_controls;
 mod reference_smoke;
 mod smoke;
 mod snapshot;
+mod video_controls;
+mod video_player;
+mod video_smoke;
 mod workspace;
 
 use eframe::egui::{self, Color32, Pos2, Rect, RichText, Sense, Stroke, Vec2};
@@ -608,6 +611,11 @@ pub struct RustMixApp {
     pub(crate) program_output: program_output::ProgramOutput,
     pub(crate) extended_output: extended_output::ExtendedOutput,
     pub(crate) audio_ui: audio_controls::AudioUi,
+    /// Local MP4 add-dialog draft; no decoder starts until the descriptor commits.
+    pub(crate) video_ui: video_controls::VideoUi,
+    /// One bounded decoder owner per committed video input.
+    pub(crate) video_players: HashMap<InputId, video_controls::VideoSlot>,
+    video_generation: u64,
     pub(crate) confirm_new: bool,
     pub(crate) confirm_close: bool,
     pub(crate) confirm_open: bool,
@@ -683,6 +691,8 @@ impl RustMixApp {
                     | "--ui-output-smoke-reopen"
                     | "--ui-audio-smoke"
                     | "--ui-audio-smoke-reopen"
+                    | "--ui-video-smoke"
+                    | "--ui-video-smoke-reopen"
             )
         }) {
             app.smoke = Some(smoke::Smoke::default());
@@ -853,6 +863,9 @@ impl RustMixApp {
             program_output: program_output::ProgramOutput::default(),
             extended_output: extended_output::ExtendedOutput::default(),
             audio_ui: audio_controls::AudioUi::default(),
+            video_ui: video_controls::VideoUi::default(),
+            video_players: HashMap::new(),
+            video_generation: 0,
             confirm_new: false,
             confirm_close: false,
             confirm_open: false,
@@ -922,6 +935,7 @@ impl RustMixApp {
 
     fn reset_editors(&mut self) {
         self.stop_audio_for_project_change();
+        self.stop_video_players();
         self.search_open = false;
         self.category = None;
         self.input_filter.clear();
@@ -2197,6 +2211,7 @@ impl RustMixApp {
         self.poll_job(&ctx);
         self.poll_media();
         self.poll_audio(&ctx);
+        self.poll_video(&ctx);
         self.poll_extended_output(&ctx);
         self.shortcuts(&ctx);
         self.refresh_textures(&ctx);
@@ -2358,6 +2373,7 @@ impl eframe::App for RustMixApp {
         // Stop frame production before eframe destroys the native GPU surfaces.
         // Hosted run 39257883015 exposed a pending-submission timeout in wgpu's
         // queue destructor after successful screenshot/save; drain explicitly.
+        self.stop_video_players();
         self.stop_audio_for_project_change();
         self.program_worker = None;
         if let Some(device) = self.gpu_device.take() {

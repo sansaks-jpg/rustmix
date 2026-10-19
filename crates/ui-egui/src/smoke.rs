@@ -21,6 +21,9 @@ pub(crate) struct Smoke {
     last_stage: u32,
     pub(crate) wait: u32,
     pub(crate) captured: bool,
+    /// Scratch text/pixel evidence for opt-in smoke modes with staged values.
+    pub(crate) scratch_text: Option<String>,
+    pub(crate) scratch_pixels: Option<Vec<u8>>,
     bank_baseline: Option<Rect>,
     paused_program: Option<(u64, Vec<u8>, Rect)>,
     transport_target: Option<Rect>,
@@ -64,6 +67,10 @@ impl RustMixApp {
         self.smoke = Some(s);
     }
     fn smoke_run(&mut self, ctx: &egui::Context, s: &mut Smoke) -> Result<()> {
+        if std::env::args().any(|arg| arg == "--ui-video-smoke" || arg == "--ui-video-smoke-reopen")
+        {
+            return self.smoke_video(ctx, s);
+        }
         if std::env::args().any(|arg| arg == "--ui-audio-smoke" || arg == "--ui-audio-smoke-reopen")
         {
             return self.smoke_audio(ctx, s);

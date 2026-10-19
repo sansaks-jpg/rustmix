@@ -4,7 +4,14 @@ use crate::{
     InputKind, InputState, Position, ProjectState, Result, TransitionKind, TransitionState, invalid,
 };
 fn pixel(input: &InputState, x: u32, y: u32, w: u32, h: u32, ms: u64) -> [u8; 4] {
-    if !input.online || input.config.media_path.is_some() || input.config.audio_source.is_some() {
+    if !input.online
+        || input.config.media_path.is_some()
+        || input.config.audio_source.is_some()
+        || input.config.video_source.is_some()
+    {
+        // Still-image, audio-only and video-file inputs are decoded outside this
+        // reference generator; until a valid frame exists they must show black
+        // rather than a plausible-looking procedural picture.
         return [0, 0, 0, 255];
     }
     let u = x as f32 / w.max(1) as f32;
@@ -312,6 +319,49 @@ pub fn program_from_sources(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn external_media_inputs_render_black_in_the_reference_generator() {
+        let demo = ProjectState::demo();
+        let Some(mut input) = demo.input(InputId(1)).cloned() else {
+            return;
+        };
+        input.kind = InputKind::Color;
+        input.online = true;
+        input.config = crate::InputConfig::default();
+        let procedural = source(&input, 2, 2, 0);
+        assert!(
+            procedural
+                .as_ref()
+                .is_ok_and(|pixels| pixels.iter().all(|pixel| pixel.get(3) == Some(&255))),
+            "procedural colour input still renders opaque pixels"
+        );
+        for config in [
+            crate::InputConfig {
+                media_path: Some("still.png".into()),
+                ..crate::InputConfig::default()
+            },
+            crate::InputConfig {
+                audio_source: Some(crate::AudioSource::WavFile {
+                    path: "clip.wav".into(),
+                }),
+                ..crate::InputConfig::default()
+            },
+            crate::InputConfig {
+                video_source: Some(crate::VideoSource::File {
+                    path: "clip.mp4".into(),
+                }),
+                ..crate::InputConfig::default()
+            },
+        ] {
+            input.config = config;
+            assert!(
+                source(&input, 2, 2, 0)
+                    .is_ok_and(|pixels| pixels.iter().all(|pixel| *pixel == [0, 0, 0, 255])),
+                "external media must never fall back to a procedural picture"
+            );
+        }
+    }
+
     #[test]
     fn independent_blend_vectors() {
         assert_eq!(

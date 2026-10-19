@@ -219,6 +219,7 @@ impl ProgramRenderer {
             config: input.config.clone(),
             frame: if !input.online
                 || input.config.media_path.is_some()
+                || input.config.video_source.is_some()
                 || matches!(input.kind, InputKind::Color | InputKind::Graphics)
             {
                 0

@@ -79,6 +79,14 @@ foreach ($file in @('audio-fixture.wav','audio-input.png','audio-io.png','audio-
 $audioSaved = Get-Content -LiteralPath artifacts/audio-workflow-ok.json -Raw
 $audioReopened = Get-Content -LiteralPath artifacts/audio-workflow-reopen-ok.json -Raw
 if ($audioSaved -cne $audioReopened) { throw 'Audio descriptors changed across native save/reopen' }
+Invoke-NativeSmoke @('--ui-video-smoke')
+Invoke-NativeSmoke @('--ui-video-smoke-reopen','artifacts/video.rustmix.json')
+foreach ($file in @('video-source.png','video-source.json','video-program.png','video-program.json','video-resumed.png','video-resumed.json','video-validation.json','video-motion.json','video-workflow-ok.json','video-reopen-ok.json','video.rustmix.json')) {
+    if (-not (Test-Path (Join-Path artifacts $file))) { throw "Missing native video workflow evidence: $file" }
+}
+$videoSaved = Get-Content -LiteralPath artifacts/video-workflow-ok.json -Raw
+$videoReopened = Get-Content -LiteralPath artifacts/video-reopen-ok.json -Raw
+if ($videoSaved -cne $videoReopened) { throw 'Video descriptors changed across native save/reopen' }
 Invoke-NativeSmoke @('--ui-perf')
 $cadence = Get-Content artifacts/program-cadence.json -Raw | ConvertFrom-Json
 if ($cadence.samples.Count -ne 3) { throw 'Missing frame-rate measurement samples' }

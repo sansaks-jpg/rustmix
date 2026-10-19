@@ -51,7 +51,7 @@ pub(crate) fn process_source_pixels(
     fx: &InputFx,
     pip_pixels: Option<&[[u8; 4]]>,
 ) -> Vec<[u8; 4]> {
-    if fx.media_path.is_some() && fx.custom_rgba.is_none() {
+    if (fx.media_path.is_some() || fx.video_source.is_some()) && fx.custom_rgba.is_none() {
         return vec![[0, 0, 0, 255]; (w * h) as usize];
     }
     let resized;
@@ -1207,10 +1207,13 @@ impl RustMixApp {
                                                     );
                                                 }
                                                 if let Some(fx) = self.input_fx.get(&input.id)
-                                                    && fx.media_path.is_some() && fx.custom_rgba.is_none() {
+                                                    && (fx.media_path.is_some() || fx.video_source.is_some()) && fx.custom_rgba.is_none() {
+                                                    let (label, color) = if fx.video_source.is_some() {
+                                                        if fx.image_error.is_some() { ("VIDEO UNAVAILABLE", RED) } else { ("LOADING VIDEO…", self.preview_color()) }
+                                                    } else if fx.image_error.is_some() { ("PNG UNAVAILABLE", RED) } else { ("LOADING PNG…", self.preview_color()) };
                                                     ui.painter().text(response.rect.center(), egui::Align2::CENTER_CENTER,
-                                                        if fx.image_error.is_some() { "PNG UNAVAILABLE" } else { "LOADING PNG…" },
-                                                        egui::FontId::proportional(11.0), self.preview_color());
+                                                        label,
+                                                        egui::FontId::proportional(11.0), color);
                                                     self.automation.insert(format!("input.{}.media-status", input.id.0), response.rect);
                                                 }
                                                 if response.clicked() {
