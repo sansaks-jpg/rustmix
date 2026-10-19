@@ -228,12 +228,12 @@ const ADD_CATEGORIES: [(&str, InputKind, &str); 20] = [
     (
         "Audio",
         InputKind::Bars,
-        "Select an Audio file (.wav / .mp3) to open.",
+        "Select and validate a local WAV audio file.",
     ),
     (
         "Audio Input",
         InputKind::Geometry,
-        "Select a Microphone or ASIO/WASAPI Audio Input.",
+        "Configure a microphone for explicitly started local monitoring.",
     ),
     (
         "Title / XAML",
@@ -397,7 +397,9 @@ impl RustMixApp {
         if !self.add_open {
             return;
         }
-        self.prepare_add_preview(ctx);
+        if !matches!(self.add_tab, 12 | 13) {
+            self.prepare_add_preview(ctx);
+        }
         let mut open = self.add_open;
         let mut close_requested = false;
         let height = (ctx.viewport_rect().height() - 180.0).clamp(200.0, 520.0);
@@ -418,11 +420,14 @@ impl RustMixApp {
                     ui.spacing_mut().item_spacing.y = 1.0;
                     for (idx, (label, kind, _)) in ADD_CATEGORIES.into_iter().enumerate() {
                         let active = app.add_tab == idx && app.add_kind == kind;
-                        let supported = matches!(idx, 0 | 1 | 3 | 4 | 6 | 11 | 14 | 15);
+                        let supported = matches!(idx, 0 | 1 | 3 | 4 | 6 | 11 | 12 | 13 | 14 | 15);
                         let r = ui.add_enabled_ui(supported, |ui| sidebar_row(ui, active, label, 21.0, Some(idx))).inner
                             .on_disabled_hover_text("Unavailable: no media/device backend for this source type");
                         if matches!(idx, 0 | 1 | 3 | 4 | 6 | 11 | 14 | 15) {
                             app.automation.insert(if idx == 1 { "dialog.add.image".into() } else { format!("dialog.add.kind.{kind:?}") }, r.rect);
+                        }
+                        if matches!(idx, 12 | 13) {
+                            app.automation.insert(if idx == 12 { "dialog.add.audio.wav".into() } else { "dialog.add.audio.microphone".into() }, r.rect);
                         }
                         if r.clicked() {
                             app.add_tab = idx;
@@ -432,6 +437,10 @@ impl RustMixApp {
                 },
                 |app, ui| {
                     if app.add_loading { ui.disable(); }
+                    if matches!(app.add_tab, 12 | 13) {
+                        app.audio_add_page(ui, ctx);
+                        return;
+                    }
                     let (_, _, banner_text) = ADD_CATEGORIES.get(app.add_tab).copied().unwrap_or((
                         "Video",
                         InputKind::Grid,
@@ -566,7 +575,7 @@ impl RustMixApp {
                         }
                     });
                 });
-                if self.add_name.trim().is_empty() {
+                if !matches!(self.add_tab, 12 | 13) && self.add_name.trim().is_empty() {
                     ui.colored_label(PREVIEW, "Enter a non-empty source label.");
                 }
                 ui.with_layout(egui::Layout::right_to_left(Align::Center), |ui| {
@@ -588,7 +597,9 @@ impl RustMixApp {
                     self.automation
                         .insert("dialog.add.confirm".into(), confirm.rect);
                     if confirm.clicked() && !self.add_loading {
-                        close_requested = self.request_add_input();
+                        close_requested = if matches!(self.add_tab, 12 | 13) {
+                            self.confirm_audio_input(ctx)
+                        } else { self.request_add_input() };
                     }
                     if self.add_loading { ui.label("Loading PNG…"); }
                 });
@@ -598,6 +609,7 @@ impl RustMixApp {
             self.add_open = false;
             self.add_loading = false;
             self.add_token = self.add_token.wrapping_add(1);
+            self.cancel_audio_add();
         }
     }
 

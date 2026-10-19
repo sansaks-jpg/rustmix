@@ -4,7 +4,7 @@ if ($LASTEXITCODE -ne 0) { throw 'Cargo metadata failed' }
 $allowed = @{
     'rustmix-engine' = @('serde','serde_json','thiserror','tempfile')
     'rustmix-platform' = @('cpal','rtrb','thiserror')
-    'rustmix-ui' = @('rustmix-engine','eframe','egui_dock','serde','serde_json','rfd','image','tempfile')
+    'rustmix-ui' = @('rustmix-engine','rustmix-platform','eframe','egui_dock','serde','serde_json','rfd','image','tempfile')
     'rustmix' = @('rustmix-ui','eframe')
 }
 foreach ($package in $metadata.packages) {

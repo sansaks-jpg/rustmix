@@ -7,6 +7,7 @@ license.workspace = true
 
 [dependencies]
 rustmix-engine = { path = "../engine" }
+rustmix-platform = { path = "../platform" }
 eframe.workspace = true
 egui_dock.workspace = true
 serde.workspace = true

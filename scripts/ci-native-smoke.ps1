@@ -5,6 +5,9 @@ New-Item -ItemType Directory -Path artifacts -Force | Out-Null
 $env:APPDATA = Join-Path $env:RUNNER_TEMP 'rustmix-smoke-appdata'
 New-Item -ItemType Directory -Path $env:APPDATA -Force | Out-Null
 function Invoke-NativeSmoke([string[]]$SmokeArguments) {
+    if (Test-Path -LiteralPath artifacts/gpu-shutdown.txt) {
+        Remove-Item -LiteralPath artifacts/gpu-shutdown.txt
+    }
     $stderrPath = Join-Path artifacts ($SmokeArguments[0].TrimStart('-') + '-stderr.txt')
     $process = Start-Process -FilePath (Resolve-Path 'target/release/rustmix.exe') -ArgumentList $SmokeArguments -PassThru -WindowStyle Hidden -RedirectStandardError $stderrPath
     $samples = [System.Collections.Generic.List[object]]::new()
@@ -33,6 +36,11 @@ function Invoke-NativeSmoke([string[]]$SmokeArguments) {
         samples = $samples
     } | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $measurementPath
     if ($process.ExitCode -ne 0) { throw "Native app exit code $($process.ExitCode)" }
+    if (-not (Test-Path -LiteralPath artifacts/gpu-shutdown.txt) -or
+        (Get-Content -LiteralPath artifacts/gpu-shutdown.txt -Raw) -ne 'GPU submissions drained before native teardown') {
+        throw 'Native GPU shutdown did not confirm drained submissions'
+    }
+    Copy-Item -LiteralPath artifacts/gpu-shutdown.txt -Destination (Join-Path artifacts ($SmokeArguments[0].TrimStart('-') + '-gpu-shutdown.txt'))
     if (Test-Path artifacts/profile-error.txt) { throw (Get-Content artifacts/profile-error.txt -Raw) }
     if (Test-Path artifacts/smoke-error.txt) { throw (Get-Content artifacts/smoke-error.txt -Raw) }
 }

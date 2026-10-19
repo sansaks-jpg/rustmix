@@ -410,7 +410,7 @@ mod tests {
         assert!(app.program_output.is_open());
         let output = parent(&mut app, &ctx, vec![]);
         let viewport = output.viewport_output.get(&viewport_id()).unwrap();
-        assert_eq!(viewport.class, egui::ViewportClass::Deferred);
+        assert!(viewport.class == egui::ViewportClass::Deferred);
         assert_eq!(viewport.parent, egui::ViewportId::ROOT);
         assert_eq!(viewport.builder.fullscreen, Some(false));
         assert_eq!(*app.engine.project(), baseline);

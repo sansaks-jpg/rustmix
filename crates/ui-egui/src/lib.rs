@@ -1,4 +1,6 @@
 #![forbid(unsafe_code)]
+mod audio_controls;
+mod audio_session;
 mod controls;
 mod dialogs;
 mod inputs;
@@ -437,6 +439,7 @@ pub(crate) enum Action {
     InputAudio(InputId),
     RequestRemove(InputId),
     Settings,
+    AudioSettings,
     SettingsAt(SettingsPage),
     OverlaySettings(usize),
     ExternalSettings(u8),
@@ -599,6 +602,7 @@ pub struct RustMixApp {
     pub(crate) multiview_split: bool,
     pub(crate) fullscreen: bool,
     pub(crate) program_output: program_output::ProgramOutput,
+    pub(crate) audio_ui: audio_controls::AudioUi,
     pub(crate) confirm_new: bool,
     pub(crate) confirm_close: bool,
     pub(crate) confirm_open: bool,
@@ -615,11 +619,17 @@ pub struct RustMixApp {
     pub(crate) category: Option<u8>,
     pub(crate) tbar_latched: bool,
     monitor_view_height: Option<f32>,
+    /// Retained only to drain submitted work during explicit application exit.
+    gpu_device: Option<eframe::wgpu::Device>,
 }
 
 impl RustMixApp {
     pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
         let mut app = Self::headless();
+        app.gpu_device = cc
+            .wgpu_render_state
+            .as_ref()
+            .map(|state| state.device.clone());
         if let Some(storage) = cc.storage
             && let Some(json) = storage.get_string("workspace.v2")
         {
@@ -820,6 +830,7 @@ impl RustMixApp {
             multiview_split: true,
             fullscreen: false,
             program_output: program_output::ProgramOutput::default(),
+            audio_ui: audio_controls::AudioUi::default(),
             confirm_new: false,
             confirm_close: false,
             confirm_open: false,
@@ -836,6 +847,7 @@ impl RustMixApp {
             category: None,
             tbar_latched: false,
             monitor_view_height: None,
+            gpu_device: None,
         }
     }
 
@@ -886,6 +898,7 @@ impl RustMixApp {
     }
 
     fn reset_editors(&mut self) {
+        self.stop_audio_for_project_change();
         self.search_open = false;
         self.category = None;
         self.input_filter.clear();
@@ -1336,6 +1349,7 @@ impl RustMixApp {
                 self.settings_name = self.engine.project().name.clone();
                 self.settings_layout = None;
             }
+            Action::AudioSettings => self.audio_ui.open = true,
             Action::SettingsAt(page) => {
                 self.settings = true;
                 self.settings_page = page;
@@ -1619,6 +1633,12 @@ impl RustMixApp {
                         }
                     }
                     ui.separator();
+                    let audio = ui.button("Audio I/O…");
+                    self.automation.insert("toolbar.audioIO".into(), audio.rect);
+                    if audio.clicked() {
+                        self.actions.push(Action::AudioSettings);
+                        ui.close();
+                    }
                     if ui.button("Overlay Settings…").clicked() {
                         self.actions.push(Action::OverlaySettings(0));
                         ui.close();
@@ -2004,6 +2024,17 @@ impl RustMixApp {
             }
             ui.label(RichText::new("UI FPS:").strong().color(DIM));
             ui.label(RichText::new(format!("{:.0}", self.fps)).color(ui.visuals().text_color()));
+            let audio_status = ui.label(
+                RichText::new(format!("Audio {}", self.audio_ui.status_label())).color(
+                    if self.audio_ui.monitoring_active() {
+                        TEAL
+                    } else {
+                        DIM
+                    },
+                ),
+            );
+            self.automation
+                .insert("status.audio".into(), audio_status.rect);
             ui.label(RichText::new("CPU:").strong().color(DIM));
             ui.label(
                 RichText::new(format!("{:.1} ms", self.generation_ms))
@@ -2077,6 +2108,7 @@ impl RustMixApp {
             || self.search_open
             || self.overlay_settings.is_some()
             || self.external_settings.is_some()
+            || self.audio_ui.open
             || self.recording_setup
             || self.streaming_setup
             || self.multicorder_open
@@ -2125,6 +2157,7 @@ impl RustMixApp {
         }
         self.poll_job(&ctx);
         self.poll_media();
+        self.poll_audio(&ctx);
         self.shortcuts(&ctx);
         self.refresh_textures(&ctx);
         let dialog_busy = self.add_open
@@ -2133,6 +2166,7 @@ impl RustMixApp {
             || self.settings
             || self.overlay_settings.is_some()
             || self.external_settings.is_some()
+            || self.audio_ui.open
             || self.recording_setup
             || self.streaming_setup
             || self.multicorder_open
@@ -2279,6 +2313,27 @@ impl TabViewer for Viewer<'_> {
 }
 
 impl eframe::App for RustMixApp {
+    fn on_exit(&mut self) {
+        // No live output continues after the operator has confirmed app exit.
+        // Stop frame production before eframe destroys the native GPU surfaces.
+        // Hosted run 39257883015 exposed a pending-submission timeout in wgpu's
+        // queue destructor after successful screenshot/save; drain explicitly.
+        self.stop_audio_for_project_change();
+        self.program_worker = None;
+        if let Some(device) = self.gpu_device.take() {
+            let result = device.poll(eframe::wgpu::PollType::Wait {
+                submission_index: None,
+                timeout: Some(Duration::from_secs(10)),
+            });
+            if self.smoke.is_some() {
+                let evidence = match result {
+                    Ok(_) => "GPU submissions drained before native teardown".to_owned(),
+                    Err(error) => format!("GPU shutdown drain failed: {error}"),
+                };
+                let _ = std::fs::write("artifacts/gpu-shutdown.txt", evidence);
+            }
+        }
+    }
     fn raw_input_hook(&mut self, _: &egui::Context, raw: &mut egui::RawInput) {
         if raw.viewport_id == egui::ViewportId::ROOT
             && let Some(smoke) = &mut self.smoke

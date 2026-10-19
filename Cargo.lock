@@ -2922,6 +2922,7 @@ dependencies = [
  "image",
  "rfd",
  "rustmix-engine",
+ "rustmix-platform",
  "serde",
  "serde_json",
  "tempfile",

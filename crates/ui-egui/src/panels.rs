@@ -1850,6 +1850,7 @@ impl RustMixApp {
     }
 
     pub(crate) fn dialogs(&mut self, ctx: &egui::Context) {
+        self.audio_io_dialog(ctx);
         self.search_dialog(ctx);
         self.add_input_dialog(ctx);
         self.input_properties_dialog(ctx);
