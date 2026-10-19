@@ -15,7 +15,7 @@ fn riff(format: u16, channels: u16, rate: u32, bits: u16, data: &[u8]) -> Vec<u8
     chunks.extend_from_slice(b"data");
     chunks.extend_from_slice(&(data.len() as u32).to_le_bytes());
     chunks.extend_from_slice(data);
-    if data.len() % 2 != 0 {
+    if !data.len().is_multiple_of(2) {
         chunks.push(0);
     }
     let mut bytes = b"RIFF".to_vec();
