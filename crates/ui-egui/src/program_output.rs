@@ -484,7 +484,7 @@ mod tests {
             .take_capture()
             .expect("deferred Program screenshot must be forwarded");
         assert_eq!(capture.viewport, viewport_id());
-        assert_eq!(capture.image.size(), [4, 3]);
+        assert_eq!(capture.image.size, [4, 3]);
         assert_eq!(capture.image.pixels.first(), image.pixels.first());
         // The capacity-one mailbox keeps a stalled consumer from blocking a
         // native window, and stale duplicates are dropped rather than queued.
