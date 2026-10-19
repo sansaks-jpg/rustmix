@@ -1,5 +1,11 @@
 # RustMix
 
+2026-10-19 full-production continuation: independent Program-window/fullscreen controls and a
+real 48 kHz sample mixer, bounded WAV decoder and Windows audio adapter are being integrated and
+verified through hosted CI. New source candidates do not inherit previous test acceptance. See
+[complete delivery plan](docs/final-delivery-plan.md), [ADR 0015](docs/adr/0015-real-audio-and-independent-program-window.md)
+and [current progress](docs/ui-progress.md). Complete vMix-class feature readiness remains open.
+
 Task 1.3 continuation (2026-10-19): four external-output configuration slots are implemented
 in source, with validated independent routing, a staged editor and schema-6 persistence. These
 are configuration records, not device outputs. External Start remains unavailable. Compilation,

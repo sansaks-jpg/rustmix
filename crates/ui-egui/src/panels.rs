@@ -388,6 +388,9 @@ impl RustMixApp {
                 Some(ctx.load_texture("program.composite", image, egui::TextureOptions::LINEAR));
         }
         self.program_pixels = Some(pixels);
+        if self.program_output.is_open() {
+            ctx.request_repaint_of(program_output::viewport_id());
+        }
     }
 
     fn monitor(&mut self, ui: &mut egui::Ui, program: bool) {

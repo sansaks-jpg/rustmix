@@ -8,6 +8,7 @@ pub struct PlaybackClock {
     last_ms: u64,
     paused: bool,
     looping: bool,
+    restart_generation: u64,
 }
 
 impl PlaybackClock {
@@ -17,6 +18,7 @@ impl PlaybackClock {
             last_ms: now,
             paused: false,
             looping: true,
+            restart_generation: 0,
         }
     }
 
@@ -28,6 +30,14 @@ impl PlaybackClock {
     }
     pub fn looping(&self) -> bool {
         self.looping
+    }
+    /// Explicit operator pause, independent of the procedural 60-second endpoint.
+    pub fn manually_paused(&self) -> bool {
+        self.paused
+    }
+    /// Changes only for an explicit restart, never for a natural loop wrap.
+    pub fn restart_generation(&self) -> u64 {
+        self.restart_generation
     }
 
     pub(crate) fn advance(&mut self, now: u64, pause_all: bool) {
@@ -45,12 +55,13 @@ impl PlaybackClock {
 
     pub(crate) fn set_paused(&mut self, paused: bool) {
         if !paused && self.position_ms == DEMO_DURATION_MS {
-            self.position_ms = 0;
+            self.restart();
         }
         self.paused = paused;
     }
     pub(crate) fn restart(&mut self) {
         self.position_ms = 0;
+        self.restart_generation = self.restart_generation.saturating_add(1);
     }
     pub(crate) fn set_looping(&mut self, looping: bool) {
         self.looping = looping;
@@ -93,5 +104,20 @@ mod tests {
         clock.set_looping(true);
         clock.advance(u64::MAX, false);
         assert!(clock.position_ms() < DEMO_DURATION_MS);
+    }
+
+    #[test]
+    fn restart_identity_is_independent_of_procedural_wraps() {
+        let mut clock = PlaybackClock::new(0);
+        clock.advance(DEMO_DURATION_MS + 10, false);
+        assert_eq!(clock.restart_generation(), 0);
+        clock.restart();
+        assert_eq!(clock.restart_generation(), 1);
+        clock.set_looping(false);
+        clock.advance(DEMO_DURATION_MS * 3, false);
+        assert!(clock.paused());
+        assert!(!clock.manually_paused());
+        clock.set_paused(false);
+        assert_eq!(clock.restart_generation(), 2);
     }
 }

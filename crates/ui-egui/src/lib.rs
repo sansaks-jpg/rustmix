@@ -3,9 +3,11 @@ mod controls;
 mod dialogs;
 mod inputs;
 mod media;
+mod output_smoke;
 mod panels;
 mod profile;
 mod program;
+mod program_output;
 mod reference_controls;
 mod reference_smoke;
 mod smoke;
@@ -453,6 +455,9 @@ pub(crate) enum Action {
     BasicMode,
     Multiview,
     Fullscreen,
+    ProgramOutputOpen,
+    ProgramOutputClose,
+    ProgramOutputFullscreen,
     Close,
     Recover,
     ConfirmOpen,
@@ -593,6 +598,7 @@ pub struct RustMixApp {
     pub(crate) multiview: bool,
     pub(crate) multiview_split: bool,
     pub(crate) fullscreen: bool,
+    pub(crate) program_output: program_output::ProgramOutput,
     pub(crate) confirm_new: bool,
     pub(crate) confirm_close: bool,
     pub(crate) confirm_open: bool,
@@ -626,6 +632,8 @@ impl RustMixApp {
         }
         if let Some(storage) = cc.storage {
             app.basic_mode = storage.get_string("basic-mode.v1").as_deref() == Some("true");
+            app.program_output
+                .restore_preferences(storage.get_string("program-output.v1").as_deref());
         }
         if let Some(path) = std::env::args()
             .skip(1)
@@ -642,6 +650,8 @@ impl RustMixApp {
                     | "--ui-input-smoke-reopen"
                     | "--ui-reference-smoke"
                     | "--ui-reference-smoke-reopen"
+                    | "--ui-output-smoke"
+                    | "--ui-output-smoke-reopen"
             )
         }) {
             app.smoke = Some(smoke::Smoke::default());
@@ -809,6 +819,7 @@ impl RustMixApp {
             multiview: false,
             multiview_split: true,
             fullscreen: false,
+            program_output: program_output::ProgramOutput::default(),
             confirm_new: false,
             confirm_close: false,
             confirm_open: false,
@@ -1392,6 +1403,16 @@ impl RustMixApp {
                 self.fullscreen = !self.fullscreen;
                 ctx.send_viewport_cmd(egui::ViewportCommand::Fullscreen(self.fullscreen));
             }
+            Action::ProgramOutputOpen => {
+                if ctx.embed_viewports() {
+                    self.say("Program window unavailable: this backend does not support separate native windows".into(), true);
+                } else {
+                    self.program_output.open(ctx);
+                    self.say("Program window opened. Drag it to the target monitor, then press F11; Escape closes only that output".into(), false);
+                }
+            }
+            Action::ProgramOutputClose => self.program_output.close(ctx),
+            Action::ProgramOutputFullscreen => self.program_output.toggle_fullscreen(ctx),
             Action::Close => self.confirm_close = true,
             Action::Recover => {
                 self.pending_open = Some(Self::recovery_path());
@@ -1559,16 +1580,17 @@ impl RustMixApp {
                         .min_size(egui::vec2(78.0, 22.0)),
                     )
                     .on_hover_text(
-                        "Expand the application window; independent Program output is unavailable",
+                        "Expand the application window; use the adjacent menu for a separate Program window",
                     );
                 self.automation
                     .insert("toolbar.fullscreen".into(), fullscreen.rect);
                 if fullscreen.clicked() {
                     self.actions.push(Action::Fullscreen);
                 }
-                caret_menu_button(ui, 22.0, |ui| {
-                    ui.label("Independent fullscreen routing is unavailable.");
+                let menu = caret_menu_button(ui, 22.0, |ui| {
+                    self.program_output_menu(ui);
                 });
+                self.automation.insert("output.program.menu".into(), menu.response.rect);
             }
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 ui.spacing_mut().item_spacing.x = 3.0;
@@ -2195,6 +2217,7 @@ impl RustMixApp {
         for action in std::mem::take(&mut self.actions) {
             self.dispatch(action, &ctx);
         }
+        self.program_output.show(&ctx, self.program_texture.clone());
         // Scripted hosted runs stay deterministic: the periodic recovery
         // checkpoint would otherwise race the harness's explicit saves for the
         // single file-job slot and add disk writes to the perf cadence.
@@ -2257,7 +2280,9 @@ impl TabViewer for Viewer<'_> {
 
 impl eframe::App for RustMixApp {
     fn raw_input_hook(&mut self, _: &egui::Context, raw: &mut egui::RawInput) {
-        if let Some(smoke) = &mut self.smoke {
+        if raw.viewport_id == egui::ViewportId::ROOT
+            && let Some(smoke) = &mut self.smoke
+        {
             raw.events.append(&mut smoke.events);
         }
     }
@@ -2277,6 +2302,7 @@ impl eframe::App for RustMixApp {
     }
     fn save(&mut self, storage: &mut dyn eframe::Storage) {
         storage.set_string("basic-mode.v1", self.basic_mode.to_string());
+        storage.set_string("program-output.v1", self.program_output.preferences_json());
         if let Ok(json) = serde_json::to_string(self.audio_restore.as_ref().unwrap_or(&self.dock)) {
             storage.set_string("workspace.v2", json);
         }

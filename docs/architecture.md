@@ -1,5 +1,12 @@
 # Workspace architecture
 
+2026-10-19 continuation: schema 7 adds typed audio-only WAV/microphone descriptors. Portable
+`engine::audio_engine` renders actual fixed 48 kHz stereo blocks with Master/A/B and guest returns;
+`engine::wav` validates PCM16/float32 RIFF data. `rustmix-platform` encapsulates Windows WASAPI
+streams and bounded PCM rings. The new `ui-egui::program_output` presents the validated Program
+texture in a separate native viewport. These candidates need their own hosted runtime acceptance;
+none establishes a complete recording/streaming backend, AV synchronization or device qualification.
+
 Task 1.3 continuation (2026-10-19): `engine::output` owns four bounded external-output
 configuration records and stable input references. Source and configuration commit through one
 validated engine command/revision. Schema 6 adds the bank; schemas 1–5 receive defaults through

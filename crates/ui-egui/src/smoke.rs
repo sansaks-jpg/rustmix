@@ -65,6 +65,11 @@ impl RustMixApp {
     }
     fn smoke_run(&mut self, ctx: &egui::Context, s: &mut Smoke) -> Result<()> {
         if std::env::args()
+            .any(|arg| arg == "--ui-output-smoke" || arg == "--ui-output-smoke-reopen")
+        {
+            return self.smoke_program_output(ctx, s);
+        }
+        if std::env::args()
             .any(|arg| arg == "--ui-reference-smoke" || arg == "--ui-reference-smoke-reopen")
         {
             return self.smoke_reference(ctx, s);

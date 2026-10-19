@@ -1,5 +1,24 @@
 # rustmix-ui
 
+Separate Program monitor candidate: the arrow beside the application's Fullscreen
+button now opens a real native Program window. Open it windowed, drag its title bar
+to the extended monitor, then select Fullscreen Program output or press F11 in that
+window. Escape and its native Close button close only the Program window. The main
+application's fullscreen state and Program/Preview selections stay independent.
+The window presents the same last validated 640×360 Program texture, including
+transitions, overlays and FTB, fitted to 16:9 over black. It emits no audio and is
+not an external-device, encoder or network output. A bounded window size preference
+is stored outside project JSON; startup never automatically opens an output.
+
+Prepared regressions exercise real menu widgets and deferred viewport callbacks,
+Program texture identity, transitions/FTB, child F11/Escape, unsupported embedding,
+and preference validation. Hosted `--ui-output-smoke` / `--ui-output-smoke-reopen`
+add native child fullscreen/windowed state, GPU screenshot samples against Program,
+FTB-black capture, Preview isolation, close/reopen and project save/reopen checks.
+Local formatting/source checks only; compilation, tests and native screenshot
+review remain pending hosted Windows acceptance. Physical multi-monitor hotplug,
+color management, display latency and endurance are not qualified.
+
 Task 1.3 candidate: the External gear opens four independently staged output
 configurations. Apply selected output dispatches the atomic
 `output.external.apply` engine command and keeps the other drafts; Cancel closes
