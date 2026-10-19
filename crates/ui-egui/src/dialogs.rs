@@ -743,7 +743,13 @@ impl RustMixApp {
                     if app.properties_loading { ui.colored_label(PREVIEW, "Loading PNG… current source stays active"); }
                     if let Some(fx) = &app.properties_fx {
                         if let Some(error) = &fx.image_error { ui.colored_label(RED, error); }
-                        if let Some([w, h]) = fx.image_size { ui.label(format!("PNG source: {w} × {h} · CPU preview / Program")); }
+                        if let Some([w, h]) = fx.image_size {
+                            if fx.video_source.is_some() {
+                                ui.label(format!("Local MP4 video: {w} × {h} · owner decoder / CPU preview / Program"));
+                            } else {
+                                ui.label(format!("PNG source: {w} × {h} · CPU preview / Program"));
+                            }
+                        }
                     }
                     ui.add_space(4.0);
                     light_form_frame(ui, 8, |ui| match app.input_page {

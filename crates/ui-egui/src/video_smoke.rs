@@ -24,7 +24,14 @@ impl RustMixApp {
         }
         let reopen = std::env::args().any(|arg| arg == "--ui-video-smoke-reopen");
         for event in ctx.input(|input| input.events.clone()) {
-            if let egui::Event::Screenshot { image, .. } = event {
+            // Only this window's own readback may advance a stage. A Program
+            // output viewport or a delayed foreign capture must not turn a
+            // passing workflow into an "unexpected screenshot" failure.
+            if let egui::Event::Screenshot {
+                viewport_id, image, ..
+            } = event
+                && viewport_id == egui::ViewportId::ROOT
+            {
                 let name = match s.stage {
                     8 => "video-source",
                     12 => "video-program",
@@ -114,7 +121,14 @@ impl RustMixApp {
                 let format = self.video_probe_format().ok_or_else(|| {
                     Error::Invalid("Native MP4 probe produced no metadata".into())
                 })?;
-                if format != (160, 90, 30, 1) {
+                // The platform acceptance checks the ratio, because Media
+                // Foundation may report an unreduced 60/2 for the same 30 fps
+                // stream; only the raster is exact.
+                if format.0 != 160
+                    || format.1 != 90
+                    || format.3 == 0
+                    || u64::from(format.2) != 30 * u64::from(format.3)
+                {
                     return Err(Error::Invalid(format!(
                         "Native MP4 probe reported unexpected format {format:?}"
                     )));
@@ -247,8 +261,13 @@ impl RustMixApp {
                 }
             }
             18 => {
-                if !Path::new("artifacts/video.rustmix.json").exists() {
-                    return Err(Error::Invalid("Native video workflow save missing".into()));
+                if !Path::new("artifacts/video.rustmix.json").exists()
+                    || self.saved_revision != self.engine.project().revision
+                {
+                    return Err(Error::Invalid(format!(
+                        "Native video workflow save did not acknowledge the current revision: {}",
+                        self.notice
+                    )));
                 }
                 assert_video_project(self.engine.project())?;
                 std::fs::write(
@@ -305,7 +324,9 @@ fn save_png(name: &str, image: &egui::ColorImage) -> Result<()> {
         format!("artifacts/{name}.json"),
         serde_json::to_vec_pretty(&serde_json::json!({
             "width": image.width(), "height": image.height(),
-            "decoded_video_pixels": true,
+            "screenshot": name,
+            "viewport": "operator-root",
+            "note": "Operator-window capture; decoded-video pixel claims are in video-validation.json and video-motion.json",
         }))?,
     )?;
     Ok(())

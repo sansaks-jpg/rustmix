@@ -9,6 +9,7 @@ use rustmix_engine::video_source::{VideoFeedError, VideoSourceHealth};
 use std::sync::mpsc::TryRecvError;
 
 /// Bounded local-file size for the descriptor; the decoder itself streams.
+#[cfg_attr(not(windows), allow(dead_code))]
 const MAX_MP4_BYTES: u64 = 4 * 1024 * 1024 * 1024;
 
 #[derive(Clone)]
@@ -219,6 +220,7 @@ impl RustMixApp {
                         fx.image_size = Some([metadata.width, metadata.height]);
                         fx.image_error = health;
                         fx.image_pending = false;
+                        fx.image_generation = fx.image_generation.wrapping_add(1);
                         changed = true;
                     } else {
                         let starting = !slot.player.is_finished();
@@ -319,6 +321,10 @@ impl RustMixApp {
         self.video_ui.path.clear();
         self.video_ui.probe = None;
         self.video_ui.add_error = None;
+        // Dropping the receiver retires a late probe result; the token is
+        // advanced as well so a reopened dialog never accepts old metadata.
+        self.video_ui.job = None;
+        self.video_ui.job_token = self.video_ui.job_token.wrapping_add(1);
     }
 
     /// Bounded probe accessors used by the opt-in native acceptance harness.
@@ -672,6 +678,74 @@ mod tests {
         assert_eq!(fx.image_error.as_deref(), Some("decoder lost"));
     }
 
+    #[test]
+    fn relinking_a_video_descriptor_clears_the_previous_decoded_frame() {
+        let mut app = RustMixApp::headless();
+        let ctx = egui::Context::default();
+        app.theme(&ctx);
+        app.engine
+            .execute(
+                Command::AddInputAt {
+                    name: "Clip".into(),
+                    kind: InputKind::Color,
+                    config: InputConfig {
+                        video_source: Some(VideoSource::File {
+                            path: r"C:\media\old.mp4".into(),
+                        }),
+                        ..InputConfig::default()
+                    },
+                    index: 7,
+                },
+                0,
+            )
+            .unwrap();
+        app.sync_input_cache();
+        let id = InputId(8);
+        let fx = app.input_fx.get_mut(&id).expect("video cache entry");
+        fx.custom_rgba = Some((2, 2, Arc::new(vec![[255, 0, 0, 255]; 4])));
+        fx.image_size = Some([2, 2]);
+        let mut relinked = app.engine.project().input(id).cloned().unwrap();
+        relinked.config.video_source = Some(VideoSource::File {
+            path: r"C:\media\new.mp4".into(),
+        });
+        app.engine
+            .execute(
+                Command::ApplyInput {
+                    input: relinked,
+                    audio: None,
+                },
+                0,
+            )
+            .unwrap();
+        app.sync_input_cache();
+        let fx = app.input_fx.get(&id).unwrap();
+        assert!(
+            fx.custom_rgba.is_none() && fx.image_size.is_none(),
+            "a relinked file must never show the previous file's last frame"
+        );
+    }
+
+    #[test]
+    fn cancel_retires_a_pending_probe_so_a_late_result_cannot_reappear() {
+        let mut app = RustMixApp::headless();
+        let ctx = egui::Context::default();
+        app.theme(&ctx);
+        let (sender, receiver) = mpsc::sync_channel::<ProbeResult>(1);
+        app.video_ui.job = Some(receiver);
+        app.video_ui.job_token = 9;
+        app.video_ui.path = r"C:\media\clip.mp4".into();
+        app.cancel_video_add();
+        assert!(app.video_ui.job.is_none() && app.video_ui.job_token != 9);
+        // The worker's bounded send now fails and cannot resurrect the draft.
+        sender
+            .try_send(ProbeResult {
+                token: 9,
+                result: Ok(Some(probe(r"C:\media\late.mp4"))),
+            })
+            .unwrap_err();
+        app.poll_video_probe();
+        assert!(app.video_ui.path.is_empty() && app.video_ui.probe.is_none());
+    }
     #[test]
     fn video_add_page_is_reachable_and_cancel_discards_the_draft() {
         let mut app = RustMixApp::headless();

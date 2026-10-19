@@ -18,6 +18,13 @@ impl RustMixApp {
                     .find(|f| f.media_path == input.config.media_path && f.media_path.is_some())
                     .cloned()
                     .unwrap_or_default();
+            } else if fx.config.video_source != input.config.video_source {
+                // A video descriptor is not an image path: without this reset a
+                // relinked file could keep showing the previous file's last
+                // decoded frame until the new owner worker publishes pixels.
+                let generation = fx.image_generation.wrapping_add(1);
+                *fx = InputFx::default();
+                fx.image_generation = generation;
             }
             fx.config = input.config.clone();
         }

@@ -62,6 +62,10 @@ pub(crate) struct InputFx {
     pub image_size: Option<[u32; 2]>,
     pub image_error: Option<String>,
     pub image_pending: bool,
+    /// Monotonic id for the current raster. Program surface caching must use
+    /// this instead of an `Arc` address: dynamic video replaces the buffer every
+    /// frame and an address can be reused by a newer allocation.
+    pub image_generation: u64,
 }
 impl std::ops::Deref for InputFx {
     type Target = InputConfig;
@@ -81,6 +85,7 @@ impl InputFx {
         self.image_size = Some(image.original_size);
         self.image_error = None;
         self.image_pending = false;
+        self.image_generation = self.image_generation.wrapping_add(1);
     }
 }
 

@@ -163,7 +163,7 @@ struct SourceKey {
     online: bool,
     config: InputConfig,
     frame: u64,
-    image: Option<(u32, u32, usize)>,
+    image: Option<(u32, u32, u64)>,
     pip_generation: u64,
 }
 struct Surface {
@@ -229,7 +229,7 @@ impl ProgramRenderer {
             image: fx
                 .custom_rgba
                 .as_ref()
-                .map(|(w, h, p)| (*w, *h, Arc::as_ptr(p) as usize)),
+                .map(|(w, h, _)| (*w, *h, fx.image_generation)),
             pip_generation: pip.as_ref().map_or(0, |(_, generation)| *generation),
         };
         if let Some(surface) = self.surfaces.get(&id)
@@ -430,6 +430,32 @@ mod tests {
         }
         assert_eq!(renderer.surfaces.len(), 1);
         assert_eq!(renderer.cached_bytes(), 640 * 360 * 4);
+    }
+    #[test]
+    fn a_new_decoded_raster_generation_invalidates_the_cached_surface() {
+        let mut engine = Engine::default();
+        engine.execute(Command::TakeInput(InputId(6)), 0).unwrap();
+        let mut input = engine.project().input(InputId(6)).cloned().unwrap();
+        input.config.image_fit = ImageFit::Stretch;
+        engine
+            .execute(Command::ApplyInput { input, audio: None }, 0)
+            .unwrap();
+        let mut renderer = ProgramRenderer::default();
+        let mut sources = HashMap::new();
+        let mut fx = InputFx::default();
+        fx.custom_rgba = Some((2, 2, Arc::new(vec![[255, 0, 0, 255]; 4])));
+        fx.image_generation = 1;
+        sources.insert(InputId(6), fx.clone());
+        let first = renderer.render(&engine, &sources).unwrap();
+        assert_eq!(first.first(), Some(&[255, 0, 0, 255]));
+        // Dynamic video reuses the cache only while the raster generation is
+        // unchanged, never because an Arc address happens to be reused.
+        fx.custom_rgba = Some((2, 2, Arc::new(vec![[0, 255, 0, 255]; 4])));
+        fx.image_generation = 2;
+        sources.insert(InputId(6), fx);
+        let second = renderer.render(&engine, &sources).unwrap();
+        assert!(!Arc::ptr_eq(&first, &second));
+        assert_eq!(second.first(), Some(&[0, 255, 0, 255]));
     }
     #[test]
     fn producer_continues_without_a_ui_consumer_and_shuts_down() {

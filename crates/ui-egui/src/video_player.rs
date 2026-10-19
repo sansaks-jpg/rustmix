@@ -21,6 +21,9 @@ use std::time::Instant;
 #[cfg(any(windows, test))]
 use std::{thread, time::Duration};
 
+/// Bounded number of decoder owner threads, including abandoned ones that have
+/// not finished yet. Only a Windows build can start an owner.
+#[cfg_attr(not(windows), allow(dead_code))]
 pub const MAX_VIDEO_PLAYERS: usize = 8;
 #[cfg(windows)]
 static LIVE_WORKERS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
