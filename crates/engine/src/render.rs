@@ -1,7 +1,8 @@
 //! Bounded deterministic SDR, full-range RGBA8 demo renderer.
 //! Blending is in display-referred sRGB for this UI prototype, not a broadcast color pipeline.
 use crate::{
-    InputKind, InputState, Position, ProjectState, Result, TransitionKind, TransitionState, invalid,
+    InputKind, InputState, ProjectState, Result, TransitionKind, TransitionState, invalid,
+    overlay_text,
 };
 fn pixel(input: &InputState, x: u32, y: u32, w: u32, h: u32, ms: u64) -> [u8; 4] {
     if !input.online
@@ -295,13 +296,12 @@ pub fn program_from_sources(
                 if o.enabled {
                     let u = x as f32 / w as f32;
                     let v = y as f32 / h as f32;
-                    let offset = i as f32 * 0.105;
-                    let (left, top) = match o.position {
-                        Position::LowerLeft => (0.05, 0.78 - offset),
-                        Position::LowerRight => (0.38, 0.78 - offset),
-                        Position::TopLeft => (0.05, 0.08 + offset),
-                    };
-                    if u >= left && u < left + 0.56 && v >= top && v < top + 0.095 {
+                    let (left, top) = overlay_text::panel_fractions(i, o.position);
+                    if u >= left
+                        && u < left + overlay_text::PANEL_WIDTH
+                        && v >= top
+                        && v < top + overlay_text::PANEL_HEIGHT
+                    {
                         color = if u < left + 0.008 {
                             [39, 192, 207, 255]
                         } else {
@@ -310,7 +310,16 @@ pub fn program_from_sources(
                     }
                 }
             }
-            out.push(blend(color, [0, 0, 0, 255], black));
+            out.push(color);
+        }
+    }
+    // Captions belong to the overlay layer: they are rasterized after the panel
+    // geometry and before any fade-to-black so Program output, the native window
+    // and future recorders all show the same picture as the operator monitor.
+    overlay_text::draw_captions(&mut out, w, h, &p.overlays.standard);
+    if black > 0.0 {
+        for pixel in &mut out {
+            *pixel = blend(*pixel, [0, 0, 0, 255], black);
         }
     }
     Ok(out)
@@ -416,5 +425,74 @@ mod tests {
         assert!(program_from_sources(&p, Some(&t), 0.0, 2, 2, &from, None).is_err());
         assert!(program_from_sources(&p, None, f32::NAN, 2, 2, &from, None).is_err());
         assert!(program_from_sources(&p, None, 0.0, 3, 2, &from, None).is_err());
+    }
+
+    #[test]
+    fn program_captions_reach_the_composited_surface_and_fade_with_black() {
+        let (w, h) = (640u32, 360u32);
+        let from = vec![[10, 10, 10, 255]; (w * h) as usize];
+        let mut p = ProjectState::demo();
+        let Some(plain) = program_from_sources(&p, None, 0.0, w, h, &from, None).ok() else {
+            return;
+        };
+        assert_eq!(plain, from, "disabled overlays must retain source pixels");
+        assert!(
+            !p.overlays.standard.is_empty(),
+            "the demo project must expose overlay channels"
+        );
+        for position in [
+            crate::Position::LowerLeft,
+            crate::Position::LowerRight,
+            crate::Position::TopLeft,
+        ] {
+            if let Some(overlay) = p.overlays.standard.first_mut() {
+                overlay.enabled = true;
+                overlay.position = position;
+                overlay.title = "LIVE".into();
+                overlay.subtitle = "CAM 1".into();
+            }
+            let Some(painted) = program_from_sources(&p, None, 0.0, w, h, &from, None).ok() else {
+                return;
+            };
+            let white = painted
+                .iter()
+                .filter(|pixel| **pixel == [255, 255, 255, 255])
+                .count();
+            let grey = painted
+                .iter()
+                .filter(|pixel| **pixel == [190, 190, 190, 255])
+                .count();
+            assert!(
+                white >= 20,
+                "{position:?}: title ink expected, found {white}"
+            );
+            assert!(
+                grey >= 8,
+                "{position:?}: subtitle ink expected, found {grey}"
+            );
+            let (left, top) = overlay_text::panel_fractions(0, position);
+            let x0 = (left * w as f32).round() as u32;
+            let y0 = (top * h as f32).round() as u32;
+            let x1 = x0 + (overlay_text::PANEL_WIDTH * w as f32).round() as u32;
+            let y1 = y0 + (overlay_text::PANEL_HEIGHT * h as f32).round() as u32;
+            for (index, pixel) in painted.iter().enumerate() {
+                if *pixel == from.get(index).copied().unwrap_or([10, 10, 10, 255]) {
+                    continue;
+                }
+                let x = index as u32 % w;
+                let y = index as u32 / w;
+                assert!(
+                    x >= x0 && x < x1 && y >= y0 && y < y1,
+                    "{position:?}: caption pixel ({x},{y}) escaped its panel"
+                );
+            }
+            let Some(faded) = program_from_sources(&p, None, 1.0, w, h, &from, None).ok() else {
+                return;
+            };
+            assert!(
+                faded.iter().all(|pixel| *pixel == [0, 0, 0, 255]),
+                "{position:?}: fade-to-black must cover caption ink"
+            );
+        }
     }
 }

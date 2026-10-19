@@ -12,6 +12,7 @@ pub use output::{
 };
 pub mod overlays;
 pub use overlays::{ActiveStinger, OverlayBank, OverlayChannelKind, StingerChannel};
+mod overlay_text;
 pub mod persistence;
 pub mod playback;
 pub mod preferences;

@@ -567,32 +567,10 @@ impl RustMixApp {
                 );
             }
         }
-        if program {
-            for (i, o) in p.overlays.standard.iter().enumerate() {
-                if o.enabled {
-                    let panel = overlay_panel_rect(rect, o.position, i);
-                    let text_rect = Rect::from_min_size(
-                        panel.left_top() + egui::vec2(rect.width() * 0.02, 0.0),
-                        egui::vec2(rect.width() * 0.52, rect.height() * 0.095),
-                    );
-                    let painter = ui.painter().with_clip_rect(text_rect);
-                    painter.text(
-                        text_rect.left_top() + egui::vec2(0.0, rect.height() * 0.006),
-                        Align2::LEFT_TOP,
-                        &o.title,
-                        FontId::proportional((rect.height() * 0.038).clamp(8.0, 15.0)),
-                        Color32::WHITE.gamma_multiply(visible),
-                    );
-                    painter.text(
-                        text_rect.left_top() + egui::vec2(0.0, rect.height() * 0.052),
-                        Align2::LEFT_TOP,
-                        &o.subtitle,
-                        FontId::proportional((rect.height() * 0.026).clamp(6.0, 11.0)),
-                        Color32::from_gray(190).gamma_multiply(visible),
-                    );
-                }
-            }
-        }
+        // Overlay captions are rasterized into the Program surface by the engine
+        // compositor, so the monitor must not paint a second copy on top: the
+        // operator monitor, native Program window, fullscreen output and future
+        // recorders now show identical pixels.
 
         // Modern live transport & timecode bar under Preview/Program monitor
         let transport = egui::Frame::new()
