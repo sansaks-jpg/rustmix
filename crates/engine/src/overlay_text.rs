@@ -306,10 +306,8 @@ mod tests {
         }];
         draw_captions(&mut pixels, w, h, &overlays);
         let (left, top) = panel_fractions(0, Position::LowerLeft);
-        let x0 = (left * w as f32).round() as u32;
-        let y0 = (top * h as f32).round() as u32;
-        let x1 = x0 + (PANEL_WIDTH * w as f32).round() as u32;
-        let y1 = y0 + (PANEL_HEIGHT * h as f32).round() as u32;
+        let right = left + PANEL_WIDTH;
+        let bottom = top + PANEL_HEIGHT;
         let white = pixels
             .iter()
             .filter(|pixel| **pixel == [255, 255, 255, 255])
@@ -327,9 +325,13 @@ mod tests {
                     .get(index)
                     .is_some_and(|pixel| *pixel != [9, 9, 9, 255]);
                 if painted {
+                    // The geometry pass compares fractions, so the oracle uses
+                    // the same rule rather than a rounded integer rectangle.
+                    let u = x as f32 / w as f32;
+                    let v = y as f32 / h as f32;
                     assert!(
-                        x >= x0 && x < x1 && y >= y0 && y < y1,
-                        "caption pixel ({x},{y}) escaped panel {x0},{y0}-{x1},{y1}"
+                        u >= left && u < right && v >= top && v < bottom,
+                        "caption pixel ({x},{y}) escaped the panel"
                     );
                 }
             }

@@ -471,18 +471,21 @@ mod tests {
                 "{position:?}: subtitle ink expected, found {grey}"
             );
             let (left, top) = overlay_text::panel_fractions(0, position);
-            let x0 = (left * w as f32).round() as u32;
-            let y0 = (top * h as f32).round() as u32;
-            let x1 = x0 + (overlay_text::PANEL_WIDTH * w as f32).round() as u32;
-            let y1 = y0 + (overlay_text::PANEL_HEIGHT * h as f32).round() as u32;
+            let right = left + overlay_text::PANEL_WIDTH;
+            let bottom = top + overlay_text::PANEL_HEIGHT;
             for (index, pixel) in painted.iter().enumerate() {
                 if *pixel == from.get(index).copied().unwrap_or([10, 10, 10, 255]) {
                     continue;
                 }
                 let x = index as u32 % w;
                 let y = index as u32 / w;
+                // Compare with the same float rule the geometry pass uses, so a
+                // rounded integer rectangle cannot report a false escape on the
+                // panel's right or bottom boundary pixel.
+                let u = x as f32 / w as f32;
+                let v = y as f32 / h as f32;
                 assert!(
-                    x >= x0 && x < x1 && y >= y0 && y < y1,
+                    u >= left && u < right && v >= top && v < bottom,
                     "{position:?}: caption pixel ({x},{y}) escaped its panel"
                 );
             }
