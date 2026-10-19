@@ -2,6 +2,74 @@
 use crate::{InputId, Result, invalid};
 use serde::{Deserialize, Serialize};
 
+/// Persisted audio-only source identity. Opening files and devices belongs to
+/// the audio worker; the engine validates descriptors without performing I/O.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum AudioSource {
+    WavFile {
+        path: String,
+    },
+    /// `None` requests the system default microphone. A selected endpoint keeps
+    /// its stable device ID rather than a possibly duplicated display name.
+    Microphone {
+        device_id: Option<String>,
+    },
+}
+
+impl AudioSource {
+    pub fn label(&self) -> &'static str {
+        match self {
+            Self::WavFile { .. } => "WAV file",
+            Self::Microphone { .. } => "Microphone",
+        }
+    }
+
+    pub fn validate(&self) -> Result<()> {
+        match self {
+            Self::WavFile { path } => {
+                if !valid_audio_identity(path) {
+                    return Err(invalid(
+                        "Audio file source must reference a local WAV path of at most 4096 bytes",
+                    ));
+                }
+                // URLs, UNC shares and alternate data streams are not local
+                // WAV descriptors. A normal Windows drive prefix is allowed.
+                let mut colons = path.match_indices(':');
+                let colon_is_drive = match colons.next() {
+                    None => true,
+                    Some((1, _)) => path.as_bytes().first().is_some_and(u8::is_ascii_alphabetic),
+                    Some(_) => false,
+                } && colons.next().is_none();
+                if path.starts_with("//")
+                    || path.starts_with(r"\\")
+                    || !colon_is_drive
+                    || !std::path::Path::new(path)
+                        .extension()
+                        .and_then(|extension| extension.to_str())
+                        .is_some_and(|extension| extension.eq_ignore_ascii_case("wav"))
+                {
+                    return Err(invalid(
+                        "Audio file source must reference a local WAV path of at most 4096 bytes",
+                    ));
+                }
+            }
+            Self::Microphone {
+                device_id: Some(device_id),
+            } if !valid_audio_identity(device_id) => {
+                return Err(invalid(
+                    "Microphone device ID must be non-empty text of at most 4096 bytes",
+                ));
+            }
+            Self::Microphone { .. } => {}
+        }
+        Ok(())
+    }
+}
+
+fn valid_audio_identity(value: &str) -> bool {
+    value.len() <= 4096 && !value.trim().is_empty() && !value.chars().any(char::is_control)
+}
+
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ImageFit {
     #[default]
@@ -26,6 +94,9 @@ pub struct InputConfig {
     pub pip_source: Option<InputId>,
     /// External PNG reference. Decoded pixels are a UI cache, never project JSON.
     pub media_path: Option<String>,
+    /// Audio-only source; a consumer must display its explicit slate rather
+    /// than presenting the input's procedural kind as decoded video.
+    pub audio_source: Option<AudioSource>,
     pub image_fit: ImageFit,
 }
 impl Default for InputConfig {
@@ -43,12 +114,21 @@ impl Default for InputConfig {
             chroma_tolerance: 0.28,
             pip_source: None,
             media_path: None,
+            audio_source: None,
             image_fit: ImageFit::Contain,
         }
     }
 }
 impl InputConfig {
     pub(crate) fn validate(&self) -> Result<()> {
+        if self.media_path.is_some() && self.audio_source.is_some() {
+            return Err(invalid(
+                "An input cannot contain both a PNG and an audio source",
+            ));
+        }
+        if let Some(source) = &self.audio_source {
+            source.validate()?;
+        }
         for (value, low, high) in [
             (self.zoom, 0.25, 4.0),
             (self.pan_x, -1.0, 1.0),

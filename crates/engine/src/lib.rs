@@ -1,9 +1,10 @@
 #![forbid(unsafe_code)]
 pub mod audio;
+pub mod audio_engine;
 pub mod categories;
 pub use categories::{InputCategory, PRESET_CATEGORIES};
 pub mod input;
-pub use input::{ImageFit, InputConfig};
+pub use input::{AudioSource, ImageFit, InputConfig};
 pub mod output;
 pub use output::{
     EXTERNAL_OUTPUTS, ExternalOutput, ExternalOutputBank, ExternalOutputConfig, MAX_AUDIO_DELAY_MS,
@@ -26,6 +27,7 @@ pub mod render;
 pub mod shortcuts;
 pub use shortcuts::{ShortcutAction, ShortcutBinding, default_key_bindings};
 pub mod video_clock;
+pub mod wav;
 
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
@@ -183,11 +185,12 @@ pub struct WorkspaceState {
     pub name: String,
     pub dock_json: String,
 }
-/// Current project schema. Schema 6 adds the four external output slots
+/// Current project schema. Schema 7 adds typed audio-only source descriptors.
+/// Schema 6 adds the four external output slots
 /// (routing and configuration); schema 5 replaced the four-overlay array with
-/// the sixteen-channel production bank; 1–5 load through the persistence
+/// the sixteen-channel production bank; 1–6 load through the persistence
 /// migration.
-pub const SCHEMA: u32 = 6;
+pub const SCHEMA: u32 = 7;
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ProjectState {
     pub schema: u32,

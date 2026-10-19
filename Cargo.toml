@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/engine", "crates/ui-egui", "apps/rustmix"]
+members = ["crates/engine", "crates/platform", "crates/ui-egui", "apps/rustmix"]
 resolver = "2"
 
 [workspace.package]

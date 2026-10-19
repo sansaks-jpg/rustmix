@@ -1,5 +1,13 @@
 # Dependency and asset review
 
+2026-10-19 audio adapter review: CPAL 0.18.2 (Apache-2.0, Rust 1.85) and rtrb 0.4.0
+(MIT OR Apache-2.0, Rust 1.38) were checked through `cargo info` and downloaded registry sources.
+They fit workspace Rust 1.94. CPAL has empty default features and is Windows-targeted here;
+ASIO/JACK/PipeWire/realtime elevation features are not enabled. The default Windows host is
+WASAPI. No private SDK, codec runtime or driver is bundled. rtrb fixed rings carry plain stereo
+frames so callbacks do not allocate or lock. This review is not a vulnerability scan or device
+qualification. Preserve licence notices for these locked dependencies in CI packaging.
+
 2026-10-17 · UI-001. Original RustMix code: MIT. No proprietary application source or artwork is used.
 
 Direct dependencies verified through registry metadata / downloaded manifests: eframe 0.35.0 (MIT OR Apache-2.0; maintained egui project; Rust 1.92), egui_dock 0.20.1 (MIT; egui 0.35 compatible), rfd 0.17.2 (MIT; native platform file dialogs), serde/serde_json (MIT OR Apache-2.0), thiserror 2 (MIT OR Apache-2.0), tempfile 3.27 (MIT OR Apache-2.0), image 0.25.10 (MIT OR Apache-2.0; PNG-only feature used by opt-in smoke captures).
