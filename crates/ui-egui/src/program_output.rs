@@ -2,7 +2,7 @@
 //! it does not create a second media scheduler, encoder or device backend.
 use super::*;
 use std::sync::{
-    atomic::{AtomicBool, AtomicU32, AtomicUsize, Ordering},
+    atomic::{AtomicBool, AtomicU32, AtomicU64, AtomicUsize, Ordering},
     mpsc::{SyncSender, sync_channel},
 };
 
@@ -35,6 +35,9 @@ struct Signals {
     native_seen: AtomicBool,
     native_fullscreen: AtomicBool,
     capture_requested: AtomicBool,
+    /// Monotonic acceptance id carried through `ViewportCommand::Screenshot` so
+    /// a stale readback can never satisfy a later request.
+    capture_sequence: AtomicU64,
     width: AtomicU32,
     height: AtomicU32,
     target_monitor: AtomicUsize,
@@ -43,23 +46,37 @@ struct Signals {
 
 pub(crate) struct Capture {
     pub viewport: egui::ViewportId,
+    pub sequence: u64,
     pub image: Arc<egui::ColorImage>,
 }
 
-/// Moves this viewport's screenshot events into the bounded mailbox. A
-/// capacity-one channel with `try_send` keeps a stalled acceptance consumer
-/// from blocking either native window.
-fn harvest_screenshots(events: &[egui::Event], sender: &SyncSender<Capture>) {
+/// Moves matching screenshot events into the bounded mailbox. A capacity-one
+/// channel with `try_send` keeps a stalled acceptance consumer from blocking
+/// either native window.
+fn harvest_screenshots(
+    events: &[egui::Event],
+    sender: &SyncSender<Capture>,
+    expected_sequence: u64,
+) {
     for event in events {
         if let egui::Event::Screenshot {
             viewport_id: id,
+            user_data,
             image,
-            ..
         } = event
             && *id == viewport_id()
         {
+            let sequence = user_data
+                .data
+                .as_ref()
+                .and_then(|data| data.downcast_ref::<u64>())
+                .copied();
+            if sequence != Some(expected_sequence) {
+                continue;
+            }
             let _ = sender.try_send(Capture {
                 viewport: *id,
+                sequence: expected_sequence,
                 image: Arc::clone(image),
             });
         }
@@ -82,6 +99,7 @@ impl Default for ProgramOutput {
                 native_seen: AtomicBool::new(false),
                 native_fullscreen: AtomicBool::new(false),
                 capture_requested: AtomicBool::new(false),
+                capture_sequence: AtomicU64::new(0),
                 width: AtomicU32::new(preferences.width),
                 height: AtomicU32::new(preferences.height),
                 target_monitor: AtomicUsize::new(usize::MAX),
@@ -117,7 +135,7 @@ impl ProgramOutput {
         self.signals
             .capture_requested
             .store(false, Ordering::Release);
-        let _ = self.captures.try_recv();
+        while self.captures.try_recv().is_ok() {}
         self.signals.open.store(true, Ordering::Release);
         ctx.request_repaint();
     }
@@ -189,14 +207,29 @@ impl ProgramOutput {
         };
         serde_json::to_string(&preferences).unwrap_or_default()
     }
-    pub fn request_capture(&self, ctx: &egui::Context) {
+    /// Requests one accepted Program-viewport readback and returns its
+    /// monotonic acceptance id. Any capture left by an earlier request is
+    /// discarded, so a retry can never be mistaken for the picture a later
+    /// acceptance stage is waiting for.
+    pub fn request_capture(&self, ctx: &egui::Context) -> u64 {
+        while self.captures.try_recv().is_ok() {}
+        let sequence = self
+            .signals
+            .capture_sequence
+            .fetch_add(1, Ordering::AcqRel)
+            .wrapping_add(1);
         self.signals
             .capture_requested
             .store(true, Ordering::Release);
         ctx.request_repaint_of(viewport_id());
+        sequence
     }
     pub fn take_capture(&self) -> Option<Capture> {
-        self.captures.try_recv().ok()
+        let expected = self.signals.capture_sequence.load(Ordering::Acquire);
+        match self.captures.try_recv() {
+            Ok(capture) if capture.sequence == expected => Some(capture),
+            _ => None,
+        }
     }
     /// Forwards a deferred Program-viewport screenshot. `eframe` injects
     /// pending screenshots into whichever native window processes its next
@@ -204,7 +237,8 @@ impl ProgramOutput {
     /// scripted acceptance, so a Program capture can arrive in the operator
     /// frame's input instead of the child callback's. Both frames call this.
     pub fn harvest_capture_events(&self, events: &[egui::Event]) {
-        harvest_screenshots(events, &self.capture_sender);
+        let expected = self.signals.capture_sequence.load(Ordering::Acquire);
+        harvest_screenshots(events, &self.capture_sender, expected);
     }
     pub fn show(&self, ctx: &egui::Context, texture: Option<egui::TextureHandle>) {
         if !self.is_open() {
@@ -291,10 +325,13 @@ impl ProgramOutput {
             }
             // Screenshot readback is opt-in hosted acceptance only. The
             // capacity-one mailbox cannot stall either viewport.
+            let expected = signals.capture_sequence.load(Ordering::Acquire);
             let events = ctx.input(|input| input.events.clone());
-            harvest_screenshots(&events, &captures);
+            harvest_screenshots(&events, &captures, expected);
             if signals.capture_requested.swap(false, Ordering::AcqRel) {
-                ctx.send_viewport_cmd(egui::ViewportCommand::Screenshot(egui::UserData::default()));
+                ctx.send_viewport_cmd(egui::ViewportCommand::Screenshot(egui::UserData::new(
+                    expected,
+                )));
             }
         });
     }
@@ -463,32 +500,53 @@ mod tests {
     }
 
     #[test]
-    fn parent_frame_forwards_only_deferred_program_screenshots_through_bounded_mailbox() {
+    fn parent_frame_forwards_only_tagged_deferred_program_screenshots_through_bounded_mailbox() {
         let output = ProgramOutput::default();
+        let ctx = egui::Context::default();
         let image = Arc::new(egui::ColorImage::filled(
             [4, 3],
             egui::Color32::from_rgb(10, 20, 30),
         ));
-        let screenshot = |viewport_id| egui::Event::Screenshot {
+        let screenshot = |viewport_id, sequence: u64| egui::Event::Screenshot {
             viewport_id,
-            user_data: egui::UserData::default(),
+            user_data: egui::UserData::new(sequence),
             image: Arc::clone(&image),
         };
-        output.harvest_capture_events(&[screenshot(egui::ViewportId::ROOT)]);
-        assert!(
-            output.take_capture().is_none(),
-            "operator-window screenshots are not Program output frames"
-        );
-        output.harvest_capture_events(&[screenshot(viewport_id())]);
+        let first = output.request_capture(&ctx);
+        // Operator-window screenshots are never Program output frames.
+        output.harvest_capture_events(&[screenshot(egui::ViewportId::ROOT, first)]);
+        assert!(output.take_capture().is_none());
+        // An untagged or obsolete readback cannot satisfy the current request.
+        output.harvest_capture_events(&[egui::Event::Screenshot {
+            viewport_id: viewport_id(),
+            user_data: egui::UserData::default(),
+            image: Arc::clone(&image),
+        }]);
+        assert!(output.take_capture().is_none());
+        output.harvest_capture_events(&[screenshot(viewport_id(), first.wrapping_sub(1))]);
+        assert!(output.take_capture().is_none());
+        output.harvest_capture_events(&[screenshot(viewport_id(), first)]);
         let capture = output
             .take_capture()
             .expect("deferred Program screenshot must be forwarded");
         assert_eq!(capture.viewport, viewport_id());
+        assert_eq!(capture.sequence, first);
         assert_eq!(capture.image.size, [4, 3]);
         assert_eq!(capture.image.pixels.first(), image.pixels.first());
-        // The capacity-one mailbox keeps a stalled consumer from blocking a
-        // native window, and stale duplicates are dropped rather than queued.
-        output.harvest_capture_events(&[screenshot(viewport_id()), screenshot(viewport_id())]);
+        // A retry discards stale readbacks and accepts only its own sequence;
+        // the capacity-one mailbox keeps a stalled consumer from blocking a
+        // native window and drops duplicates instead of queueing them.
+        let second = output.request_capture(&ctx);
+        assert_ne!(second, first);
+        output.harvest_capture_events(&[screenshot(viewport_id(), first)]);
+        assert!(
+            output.take_capture().is_none(),
+            "a stale capture must never satisfy a newer request"
+        );
+        output.harvest_capture_events(&[
+            screenshot(viewport_id(), second),
+            screenshot(viewport_id(), second),
+        ]);
         assert!(output.take_capture().is_some());
         assert!(output.take_capture().is_none());
     }

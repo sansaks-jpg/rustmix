@@ -9,9 +9,15 @@ const FIXTURE_FRAMES: usize = 44_100;
 
 impl RustMixApp {
     pub(crate) fn smoke_audio(&mut self, ctx: &egui::Context, s: &mut smoke::Smoke) -> Result<()> {
-        if self.start.elapsed() > Duration::from_secs(240) {
+        if self.start.elapsed() > Duration::from_secs(360) {
             return Err(Error::Invalid(format!(
                 "Native audio descriptor workflow timed out at stage {}",
+                s.stage
+            )));
+        }
+        if s.wait > 240 {
+            return Err(Error::Invalid(format!(
+                "Native audio workflow stage {} did not advance after 240 frames",
                 s.stage
             )));
         }

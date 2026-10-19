@@ -7,9 +7,18 @@ impl RustMixApp {
         ctx: &egui::Context,
         s: &mut smoke::Smoke,
     ) -> Result<()> {
-        if self.start.elapsed() > Duration::from_secs(240) {
+        if self.start.elapsed() > Duration::from_secs(360) {
             return Err(Error::Invalid(format!(
                 "Program output smoke timed out at {}",
+                s.stage
+            )));
+        }
+        // A stage that never advances is a hang, not a slow capture. Bound it
+        // separately so the failure names the stuck stage and stays far below
+        // the external process limit.
+        if s.wait > 240 {
+            return Err(Error::Invalid(format!(
+                "Program output smoke stage {} did not advance after 240 frames",
                 s.stage
             )));
         }
@@ -45,6 +54,9 @@ impl RustMixApp {
         match s.stage {
             0 => {
                 std::fs::create_dir_all("artifacts")?;
+                // The Program menu is only available on the advanced surface;
+                // a previous process may have persisted Basic mode.
+                self.basic_mode = false;
                 self.execute(Command::SetInputsPaused(true));
                 self.execute(Command::TakeInput(InputId(6)));
                 self.native_click(s, "output.program.menu")?;
@@ -218,7 +230,9 @@ impl RustMixApp {
 
     /// A screenshot request or readback can be lost while the child window
     /// transitions between fullscreen states, so re-request on a bounded frame
-    /// cadence instead of waiting out the whole timeout on one lost capture.
+    /// cadence. Consume first: a capture harvested this frame must not be
+    /// discarded by the retry, and `take_capture` only accepts the current
+    /// request sequence.
     fn wait_output_capture(
         &self,
         ctx: &egui::Context,
@@ -226,10 +240,13 @@ impl RustMixApp {
         black: bool,
         s: &smoke::Smoke,
     ) -> Result<bool> {
+        if self.save_output_capture(name, black)? {
+            return Ok(true);
+        }
         if s.wait > 0 && s.wait.is_multiple_of(20) {
             self.program_output.request_capture(ctx);
         }
-        self.save_output_capture(name, black)
+        Ok(false)
     }
 
     fn save_output_capture(&self, name: &str, black: bool) -> Result<bool> {
