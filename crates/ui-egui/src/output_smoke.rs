@@ -379,7 +379,7 @@ fn validate_caption_ink(
             if ix < 0 || iy < 0 || ix >= image.width() as i64 || iy >= image.height() as i64 {
                 continue;
             }
-            let index = iy as usize * image.width() as usize + ix as usize;
+            let index = iy as usize * image.width() + ix as usize;
             let Some(pixel) = image.pixels.get(index) else {
                 continue;
             };
