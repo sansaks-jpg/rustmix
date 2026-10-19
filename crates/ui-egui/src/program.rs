@@ -442,9 +442,11 @@ mod tests {
             .unwrap();
         let mut renderer = ProgramRenderer::default();
         let mut sources = HashMap::new();
-        let mut fx = InputFx::default();
-        fx.custom_rgba = Some((2, 2, Arc::new(vec![[255, 0, 0, 255]; 4])));
-        fx.image_generation = 1;
+        let mut fx = InputFx {
+            custom_rgba: Some((2, 2, Arc::new(vec![[255, 0, 0, 255]; 4]))),
+            image_generation: 1,
+            ..InputFx::default()
+        };
         sources.insert(InputId(6), fx.clone());
         let first = renderer.render(&engine, &sources).unwrap();
         assert_eq!(first.first(), Some(&[255, 0, 0, 255]));
