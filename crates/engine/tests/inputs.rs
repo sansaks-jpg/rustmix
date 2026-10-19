@@ -156,7 +156,7 @@ fn schema_one_migrates_and_future_files_remain_rejected() {
     }
     std::fs::write(&path, serde_json::to_vec(&value).unwrap()).unwrap();
     let migrated = persistence::load(&path).unwrap();
-    assert_eq!(migrated.schema, 5);
+    assert_eq!(migrated.schema, SCHEMA);
     assert!(
         migrated
             .inputs
@@ -185,7 +185,7 @@ fn migrating_save_keeps_the_original_schema_one_backup_bytes() {
         std::fs::read(persistence::backup_path(&path, 1)).unwrap(),
         original
     );
-    assert_eq!(persistence::load(&path).unwrap().schema, 5);
+    assert_eq!(persistence::load(&path).unwrap().schema, SCHEMA);
     persistence::save(&path, &migrated).unwrap();
     assert_eq!(
         std::fs::read(persistence::backup_path(&path, 2)).unwrap(),

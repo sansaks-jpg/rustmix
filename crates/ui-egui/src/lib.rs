@@ -414,6 +414,14 @@ fn default_dock(audio_focus: bool) -> DockState<Panel> {
     dock
 }
 
+#[derive(Clone)]
+pub(crate) struct ExternalSettingsDraft {
+    selected: u8,
+    outputs: Vec<ExternalOutput>,
+    error: Option<String>,
+    applied: Option<u8>,
+}
+
 pub(crate) enum Action {
     Unavailable(&'static str),
     Engine(Command),
@@ -429,6 +437,8 @@ pub(crate) enum Action {
     Settings,
     SettingsAt(SettingsPage),
     OverlaySettings(usize),
+    ExternalSettings(u8),
+    ApplyExternal(ExternalOutput),
     RecordingSetup,
     StreamingSetup,
     MultiCorder,
@@ -529,6 +539,8 @@ pub struct RustMixApp {
     pub(crate) settings_layout: Option<bool>,
     /// Staged Overlay Settings draft: selected slot plus its uncommitted copy.
     pub(crate) overlay_settings: Option<(usize, OverlayState)>,
+    /// Independent staged copies; selecting another slot never discards edits.
+    pub(crate) external_settings: Option<ExternalSettingsDraft>,
     /// Reference dialogs and live production output engines.
     pub(crate) recording_setup: bool,
     pub(crate) rec_slot: u8,
@@ -743,6 +755,7 @@ impl RustMixApp {
             settings_name: String::new(),
             settings_layout: None,
             overlay_settings: None,
+            external_settings: None,
             recording_setup: false,
             rec_slot: 1,
             rec_format: 2,
@@ -877,6 +890,7 @@ impl RustMixApp {
         self.settings_name.clear();
         self.settings_layout = None;
         self.overlay_settings = None;
+        self.external_settings = None;
         self.recording_setup = false;
         self.streaming_setup = false;
         self.multicorder_open = false;
@@ -1323,6 +1337,33 @@ impl RustMixApp {
                     self.overlay_settings = Some((slot, overlay));
                 }
             }
+            Action::ExternalSettings(slot) => {
+                if self.engine.project().outputs.slot(slot).is_some() {
+                    self.external_settings = Some(ExternalSettingsDraft {
+                        selected: slot,
+                        outputs: self.engine.project().outputs.iter().cloned().collect(),
+                        error: None,
+                        applied: None,
+                    });
+                }
+            }
+            Action::ApplyExternal(output) => {
+                let number = output.number;
+                let applied = self
+                    .try_execute(Command::SetExternalOutput(output))
+                    .is_some();
+                if applied {
+                    self.submit_program();
+                }
+                if let Some(editor) = &mut self.external_settings {
+                    editor.error = if applied {
+                        None
+                    } else {
+                        Some(self.notice.clone())
+                    };
+                    editor.applied = applied.then_some(number);
+                }
+            }
             Action::RecordingSetup => self.recording_setup = true,
             Action::StreamingSetup => self.streaming_setup = true,
             Action::MultiCorder => self.multicorder_open = true,
@@ -1685,38 +1726,16 @@ impl RustMixApp {
             ui.add_space(10.0);
 
             // 2. External: [ ⚙ | External ]
-            let ext_gear = ui.menu_button(" ", |ui| {
-                ui.set_min_width(210.0);
-                for item in [
-                    "Output 2  (Program / Clean Feed)",
-                    "Output 3  (Preview / Multiview)",
-                    "Output 4  (Aux / Guest Return)",
-                    "SRT / NDI Hardware Output",
-                ] {
-                    if ui.button(item).clicked() {
-                        self.say(format!("External route selected: {item}"), false);
-                        ui.close();
-                    }
-                }
-                ui.separator();
-                if ui.button("Outputs / NDI / OMT / SRT Settings…").clicked() {
-                    self.actions.push(Action::SettingsAt(SettingsPage::Outputs));
-                    ui.close();
-                }
-                if ui.button("External Output Settings…").clicked() {
-                    self.actions
-                        .push(Action::SettingsAt(SettingsPage::ExternalOutput));
-                    ui.close();
-                }
-            });
-            paint_vector_icon(
-                ui.painter(),
-                ext_gear.response.rect,
-                VectorIcon::Gear,
-                Color32::WHITE,
-            );
+            let ext_gear =
+                vector_icon_button(ui, VectorIcon::Gear, egui::vec2(26.0, 24.0), false, None)
+                    .on_hover_text("Configure external output routes (no output backend)");
             self.automation
-                .insert("output.external.settings".into(), ext_gear.response.rect);
+                .insert("output.external.settings".into(), ext_gear.rect);
+            self.automation
+                .insert("output.external.open".into(), ext_gear.rect);
+            if ext_gear.clicked() {
+                self.actions.push(Action::ExternalSettings(1));
+            }
             let mut ext_btn_w = egui::Button::new(
                 RichText::new(if self.external_active {
                     "EXT ON"
@@ -2035,6 +2054,7 @@ impl RustMixApp {
             || self.settings
             || self.search_open
             || self.overlay_settings.is_some()
+            || self.external_settings.is_some()
             || self.recording_setup
             || self.streaming_setup
             || self.multicorder_open
@@ -2090,6 +2110,7 @@ impl RustMixApp {
             || self.properties.is_some()
             || self.settings
             || self.overlay_settings.is_some()
+            || self.external_settings.is_some()
             || self.recording_setup
             || self.streaming_setup
             || self.multicorder_open

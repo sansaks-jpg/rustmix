@@ -1,5 +1,13 @@
 # Feature matrix
 
+## Task 1.3 source continuation (2026-10-19; runtime acceptance pending)
+
+| Feature | Status | Scope | Test evidence | Platform | Hardware tested | Known limitations / failure behavior | Last verified date | Owner/task ID |
+|---|---|---|---|---|---|---|---|---|
+| External-output configuration | Experimental, source only | Four independent routes/configurations, atomic complete-slot Apply, staged drafts and schema-6 persistence | Engine/widget/native regressions prepared; execution pending; local formatting/static checks recorded in ui-progress | Windows intended; current source not compiled | None | No device/frame sink/transport/audio backend; External Start unavailable; invalid changes must leave project unchanged | Source review 2026-10-19; runtime pending | Task 1.3 / ADR 0014 / G05 |
+
+The historical accepted rows below refer to their named revisions, not the current schema-6 source.
+
 ## UI-012 verified prototype scope (2026-10-18)
 
 [Hosted run 39111788801](https://github.com/sansaks-jpg/rustmix/actions/runs/39111788801), runtime

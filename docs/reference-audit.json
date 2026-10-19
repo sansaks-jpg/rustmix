@@ -1,6 +1,6 @@
 {
   "schema": 2,
-  "date": "2026-10-18",
+  "date": "2026-10-19",
   "task": "UI-012-reference-audit",
   "all_features_match": false,
   "scope": "Evidence-classified capability audit, not production or exact protocol/pixel parity",
@@ -160,16 +160,19 @@
     {
       "id": 8,
       "name": "Routing / external outputs",
-      "status": "not_started",
-      "conformance": "missing",
+      "status": "experimental",
+      "conformance": "partial",
       "source_evidence": [
-        "crates/ui-egui/src/lib.rs"
+        "crates/engine/src/output.rs",
+        "crates/engine/src/lib.rs",
+        "crates/ui-egui/src/dialogs.rs"
       ],
       "test_files": [
+        "crates/engine/tests/outputs.rs",
         "crates/ui-egui/src/smoke.rs"
       ],
-      "scope": "Unavailable starts remain gated",
-      "gap": "No SDI/virtual camera/NDI/OMT/SRT routing or four independent hardware outputs"
+      "scope": "Four source/configuration records, atomic complete-slot command, staged editor and schema-6 persistence; source review only, runtime acceptance pending",
+      "gap": "No external frame sink, device enumeration, SDI, virtual camera, NDI, OMT or SRT backend; no live output or protocol/hardware qualification"
     },
     {
       "id": 9,
@@ -248,8 +251,8 @@
       "test_files": [
         "crates/engine/tests/inputs.rs"
       ],
-      "scope": "Own schema4 with schema1/2/3 migration, atomic settings/saves, backups and checkpoints",
-      "gap": "UI-013 verification pending; no .vmix interoperability, media packaging or power-loss qualification."
+      "scope": "Own schema6 with schema1-5 migration, atomic settings/saves, backups and checkpoints; new output migration tests prepared, not run",
+      "gap": "Previous hosted schema5 acceptance does not verify schema6; no .vmix interoperability, media packaging or power-loss qualification"
     },
     {
       "id": 15,

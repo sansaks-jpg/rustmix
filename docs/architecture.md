@@ -1,5 +1,12 @@
 # Workspace architecture
 
+Task 1.3 continuation (2026-10-19): `engine::output` owns four bounded external-output
+configuration records and stable input references. Source and configuration commit through one
+validated engine command/revision. Schema 6 adds the bank; schemas 1–5 receive defaults through
+migration, while current-schema files must contain the bank. UI drafts do not alter Program,
+Preview or output liveness. There is no external frame sink/device/transport worker. Source
+implementation and prepared regression coverage only; new hosted acceptance pending.
+
 UI-012: `engine::production` owns transition slots, named playlists and bounded automatic input
 sequencing; `engine::shortcuts` owns portable binding validation and typed action resolution.
 The UI stages keyboard preferences and dispatches playlist commands. Project schema 5 stores

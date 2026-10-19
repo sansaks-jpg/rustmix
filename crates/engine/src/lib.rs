@@ -4,6 +4,11 @@ pub mod categories;
 pub use categories::{InputCategory, PRESET_CATEGORIES};
 pub mod input;
 pub use input::{ImageFit, InputConfig};
+pub mod output;
+pub use output::{
+    EXTERNAL_OUTPUTS, ExternalOutput, ExternalOutputBank, ExternalOutputConfig, MAX_AUDIO_DELAY_MS,
+    OutputSource,
+};
 pub mod overlays;
 pub use overlays::{ActiveStinger, OverlayBank, OverlayChannelKind, StingerChannel};
 pub mod persistence;
@@ -178,9 +183,11 @@ pub struct WorkspaceState {
     pub name: String,
     pub dock_json: String,
 }
-/// Current project schema. Schema 5 replaced the four-overlay array with the
-/// sixteen-channel production bank; 1–4 load through the persistence migration.
-pub const SCHEMA: u32 = 5;
+/// Current project schema. Schema 6 adds the four external output slots
+/// (routing and configuration); schema 5 replaced the four-overlay array with
+/// the sixteen-channel production bank; 1–5 load through the persistence
+/// migration.
+pub const SCHEMA: u32 = 6;
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ProjectState {
     pub schema: u32,
@@ -196,6 +203,7 @@ pub struct ProjectState {
     pub playlists: Vec<Playlist>,
     pub buses: [AudioChannel; 3],
     pub overlays: OverlayBank,
+    pub outputs: ExternalOutputBank,
     pub preferences: Preferences,
     pub workspace: WorkspaceState,
 }
@@ -249,6 +257,7 @@ impl ProjectState {
             transition_slots: default_transition_slots(),
             playlists: default_playlists(),
             buses: std::array::from_fn(|_| AudioChannel::default()),
+            outputs: ExternalOutputBank::default(),
             overlays: OverlayBank::demo(),
             preferences: Preferences {
                 width: 1920,
@@ -333,6 +342,7 @@ impl ProjectState {
             valid_audio(a)?;
         }
         self.overlays.validate(&self.inputs)?;
+        self.outputs.validate(&self.inputs, self.buses.len())?;
         let p = &self.preferences;
         if !matches!(
             (p.width, p.height),
@@ -476,6 +486,9 @@ pub enum Command {
     SetStinger(usize, StingerChannel),
     TriggerStinger(usize),
     StopStinger,
+    SetOutputSource(u8, OutputSource),
+    SetExternalOutputConfig(u8, ExternalOutputConfig),
+    SetExternalOutput(ExternalOutput),
     SetPreferences(Preferences),
     ApplySettings {
         name: String,
@@ -686,6 +699,30 @@ impl Command {
                 "",
                 true,
                 true,
+            ),
+            Self::SetOutputSource(..) => (
+                "output.route.set",
+                "Route external output",
+                "Outputs",
+                "",
+                true,
+                false,
+            ),
+            Self::SetExternalOutputConfig(..) => (
+                "output.external.configure",
+                "Configure external output",
+                "Outputs",
+                "",
+                true,
+                false,
+            ),
+            Self::SetExternalOutput(_) => (
+                "output.external.apply",
+                "Apply external output",
+                "Outputs",
+                "",
+                true,
+                false,
             ),
             Self::SetPreferences(_) => (
                 "project.preferences",
@@ -1019,6 +1056,25 @@ impl Engine {
             {
                 Err(invalid("Configure a stinger input first"))
             }
+            Command::SetOutputSource(number, _) if self.project.outputs.slot(*number).is_none() => {
+                Err(invalid("External output not found"))
+            }
+            Command::SetOutputSource(_, OutputSource::Input(id))
+                if self.project.input(*id).is_none() =>
+            {
+                Err(invalid("Output source input not found"))
+            }
+            Command::SetExternalOutputConfig(number, _)
+                if self.project.outputs.slot(*number).is_none() =>
+            {
+                Err(invalid("External output not found"))
+            }
+            Command::SetExternalOutputConfig(_, config) => {
+                config.validate(self.project.buses.len())
+            }
+            Command::SetExternalOutput(output) => {
+                output.validate(&self.project.inputs, self.project.buses.len())
+            }
             _ => Ok(()),
         }
     }
@@ -1243,6 +1299,7 @@ impl Engine {
                 next.preferences
                     .key_bindings
                     .retain(|binding| binding.action != ShortcutAction::Preview(id));
+                next.outputs.forget_input(id);
                 for input in &mut next.inputs {
                     if input.config.pip_source == Some(id) {
                         input.config.pip_source = None;
@@ -1333,6 +1390,20 @@ impl Engine {
             }
             Command::StopStinger => {
                 stinger = None;
+            }
+            Command::SetOutputSource(number, source) => {
+                if !next.outputs.set_source(number, source) {
+                    return Err(invalid("External output not found"));
+                }
+            }
+            Command::SetExternalOutputConfig(number, config) => {
+                let bus_count = next.buses.len();
+                if !next.outputs.set_config(number, config, bus_count) {
+                    return Err(invalid("External output configuration is invalid"));
+                }
+            }
+            Command::SetExternalOutput(output) => {
+                next.outputs.apply(output, &next.inputs, next.buses.len())?;
             }
             Command::SetPreferences(p) => {
                 next.preferences = p;

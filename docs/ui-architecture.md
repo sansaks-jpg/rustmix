@@ -1,5 +1,11 @@
 # Native UI architecture
 
+Task 1.3 source update (2026-10-19): the External gear directly opens a bounded editor with
+four independent drafts. The engine owns persisted output routes/configuration and atomic Apply;
+Apply stores the selected slot and leaves other drafts staged, while Cancel discards unapplied
+changes. Validation failures stay visible in the editor. External Start remains disabled because
+no output backend exists. New widget/native verification is prepared, not executed. See ADR 0014.
+
 `apps/rustmix` hosts eframe's native event loop and wgpu renderer. `crates/ui-egui` renders the interface and coordinates file jobs. `crates/engine` owns all switcher state; it cannot import egui, wgpu, dialogs or windows.
 
 ```text

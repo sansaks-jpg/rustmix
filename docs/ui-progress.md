@@ -1,5 +1,41 @@
 # UI milestone progress
 
+## Task 1.3 continuation — four external-output configuration slots (2026-10-19)
+
+Continued the pre-existing uncommitted engine/UI output work. Three sub-agents handled a
+read-only reference audit, engine hardening and UI editing in parallel; code workers used separate
+Git worktrees with independent target directories. Only owned source files are integrated into
+the RustMix checkout; no proprietary code/assets are copied.
+
+Reference review: `rustmix-reference/vmix/FEATURE-MAP.md` §8.1, `UI-UX.md` §12.10 and the locally
+observed External Output capture establish four configurable output slots. The Port selector
+means a hardware connector; there is no evidence for a TCP/UDP port. RustMix uses its own bounded
+connector-number placeholder while no device backend/enumerator exists.
+
+The draft had two reliability defects: independent route/config commands could partially apply,
+and switching slots discarded edits. The continuation validates/commits a complete output slot
+atomically and retains independent drafts. Apply explicitly stores the selected slot and keeps
+the editor open; Cancel discards unapplied drafts. Source choices/configuration never assert
+live device status, and External Start stays unavailable. Schema 6 persists the new bank.
+
+Final integrated source checks on Windows passed: `cargo fmt --all -- --check`,
+`git diff --check`, `scripts/check-repository.ps1` (locked metadata/layers/assets/reference
+inventory) and PowerShell syntax parsing of `scripts/ci-native-smoke.ps1`. The initial formatting
+check found unformatted lines in the pre-existing dialog draft; formatting was corrected and the
+final check passed. `scripts/check-reference-coverage.ps1 -RequireFullMatch` returned exit 1 as
+expected: complete feature/protocol/hardware/cadence acceptance remains false.
+
+Prepared coverage includes 7 output-model unit tests, 10 output integration tests, 2 new widget
+tests, the expanded four-viewport footer regression and the native external-editor workflow.
+The native script requires `reference-output-settings.png` and `reference-output-elements.json`;
+save/reopen must preserve Program routing, exact 60000/1001 rate and connector 1 for slot 1 while
+the remaining slots stay unassigned. These artifacts have not been produced for this change.
+
+Rust compilation, regression execution, native screenshots and save/reopen are **pending**
+under the hosted-Windows-only environment policy. No local executable is built;
+no commit, remote push, stream or hardware session is started. Previous accepted CI runs below
+remain historical evidence only. G01/G02/G05 and the failed cadence qualification remain open.
+
 2026-10-17 · Tasks UI-001 / UI-002 · Experimental synthetic desktop application.
 
 ## Delivered scope

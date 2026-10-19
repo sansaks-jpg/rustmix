@@ -1,5 +1,11 @@
 # Engine audit — 2026-10-18
 
+Task 1.3 source update (2026-10-19): schema6 adds four external-output configuration records
+with atomic complete-slot commands and schemas1–5 migration. This is configuration only; no
+external frame sink, hardware connector enumeration, encoder, audio output or transport exists.
+New regression execution/native acceptance is pending; historical evidence below does not verify
+the current source. See ADR 0014.
+
 Source baseline: `52d3610`; repair branch: `fix/ui009-layout-transport`.
 This audit distinguishes working prototype paths from missing media backends.
 

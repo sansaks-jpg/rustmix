@@ -1,5 +1,10 @@
 # Roadmap
 
+- Task 1.3 continuation (2026-10-19): finish the existing four-slot external-output configuration
+  slice, atomic source/config Apply, preserved drafts, schema-6 migration and validation tests.
+  Source implementation only; new hosted build/test/native acceptance pending. No hardware or
+  network output backend. Next broadcast blockers remain G01 Program delivery and G02 real audio.
+
 - Task 1.1 port (reference → rustmix): sixteen-channel overlay bank — eight title-panel channels
   and eight stinger channels (configured input, cut point, display-underneath) — with schema 5 and
   1–4 migration, `overlay.stinger.*` commands and the cut-point Program/Preview exchange. Hosted

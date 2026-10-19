@@ -1,5 +1,19 @@
 # Verification
 
+## Task 1.3 prepared acceptance (2026-10-19)
+
+The external-output source change requires engine tests for atomic complete-slot Apply, rejected
+slot/source/config without mutation, Program/Preview isolation, valid/invalid fractional rates,
+raster/bus/delay/device/connector bounds, input removal, schema 1–5 migration and schema-6
+round-trip/corruption. Widget tests must exercise the real gear, independent per-slot drafts,
+Apply/Cancel, invalid configuration feedback and bounded footers. The hosted native harness must
+capture `reference-output-settings.png` with `reference-output-elements.json`, then verify configured
+slots after save/reopen. These new tests and
+native checks are **prepared, not yet executed**; previous CI results do not verify this source.
+
+Local checks are limited to formatting, source/diff inspection and the existing repository /
+reference inventory guards. Compilation and native acceptance retain the environment policy below.
+
 ## Current UI-013 verification candidate
 
 No Rust compilation, Rust tests, release build or native launch has been run locally. UI-012 baseline was accepted in run39111788801; new UI-013 category/search/theme/atomic-settings/T-Bar/snapshot tests and seven native processes require a new exact-code run.

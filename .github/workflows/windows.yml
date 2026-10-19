@@ -1,7 +1,7 @@
 name: Windows native UI
 on:
   push:
-    branches: [main]
+    branches: [main, 'codex/**']
     paths-ignore:
       - '**/*.md'
   workflow_dispatch:

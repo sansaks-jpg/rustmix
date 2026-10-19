@@ -1314,6 +1314,11 @@ mod tests {
                     "dialog.overlay",
                     "dialog.overlay.apply",
                 ),
+                (
+                    Action::ExternalSettings(1),
+                    "dialog.external",
+                    "dialog.external.apply",
+                ),
             ] {
                 let mut app = RustMixApp::headless();
                 let ctx = egui::Context::default();
@@ -1896,6 +1901,137 @@ mod tests {
             workspace::decode(&encoded).unwrap().iter_all_tabs().count(),
             3
         );
+    }
+
+    #[test]
+    fn external_output_widgets_preserve_slot_drafts_and_commit_atomically() {
+        let mut app = RustMixApp::headless();
+        let ctx = egui::Context::default();
+        app.theme(&ctx);
+        let size = [1600.0, 900.0];
+        app.execute(Command::SetInputsPaused(true));
+        frame(&mut app, &ctx, vec![], size);
+        let before = app.engine.project().clone();
+        let pixels = app.last_program_rgba.clone();
+
+        // The production gear is a real entry point, not a status-only menu.
+        click(&mut app, &ctx, "output.external.settings", size);
+        assert_eq!(app.external_settings.as_ref().unwrap().selected, 1);
+        click(&mut app, &ctx, "dialog.external.source.program", size);
+        click(&mut app, &ctx, "dialog.external.rate", size);
+        click(&mut app, &ctx, "dialog.external.rate.59.94", size);
+        click(&mut app, &ctx, "dialog.external.device", size);
+        frame(
+            &mut app,
+            &ctx,
+            vec![egui::Event::Text("Test device".into())],
+            size,
+        );
+        click(&mut app, &ctx, "dialog.external.port_toggle", size);
+        click(&mut app, &ctx, "dialog.external.bus", size);
+        click(&mut app, &ctx, "dialog.external.bus.B", size);
+        click(&mut app, &ctx, "dialog.external.alpha", size);
+        let first = app.external_settings.as_ref().unwrap().outputs[0].clone();
+        assert_eq!(first.source, OutputSource::Program);
+        assert_eq!(first.config.frame_rate, Rate::new(60000, 1001).unwrap());
+        assert_eq!(first.config.device, "Test device");
+        assert_eq!(
+            first.config.port,
+            Some(1),
+            "Hardware connector defaults to 1"
+        );
+        assert_eq!(first.config.audio_bus, Some(2));
+        assert!(first.config.alpha_channel);
+        assert_eq!(*app.engine.project(), before);
+
+        click(&mut app, &ctx, "dialog.external.slot.2", size);
+        click(&mut app, &ctx, "dialog.external.source.preview", size);
+        click(&mut app, &ctx, "dialog.external.slot.1", size);
+        assert_eq!(app.external_settings.as_ref().unwrap().outputs[0], first);
+        click(&mut app, &ctx, "dialog.external.apply", size);
+        assert!(
+            app.external_settings.is_some(),
+            "Apply preserves other slot drafts"
+        );
+        assert_eq!(app.engine.project().revision, before.revision + 1);
+        assert_eq!(app.engine.project().outputs.slot(1), Some(&first));
+        assert_eq!(app.engine.project().outputs.slot(2), before.outputs.slot(2));
+        click(&mut app, &ctx, "dialog.external.slot.2", size);
+        assert_eq!(
+            app.external_settings.as_ref().unwrap().outputs[1].source,
+            OutputSource::Preview
+        );
+        click(&mut app, &ctx, "dialog.external.apply", size);
+        assert_eq!(app.engine.project().revision, before.revision + 2);
+        assert_eq!(
+            app.engine.project().outputs.slot(2).unwrap().source,
+            OutputSource::Preview
+        );
+
+        // Cancel discards subsequent edits without undoing applied slots.
+        let applied = app.engine.project().clone();
+        click(&mut app, &ctx, "dialog.external.source.none", size);
+        click(&mut app, &ctx, "dialog.external.cancel", size);
+        assert!(app.external_settings.is_none());
+        assert_eq!(*app.engine.project(), applied);
+        click(&mut app, &ctx, "output.external", size);
+        assert_eq!(*app.engine.project(), applied);
+        assert!(!app.external_active && !app.rec_active && !app.stream_active);
+        assert_eq!(app.engine.project().program, before.program);
+        assert_eq!(app.engine.project().preview, before.preview);
+        assert_eq!(app.last_program_rgba, pixels);
+    }
+
+    #[test]
+    fn external_output_cancel_and_invalid_or_disappeared_source_leave_state_untouched() {
+        let mut app = RustMixApp::headless();
+        let ctx = egui::Context::default();
+        app.theme(&ctx);
+        let size = [1600.0, 900.0];
+        let initial = app.engine.project().clone();
+        click(&mut app, &ctx, "output.external.open", size);
+        click(&mut app, &ctx, "dialog.external.source.program", size);
+        click(&mut app, &ctx, "dialog.external.cancel", size);
+        assert_eq!(*app.engine.project(), initial);
+
+        click(&mut app, &ctx, "output.external.open", size);
+        click(&mut app, &ctx, "dialog.external.source.program", size);
+        // Malformed configuration must reject the complete source/config update.
+        app.external_settings.as_mut().unwrap().outputs[0]
+            .config
+            .device = "bad\u{7}device".into();
+        click(&mut app, &ctx, "dialog.external.apply", size);
+        frame(&mut app, &ctx, vec![], size);
+        assert_eq!(*app.engine.project(), initial);
+        assert!(app.external_settings.as_ref().unwrap().error.is_some());
+        assert!(app.automation.contains_key("dialog.external.error"));
+        app.external_settings.as_mut().unwrap().outputs[0]
+            .config
+            .device
+            .clear();
+
+        click(&mut app, &ctx, "dialog.external.input", size);
+        click(&mut app, &ctx, "dialog.external.input.7", size);
+        app.execute(Command::RemoveInput(InputId(7)));
+        let removed = app.engine.project().clone();
+        click(&mut app, &ctx, "dialog.external.apply", size);
+        assert_eq!(*app.engine.project(), removed);
+        assert!(app.external_settings.as_ref().unwrap().error.is_some());
+        assert_eq!(
+            app.external_settings.as_ref().unwrap().outputs[0].source,
+            OutputSource::Input(InputId(7))
+        );
+        // A valid replacement stays actionable in the same open editor.
+        click(&mut app, &ctx, "dialog.external.source.preview", size);
+        click(&mut app, &ctx, "dialog.external.apply", size);
+        assert!(app.external_settings.as_ref().unwrap().error.is_none());
+        assert_eq!(
+            app.engine.project().outputs.slot(1).unwrap().source,
+            OutputSource::Preview
+        );
+        assert_eq!(app.engine.project().revision, removed.revision + 1);
+        assert_eq!(app.engine.project().program, initial.program);
+        assert_eq!(app.engine.project().preview, initial.preview);
     }
 
     #[test]

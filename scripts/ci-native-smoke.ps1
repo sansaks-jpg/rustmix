@@ -55,7 +55,7 @@ foreach ($file in @('input-fixture.png','input-workflow.png','input-properties.p
 }
 Invoke-NativeSmoke @('--ui-reference-smoke')
 Invoke-NativeSmoke @('--ui-reference-smoke-reopen','artifacts/reference.rustmix.json')
-foreach ($file in @('reference-categories.png','reference-search.png','reference-audio-hidden.png','reference-light.png','reference-reopened.png','reference-smoke-ok.json','reference-reopen-ok.json','reference.rustmix.json')) {
+foreach ($file in @('reference-categories.png','reference-search.png','reference-audio-hidden.png','reference-light.png','reference-output-settings.png','reference-output-elements.json','reference-reopened.png','reference-smoke-ok.json','reference-reopen-ok.json','reference.rustmix.json')) {
     if (-not (Test-Path (Join-Path artifacts $file))) { throw "Missing reference workflow evidence: $file" }
 }
 Invoke-NativeSmoke @('--ui-perf')

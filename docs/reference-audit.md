@@ -1,5 +1,11 @@
 # Audit seluruh temuan referensi
 
+Task 1.3 source update (2026-10-19): four external-output route/configuration records, atomic
+complete-slot Apply and schema-6 persistence are implemented in RustMix. This is **source-only**
+experimental configuration work; new engine/widget/native acceptance is pending. No external
+frame sink, hardware device, network output, XML state endpoint or reference parity is claimed.
+Historical test results and schema-5 evidence below apply only to their named revisions.
+
 Tanggal: 2026-10-18. **Kesimpulan: belum semua fitur sesuai.** Audit ini mencakup seluruh 30 area inventaris, 40 tipe input, 20 efek transisi, 16 kanal overlay/stinger, dan 9 tujuan audio. Jumlah ini adalah cakupan pemeriksaan, bukan jumlah fitur yang sudah tersedia.
 
 Snapshot sumber: `rustmix-reference/vmix`, studi versi 29.0.0.48. Katalog memuat 777 nama shortcut, bukan 777 fungsi HTTP. Catatan trace T11 mengoreksi ringkasan awal: sejumlah nama shortcut ditolak endpoint, sedangkan Cut/Fade diterima tanpa konstanta shortcut terpisah. RustMix belum memiliki endpoint/protokol kompatibel. Referensi Rust sendiri adalah model domain/API dengan backend tertentu dinyatakan unavailable, sehingga daftar enum tidak dipakai sebagai bukti perangkat/codec berjalan.
@@ -17,13 +23,13 @@ Status: `experimental` = sebagian alur prototipe berjalan; `stub` = hanya simula
 | 5 | Multiview | experimental | In-app Split and full source grid layouts | No two independent multiview outputs or all five observed layout contracts | [kode](../crates/ui-egui/src/panels.rs) / [uji](../crates/ui-egui/src/smoke.rs) |
 | 6 | Titles / GT graphics | experimental | Original title/subtitle panels and generated graphics | No GT/XAML compatibility, animation templates, ticker or editable production clock | [kode](../crates/ui-egui/src/panels.rs) / [uji](../crates/ui-egui/src/smoke.rs) |
 | 7 | Audio mixer / matrix | stub | Gain/mute/solo and Master/A/B meter-control simulation | No sample blocks, device audio, nine destinations, DSP, mix-minus or AV sync | [kode](../crates/engine/src/audio.rs) / [uji](../crates/engine/tests/workflow.rs) |
-| 8 | Routing / external outputs | not_started | Unavailable starts remain gated | No SDI/virtual camera/NDI/OMT/SRT routing or four independent hardware outputs | [kode](../crates/ui-egui/src/lib.rs) / [uji](../crates/ui-egui/src/smoke.rs) |
+| 8 | Routing / external outputs | experimental, source only | Four persisted configuration records; atomic complete-slot command and independent staged UI drafts | New regression execution/native acceptance pending; no external frame sink, SDI/virtual camera/NDI/OMT/SRT or hardware output | [kode](../crates/engine/src/output.rs) / [uji disiapkan](../crates/engine/tests/outputs.rs) |
 | 9 | Streaming | not_started | Unavailable starts remain gated | No encoder, RTMP/RTMPS transport, profiles, reconnect or five destinations | [kode](../crates/ui-egui/src/lib.rs) / [uji](../crates/ui-egui/src/smoke.rs) |
 | 10 | Recording | not_started | Unavailable starts remain gated | No Program recording, independent WAV, splitting, recovery or two recording outputs | [kode](../crates/ui-egui/src/lib.rs) / [uji](../crates/ui-egui/src/smoke.rs) |
 | 11 | Replay | not_started | None | No replay storage, camera channels, events, marks, speed control or exports | [kode](../Cargo.toml) |
 | 12 | PTZ camera control | not_started | None | No VISCA/vendor/UVC PTZ provider, movement or presets | [kode](../Cargo.toml) |
 | 13 | Shortcuts / MIDI / surfaces | experimental | Saved keyboard action/key/modifier mappings with validation and repeat/focus guards | No MIDI, activators, controllers, voice or 19 input trigger events | [kode](../crates/engine/src/shortcuts.rs) / [uji](../crates/ui-egui/src/smoke.rs) |
-| 14 | Presets / sessions | experimental | Own schema5 with schema1–4 migration, atomic settings/saves, backups and checkpoints | Hosted native acceptance passed in run 39129117131 (byte-identical save/reopen); no .vmix interoperability, media packaging or power-loss qualification. | [kode](../crates/engine/src/persistence.rs) / [uji](../crates/engine/tests/inputs.rs) |
+| 14 | Presets / sessions | experimental | Own schema6 with schema1–5 migration, atomic settings/saves, backups and checkpoints | New schema6 tests prepared, execution pending; hosted run 39129117131 verifies earlier schema5 only; no .vmix interoperability, media packaging or power-loss qualification. | [kode](../crates/engine/src/persistence.rs) / [uji](../crates/engine/tests/inputs.rs) |
 | 15 | Settings | experimental | Validated preferences, categories/theme/colors and one atomic name/preferences apply; unavailable scaffolds explicitly read-only | 256 observed properties are not implemented; theme/color/display and advanced fields include unavailable/scaffold controls | [kode](../crates/ui-egui/src/dialogs.rs) / [uji](../crates/ui-egui/src/smoke.rs) |
 | 16 | HTTP / TCP / WebSocket API | not_started | Headless typed Rust commands only | No HTTP listener, XML state document, public function dispatcher, TCP or WebSocket protocol | [kode](../Cargo.toml) |
 | 17 | Scripting | not_started | None | No scripts, timers, runtime sandbox or script permissions | [kode](../Cargo.toml) |

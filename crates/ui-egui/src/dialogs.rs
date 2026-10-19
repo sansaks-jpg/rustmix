@@ -1361,6 +1361,50 @@ impl RustMixApp {
                         }
                         SettingsPage::Shortcuts => app.shortcut_settings(ui, &mut draft),
                         SettingsPage::Categories => app.category_settings(ui, &mut draft),
+                        SettingsPage::ExternalOutput => {
+                            ui.label(
+                                "External outputs are routed and configured in the External Output \
+                                 dialog (Outputs area → gear). These are the current stored values.",
+                            );
+                            ui.add_space(4.0);
+                            for output in app.engine.project().outputs.iter() {
+                                let source = match output.source {
+                                    OutputSource::None => "None".to_string(),
+                                    OutputSource::Program => "Program".to_string(),
+                                    OutputSource::Preview => "Preview".to_string(),
+                                    OutputSource::Input(id) => {
+                                        app.engine.project().input(id).map_or_else(
+                                            || "Missing input".to_string(),
+                                            |i| i.name.clone(),
+                                        )
+                                    }
+                                };
+                                let bus = match output.config.audio_bus {
+                                    None | Some(0) => "Master".to_string(),
+                                    Some(1) => "A".to_string(),
+                                    Some(2) => "B".to_string(),
+                                    Some(other) => format!("Bus {other}"),
+                                };
+                                ui.label(format!(
+                                    "External{} · {} · {}×{} · {} fps · bus {bus} · delay {} ms",
+                                    if output.number == 1 {
+                                        String::new()
+                                    } else {
+                                        format!(" {}", output.number)
+                                    },
+                                    source,
+                                    output.config.width,
+                                    output.config.height,
+                                    output.config.frame_rate.label(),
+                                    output.config.audio_delay_ms,
+                                ));
+                            }
+                            ui.add_space(4.0);
+                            ui.label(
+                                "Device, NDI, OMT and SRT transport backends are absent; the \
+                                 External button stays unavailable.",
+                            );
+                        }
                         _ => {
                             ui.label(
                                 RichText::new(format!("{:?} Configuration", app.settings_page))
@@ -1532,6 +1576,297 @@ impl RustMixApp {
             self.overlay_settings = None;
         } else {
             self.overlay_settings = Some((slot, draft));
+        }
+    }
+
+    /// Bounded staged editor for the four external output slots (reference
+    /// Task 1.3). Routing and the eight configuration fields are real engine
+    /// state; no transport backend exists, so the dialog states that nothing is
+    /// transmitted and no device is opened.
+    pub(crate) fn external_settings_dialog(&mut self, ctx: &egui::Context) {
+        let Some(mut editor) = self.external_settings.clone() else {
+            return;
+        };
+        let mut slot = editor.selected;
+        let Some(mut draft) = editor.outputs.iter().find(|o| o.number == slot).cloned() else {
+            return;
+        };
+        let mut open = true;
+        let mut apply_clicked = false;
+        let mut cancel_clicked = false;
+        let project = self.engine.project().clone();
+        let height = (ctx.viewport_rect().height() - 210.0).clamp(150.0, 400.0);
+        operator_window(
+            ctx,
+            "External Output",
+            "dialog.external_settings",
+            &mut open,
+            Vec2::new(720.0, 540.0),
+        )
+        .show(ctx, |ui| {
+            let width = ui
+                .available_width()
+                .min((ui.ctx().viewport_rect().width() - 48.0).max(250.0));
+            let (body, _) = ui.allocate_exact_size(Vec2::new(width, height), Sense::hover());
+            let mut body_ui = ui.new_child(
+                egui::UiBuilder::new()
+                    .id_salt("dialog.external.body")
+                    .max_rect(body)
+                    .layout(egui::Layout::top_down(egui::Align::Min)),
+            );
+            body_ui.set_clip_rect(body.intersect(ui.clip_rect()));
+            body_ui.painter().rect_filled(body, 4.0, FORM_LIGHT);
+            *body_ui.visuals_mut() = egui::Visuals::dark();
+            egui::ScrollArea::vertical()
+                .id_salt("dialog.external.scroll")
+                .max_height(height)
+                .show(&mut body_ui, |ui| {
+            ui.label(
+                RichText::new(
+                    "Configuration only: no output backend, device or transmission is active.",
+                )
+                .size(11.5)
+                .color(FORM_TEXT),
+            );
+            ui.label("Apply stores the selected output only. Other drafts remain staged; Cancel discards unapplied changes.");
+            if let Some(error) = &editor.error {
+                let error = ui.colored_label(RED, format!("Could not apply: {error}. Correct the source or configuration and try again."));
+                self.automation.insert("dialog.external.error".into(), error.rect);
+            } else if let Some(number) = editor.applied {
+                ui.label(format!("Output {number} configuration applied; output remains unavailable."));
+            }
+                    ui.horizontal(|ui| {
+                        ui.label(RichText::new("Output").size(11.5).color(FORM_TEXT));
+                        for number in 1..=EXTERNAL_OUTPUTS as u8 {
+                            let label = if number == 1 {
+                                "External".to_string()
+                            } else {
+                                format!("External {number}")
+                            };
+                            let r = ui.selectable_label(slot == number, label);
+                            self.automation
+                                .insert(format!("dialog.external.slot.{number}"), r.rect);
+                            if r.clicked() && number != slot {
+                                if let Some(staged) = editor.outputs.iter_mut().find(|o| o.number == slot) {
+                                    *staged = draft.clone();
+                                }
+                                slot = number;
+                                if let Some(staged) = editor.outputs.iter().find(|o| o.number == number) {
+                                    draft = staged.clone();
+                                }
+                                editor.error = None;
+                                editor.applied = None;
+                            }
+                        }
+                    });
+                    ui.separator();
+                    ui.horizontal(|ui| {
+                        ui.label(RichText::new("Source").size(11.5).color(FORM_TEXT));
+                        let mut source = draft.source;
+                        let none = ui.selectable_value(&mut source, OutputSource::None, "None");
+                        self.automation
+                            .insert("dialog.external.source.none".into(), none.rect);
+                        let program =
+                            ui.selectable_value(&mut source, OutputSource::Program, "Program");
+                        self.automation
+                            .insert("dialog.external.source.program".into(), program.rect);
+                        let preview =
+                            ui.selectable_value(&mut source, OutputSource::Preview, "Preview");
+                        self.automation
+                            .insert("dialog.external.source.preview".into(), preview.rect);
+                        let selected = match draft.source {
+                            OutputSource::Input(id) => project
+                                .input(id)
+                                .map_or_else(|| "Missing input".to_string(), |i| i.name.clone()),
+                            _ => "Input".to_string(),
+                        };
+                        let input_picker = egui::ComboBox::from_id_salt("dialog.external.input")
+                            .width(150.0)
+                            .selected_text(selected)
+                            .show_ui(ui, |ui| {
+                                for input in &project.inputs {
+                                    let r = ui.selectable_value(
+                                        &mut source,
+                                        OutputSource::Input(input.id),
+                                        &input.name,
+                                    );
+                                    self.automation
+                                        .insert(format!("dialog.external.input.{}", input.id.0), r.rect);
+                                }
+                            });
+                        self.automation.insert("dialog.external.input".into(), input_picker.response.rect);
+                        draft.source = source;
+                    });
+                    ui.horizontal(|ui| {
+                        ui.label(RichText::new("Frame rate").size(11.5).color(FORM_TEXT));
+                        let rate_picker = egui::ComboBox::from_id_salt("dialog.external.rate")
+                            .width(150.0)
+                            .selected_text(format!("{} fps", draft.config.frame_rate.label()))
+                            .show_ui(ui, |ui| {
+                                for (num, den, lbl) in [
+                                    (24, 1, "24p"),
+                                    (25, 1, "25p"),
+                                    (30000, 1001, "NTSC 29.97p"),
+                                    (30, 1, "NTSC 30p"),
+                                    (50, 1, "PAL 50p"),
+                                    (60000, 1001, "NTSC 59.94p"),
+                                    (60, 1, "60p"),
+                                ] {
+                                    let rate = Rate {
+                                        numerator: num,
+                                        denominator: den,
+                                    };
+                                    let r = ui.selectable_value(
+                                        &mut draft.config.frame_rate,
+                                        rate,
+                                        lbl,
+                                    );
+                                    self.automation.insert(
+                                        format!("dialog.external.rate.{}", rate.label()),
+                                        r.rect,
+                                    );
+                                }
+                            });
+                        self.automation.insert("dialog.external.rate".into(), rate_picker.response.rect);
+                    });
+                    ui.horizontal(|ui| {
+                        ui.label(RichText::new("Output size").size(11.5).color(FORM_TEXT));
+                        let w = ui.add(
+                            egui::DragValue::new(&mut draft.config.width)
+                                .range(1..=MAX_OUTPUT_WIDTH)
+                                .speed(8.0),
+                        );
+                        self.automation
+                            .insert("dialog.external.width".into(), w.rect);
+                        ui.label("×");
+                        let h = ui.add(
+                            egui::DragValue::new(&mut draft.config.height)
+                                .range(1..=MAX_OUTPUT_HEIGHT)
+                                .speed(8.0),
+                        );
+                        self.automation
+                            .insert("dialog.external.height".into(), h.rect);
+                        ui.label("px");
+                    });
+                    ui.horizontal(|ui| {
+                        ui.label(RichText::new("Device").size(11.5).color(FORM_TEXT));
+                        let d = ui.add(
+                            egui::TextEdit::singleline(&mut draft.config.device)
+                                .hint_text("Application renderer")
+                                .char_limit(96)
+                                .desired_width(240.0),
+                        );
+                        self.automation
+                            .insert("dialog.external.device".into(), d.rect);
+                    });
+                    ui.horizontal(|ui| {
+                        let mut has_port = draft.config.port.is_some();
+                        let toggle = ui.checkbox(&mut has_port, "Device port");
+                        self.automation
+                            .insert("dialog.external.port_toggle".into(), toggle.rect);
+                        if toggle.changed() {
+                            draft.config.port = if has_port { Some(1) } else { None };
+                        }
+                        if let Some(port) = draft.config.port.as_mut() {
+                            let p =
+                                ui.add(egui::DragValue::new(port).range(1..=65_535).speed(1.0).prefix("Connector "));
+                            self.automation
+                                .insert("dialog.external.port".into(), p.rect);
+                        } else {
+                            ui.label("Default");
+                        }
+                    });
+                    ui.horizontal(|ui| {
+                        ui.label(RichText::new("Audio device").size(11.5).color(FORM_TEXT));
+                        let a = ui.add(
+                            egui::TextEdit::singleline(&mut draft.config.audio_device)
+                                .hint_text("Default")
+                                .char_limit(96)
+                                .desired_width(240.0),
+                        );
+                        self.automation
+                            .insert("dialog.external.audio_device".into(), a.rect);
+                    });
+                    ui.horizontal(|ui| {
+                        ui.label(RichText::new("Audio bus").size(11.5).color(FORM_TEXT));
+                        let label = match draft.config.audio_bus {
+                            None | Some(0) => "Master".to_string(),
+                            Some(1) => "A".to_string(),
+                            Some(2) => "B".to_string(),
+                            Some(other) => format!("Bus {other}"),
+                        };
+                        let bus_picker = egui::ComboBox::from_id_salt("dialog.external.bus")
+                            .width(120.0)
+                            .selected_text(label)
+                            .show_ui(ui, |ui| {
+                                for (value, name) in
+                                    [(None, "Master"), (Some(1_u8), "A"), (Some(2_u8), "B")]
+                                {
+                                    let r = ui.selectable_label(
+                                        draft.config.audio_bus.unwrap_or(0) == value.unwrap_or(0),
+                                        name,
+                                    );
+                                    self.automation
+                                        .insert(format!("dialog.external.bus.{name}"), r.rect);
+                                    if r.clicked() {
+                                        draft.config.audio_bus = value;
+                                    }
+                                }
+                            });
+                        self.automation.insert("dialog.external.bus".into(), bus_picker.response.rect);
+                    });
+                    let alpha = ui.checkbox(&mut draft.config.alpha_channel, "Alpha channel requested (requires output backend)");
+                    self.automation.insert("dialog.external.alpha".into(), alpha.rect);
+                    ui.horizontal(|ui| {
+                        ui.label(RichText::new("Audio delay").size(11.5).color(FORM_TEXT));
+                        let d = ui.add(
+                            egui::DragValue::new(&mut draft.config.audio_delay_ms)
+                                .range(0..=MAX_AUDIO_DELAY_MS)
+                                .speed(5.0)
+                                .suffix(" ms"),
+                        );
+                        self.automation
+                            .insert("dialog.external.delay".into(), d.rect);
+                    });
+                });
+            self.automation.insert("dialog.external.body".into(), body);
+            ui.separator();
+            ui.horizontal(|ui| {
+                ui.with_layout(egui::Layout::right_to_left(Align::Center), |ui| {
+                    let cancel = ui.add(
+                        egui::Button::new("Cancel")
+                            .fill(CHIP_BG)
+                            .min_size(Vec2::new(92.0, 29.0)),
+                    );
+                    self.automation
+                        .insert("dialog.external.cancel".into(), cancel.rect);
+                    if cancel.clicked() {
+                        cancel_clicked = true;
+                    }
+                    let apply = ui.add(
+                        egui::Button::new(RichText::new("Apply selected output").color(Color32::WHITE).strong())
+                            .fill(CHIP_BG)
+                            .min_size(Vec2::new(92.0, 29.0)),
+                    );
+                    self.automation
+                        .insert("dialog.external.apply".into(), apply.rect);
+                    if apply.clicked() {
+                        apply_clicked = true;
+                    }
+                });
+            });
+        });
+        if cancel_clicked || !open {
+            self.external_settings = None;
+        } else {
+            if let Some(staged) = editor.outputs.iter_mut().find(|o| o.number == slot) {
+                *staged = draft.clone();
+            }
+            editor.selected = slot;
+            self.external_settings = Some(editor);
+            if apply_clicked {
+                self.actions.push(Action::ApplyExternal(draft));
+            }
         }
     }
 

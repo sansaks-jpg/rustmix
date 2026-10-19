@@ -1,5 +1,11 @@
 # Reference findings mapped to RustMix
 
+Task 1.3 source update (2026-10-19): four external-output route/configuration records, atomic
+complete-slot Apply and schema-6 persistence are implemented in RustMix. This is **source-only**
+experimental configuration work; new engine/widget/native acceptance is pending. No external
+frame sink, hardware device, network output, XML state endpoint or reference parity is claimed.
+Historical test results and schema-5 evidence below apply only to their named revisions.
+
 **Full audit: [all 30 areas plus the 40 input / 20 effect / 16 overlay / 9 audio contracts](reference-audit.md).**
 The full-match acceptance gate currently fails; neither this comparison nor a green functional CI run means all reference features are implemented.
 
@@ -22,7 +28,7 @@ Features remain experimental and performance/full-reference qualification did no
 | Device/network inputs | No backend | Webcam, capture card, desktop capture, RTSP/SRT/NDI/OMT/browser/guest inputs remain absent |
 | Audio Master + A–G, DSP, mix-minus | Master/A/B simulated controls and meters | Real samples/devices/routing/DSP and larger bus graph remain absent |
 | Sixteen overlay channels / key-fill | Eight title-panel channels plus eight stinger channels (configured input, cut point, display-underneath) inside the schema-5 bank, plus input PIP/keying | Task 1.1 port added the 16-channel bank, `overlay.stinger.*` commands and the cut-point Program/Preview exchange; stinger clip compositing, template animation, full-frame overlay channels and key/fill remain absent |
-| Multiview and outputs | In-app monitor/grid layouts | Independent monitor outputs, SDI, virtual camera and network outputs remain absent |
+| Multiview and outputs | In-app monitor/grid layouts; four saved external-output route/configuration records (Task 1.3 source only) | Atomic slot editing and schema6 tests prepared, execution/native acceptance pending; independent monitor outputs, SDI, virtual camera and network backends remain absent |
 | Record / Stream / MultiCorder | Disabled unavailable actions | Encoders, file recovery and network streaming remain absent |
 | Replay and ISO | No backend | Storage, replay transport and clip export remain absent |
 | Titles, data sources and virtual sets | Procedural graphics, title panels, PIP | No GT/proprietary templates, data connectors or virtual-set asset packages |

@@ -1852,6 +1852,7 @@ impl RustMixApp {
         self.input_properties_dialog(ctx);
         self.settings_dialog(ctx);
         self.overlay_settings_dialog(ctx);
+        self.external_settings_dialog(ctx);
         self.recording_setup_dialog(ctx);
         self.streaming_setup_dialog(ctx);
         self.multicorder_dialog(ctx);

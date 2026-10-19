@@ -1,5 +1,12 @@
 # Known gaps
 
+Task 1.3 continuation (2026-10-19): four external-output configuration slots and staged editing
+are implemented in source, with schema 6 and atomic source/config changes. New regression tests
+are prepared, not executed in this session. G05 remains open: configuration is not an SDI,
+virtual-camera or network output backend, and External Start stays unavailable. Device port is a
+hardware connector placeholder (Default or a numbered connector), not a network port. No new
+hardware/cadence qualification is claimed. See [ADR 0014](adr/0014-external-output-configuration.md).
+
 The [complete reference audit](reference-audit.md) enumerates all observed areas, input/effect/
 overlay/audio contracts, UI workflows and public function names. Full-match acceptance is false:
 major media/audio/output/API backends are absent, and hosted cadence/hardware qualification

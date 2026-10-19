@@ -54,6 +54,14 @@ fn decode(bytes: &[u8]) -> Result<ProjectState> {
     let Some(object) = value.as_object_mut() else {
         return Err(invalid("Project JSON must be an object"));
     };
+    // Only pre-output schemas may omit the bank. Missing current-schema state
+    // is corruption, not a request to silently clear all output assignments.
+    if schema < 6 && !object.contains_key("outputs") {
+        object.insert(
+            "outputs".into(),
+            serde_json::to_value(crate::ExternalOutputBank::default())?,
+        );
+    }
     object.insert("schema".into(), SCHEMA.into());
     let mut p: ProjectState = serde_json::from_value(value)?;
     // Older descriptors retain source IDs, routing and layout. New production

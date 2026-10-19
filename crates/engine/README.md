@@ -1,5 +1,18 @@
 # rustmix-engine
 
+Task 1.3 source candidate: schema 6 adds four independent external-output configuration
+slots (`outputs`). `output.route.set` and `output.external.configure` update individual
+fields; `output.external.apply` validates and publishes a complete slot atomically in
+one revision. Settings preserve Program/Preview, transitions and existing audio routing.
+The hardware connector `port` is a 1-based descriptor (`None` = device default), not a
+network port; device and connector support is unverified until a backend enumerates it.
+Schemas 1-5 migrate with an unassigned default bank while preserving rollback bytes;
+schema 6 requires the bank and rejects corrupt output state. Tests cover these paths,
+invalid configurations, source removal and revision exhaustion but have not been run
+for this patch. Local formatting/static checks only; hosted Windows execution remains
+required. No hardware output, encoder, streaming, NDI/OMT, live state or separate
+fullscreen output is implemented by this configuration model.
+
 Task 1.1 port: schema 5 replaces the fixed four-overlay array with the sixteen-channel
 production bank - eight title-panel channels and eight stinger channels driven by
 `overlay.stinger.set` / `overlay.stinger.trigger` / `overlay.stinger.stop`, with a cut-point

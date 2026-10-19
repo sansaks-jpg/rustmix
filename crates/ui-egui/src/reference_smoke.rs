@@ -22,6 +22,7 @@ impl RustMixApp {
                         3 => "reference-categories",
                         6 => "reference-search",
                         10 => "reference-audio-hidden",
+                        20 => "reference-output-settings",
                         _ => "reference-light",
                     }
                 };
@@ -165,11 +166,68 @@ impl RustMixApp {
                 s.stage = 13;
             }
             13 if s.captured => {
-                if self.scripted_save("artifacts/reference.rustmix.json", ctx)? {
-                    s.stage = 14;
-                }
+                self.native_click(s, "output.external.open")?;
+                s.stage = 14;
             }
             14 => {
+                self.validate_dialog_geometry(ctx, "dialog.external")?;
+                self.native_click(s, "dialog.external.source.program")?;
+                s.stage = 15;
+            }
+            15 => {
+                self.native_click(s, "dialog.external.rate")?;
+                s.stage = 16;
+            }
+            16 => {
+                self.native_click(s, "dialog.external.rate.59.94")?;
+                s.stage = 17;
+            }
+            17 => {
+                self.native_click(s, "dialog.external.port_toggle")?;
+                s.stage = 18;
+            }
+            18 => {
+                self.native_click(s, "dialog.external.apply")?;
+                s.stage = 19;
+            }
+            19 => {
+                Self::assert_reference_outputs(self.engine.project())?;
+                if self.external_settings.is_none() || self.external_active {
+                    return Err(Error::Invalid(
+                        "Output Apply lost the editor or started an unavailable backend".into(),
+                    ));
+                }
+                self.validate_dialog_geometry(ctx, "dialog.external")?;
+                std::fs::write(
+                    "artifacts/reference-output-elements.json",
+                    serde_json::to_vec_pretty(
+                        &self
+                            .automation
+                            .iter()
+                            .filter(|(id, _)| id.starts_with("dialog.external"))
+                            .map(|(id, rect)| (id, format!("{rect:?}")))
+                            .collect::<HashMap<_, _>>(),
+                    )?,
+                )?;
+                ctx.send_viewport_cmd(egui::ViewportCommand::Screenshot(egui::UserData::default()));
+                s.captured = false;
+                s.stage = 20;
+            }
+            20 if s.captured => {
+                self.native_click(s, "dialog.external.cancel")?;
+                s.stage = 21;
+            }
+            21 => {
+                if self.external_settings.is_some() {
+                    return Err(Error::Invalid(
+                        "External Output Cancel did not close".into(),
+                    ));
+                }
+                if self.scripted_save("artifacts/reference.rustmix.json", ctx)? {
+                    s.stage = 22;
+                }
+            }
+            22 => {
                 if self.job.is_some() {
                     return Ok(());
                 }
@@ -195,6 +253,7 @@ impl RustMixApp {
     /// the widget tests so a schema bump cannot silently break the native
     /// reopen check again.
     pub(crate) fn assert_reference_reopen(state: &ProjectState) -> Result<()> {
+        Self::assert_reference_outputs(state)?;
         if state.schema != SCHEMA
             || state
                 .input(InputId(1))
@@ -210,6 +269,27 @@ impl RustMixApp {
         {
             return Err(Error::Invalid(
                 "Reference category/theme configuration did not reopen".into(),
+            ));
+        }
+        Ok(())
+    }
+
+    fn assert_reference_outputs(state: &ProjectState) -> Result<()> {
+        let expected_rate = Rate::new(60000, 1001)?;
+        if state.outputs.slot(1).is_none_or(|output| {
+            output.source != OutputSource::Program
+                || output.config.frame_rate != expected_rate
+                || output.config.port != Some(1)
+                || output.config.width != 1920
+                || output.config.height != 1080
+        }) || state
+            .outputs
+            .iter()
+            .skip(1)
+            .any(|output| output.source != OutputSource::None)
+        {
+            return Err(Error::Invalid(
+                "External output configuration did not apply/reopen independently".into(),
             ));
         }
         Ok(())
@@ -240,6 +320,11 @@ mod tests {
             &ctx,
         );
         app.execute(Command::SetInputCategory(InputId(1), Some(0)));
+        let mut output = app.engine.project().outputs.slot(1).unwrap().clone();
+        output.source = OutputSource::Program;
+        output.config.frame_rate = Rate::new(60000, 1001).unwrap();
+        output.config.port = Some(1);
+        app.execute(Command::SetExternalOutput(output));
         assert!(RustMixApp::assert_reference_reopen(app.engine.project()).is_ok());
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("reference.rustmix.json");

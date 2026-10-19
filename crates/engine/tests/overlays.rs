@@ -181,7 +181,7 @@ fn schema_four_migrates_title_panels_into_the_channel_bank() {
     let original = serde_json::to_vec(&value).unwrap();
     std::fs::write(&path, &original).unwrap();
     let migrated = persistence::load(&path).unwrap();
-    assert_eq!(migrated.schema, 5);
+    assert_eq!(migrated.schema, SCHEMA);
     assert_eq!(migrated.overlays.standard[0].title, "Legacy One");
     assert!(migrated.overlays.standard[0].enabled);
     assert_eq!(migrated.overlays.standard[0].position, Position::LowerRight);

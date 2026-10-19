@@ -1,5 +1,14 @@
 # rustmix-ui
 
+Task 1.3 candidate: the External gear opens four independently staged output
+configurations. Apply selected output dispatches the atomic
+`output.external.apply` engine command and keeps the other drafts; Cancel closes
+and discards only unapplied edits. Source, rate, size, device/connector, audio
+device/bus, alpha request and audio delay are project configuration only. External
+start stays disabled because no device or transport backend exists. Widget coverage
+and native `reference-output-settings.png` plus save/reopen assertions are prepared;
+they require the hosted Windows workflow and have not been run locally.
+
 Task 1.1 port: the switcher's overlay buttons are a live 4×2 grid
 (`switcher.overlay.{1..8}`), the source-tile strip assigns all eight channels, the Overlays panel
 and Overlay Settings dialog cover channels 1–8, and default F-keys run F1–F8. Stinger channels are
