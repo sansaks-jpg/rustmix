@@ -415,10 +415,10 @@ impl<R: FrameReader> Playback<R> {
         Ok(())
     }
     fn step(&mut self, control: VideoControl, now: u64) -> Result<Step, String> {
-        if let Some(generation) = self.restart_generation {
-            if generation != control.restart_generation {
-                self.seek_cycle(now, true)?;
-            }
+        if let Some(generation) = self.restart_generation
+            && generation != control.restart_generation
+        {
+            self.seek_cycle(now, true)?;
         }
         self.restart_generation = Some(control.restart_generation);
         self.pacer.pause(control.paused, now)?;
