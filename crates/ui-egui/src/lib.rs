@@ -2179,6 +2179,11 @@ impl RustMixApp {
 
     fn frame_ui(&mut self, ui: &mut egui::Ui) {
         let ctx = ui.ctx().clone();
+        // `eframe` may inject a deferred Program-viewport screenshot into this
+        // operator window's input; forward it before the smoke harness polls so
+        // a captured Program frame cannot be discarded by the parent window.
+        let program_output = &self.program_output;
+        ctx.input(|input| program_output.harvest_capture_events(&input.events));
         self.automation.clear();
         self.now = u64::try_from(self.start.elapsed().as_millis()).unwrap_or(u64::MAX);
         let previous_alarm = self.engine.playlist_alarm().map(str::to_owned);

@@ -46,6 +46,26 @@ pub(crate) struct Capture {
     pub image: Arc<egui::ColorImage>,
 }
 
+/// Moves this viewport's screenshot events into the bounded mailbox. A
+/// capacity-one channel with `try_send` keeps a stalled acceptance consumer
+/// from blocking either native window.
+fn harvest_screenshots(events: &[egui::Event], sender: &SyncSender<Capture>) {
+    for event in events {
+        if let egui::Event::Screenshot {
+            viewport_id: id,
+            image,
+            ..
+        } = event
+            && *id == viewport_id()
+        {
+            let _ = sender.try_send(Capture {
+                viewport: *id,
+                image: Arc::clone(image),
+            });
+        }
+    }
+}
+
 pub(crate) struct ProgramOutput {
     signals: Arc<Signals>,
     captures: Receiver<Capture>,
@@ -178,6 +198,14 @@ impl ProgramOutput {
     pub fn take_capture(&self) -> Option<Capture> {
         self.captures.try_recv().ok()
     }
+    /// Forwards a deferred Program-viewport screenshot. `eframe` injects
+    /// pending screenshots into whichever native window processes its next
+    /// frame first, and the operator window repaints continuously during
+    /// scripted acceptance, so a Program capture can arrive in the operator
+    /// frame's input instead of the child callback's. Both frames call this.
+    pub fn harvest_capture_events(&self, events: &[egui::Event]) {
+        harvest_screenshots(events, &self.capture_sender);
+    }
     pub fn show(&self, ctx: &egui::Context, texture: Option<egui::TextureHandle>) {
         if !self.is_open() {
             return;
@@ -263,21 +291,8 @@ impl ProgramOutput {
             }
             // Screenshot readback is opt-in hosted acceptance only. The
             // capacity-one mailbox cannot stall either viewport.
-            for event in ctx.input(|input| input.events.clone()) {
-                if let egui::Event::Screenshot {
-                    viewport_id: id,
-                    image,
-                    ..
-                } = event
-                    && id == viewport_id()
-                {
-                    let _ = captures.try_send(Capture {
-                        viewport: id,
-                        image,
-                    });
-                    ctx.request_repaint_of(egui::ViewportId::ROOT);
-                }
-            }
+            let events = ctx.input(|input| input.events.clone());
+            harvest_screenshots(&events, &captures);
             if signals.capture_requested.swap(false, Ordering::AcqRel) {
                 ctx.send_viewport_cmd(egui::ViewportCommand::Screenshot(egui::UserData::default()));
             }
@@ -445,6 +460,37 @@ mod tests {
             !textures.contains(&preview),
             "Preview cannot enter child output"
         );
+    }
+
+    #[test]
+    fn parent_frame_forwards_only_deferred_program_screenshots_through_bounded_mailbox() {
+        let output = ProgramOutput::default();
+        let image = Arc::new(egui::ColorImage::filled(
+            [4, 3],
+            egui::Color32::from_rgb(10, 20, 30),
+        ));
+        let screenshot = |viewport_id| egui::Event::Screenshot {
+            viewport_id,
+            user_data: egui::UserData::default(),
+            image: Arc::clone(&image),
+        };
+        output.harvest_capture_events(&[screenshot(egui::ViewportId::ROOT)]);
+        assert!(
+            output.take_capture().is_none(),
+            "operator-window screenshots are not Program output frames"
+        );
+        output.harvest_capture_events(&[screenshot(viewport_id())]);
+        let capture = output
+            .take_capture()
+            .expect("deferred Program screenshot must be forwarded");
+        assert_eq!(capture.viewport, viewport_id());
+        assert_eq!(capture.image.size(), [4, 3]);
+        assert_eq!(capture.image.pixels.first(), image.pixels.first());
+        // The capacity-one mailbox keeps a stalled consumer from blocking a
+        // native window, and stale duplicates are dropped rather than queued.
+        output.harvest_capture_events(&[screenshot(viewport_id()), screenshot(viewport_id())]);
+        assert!(output.take_capture().is_some());
+        assert!(output.take_capture().is_none());
     }
 
     #[test]

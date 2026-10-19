@@ -96,7 +96,7 @@ impl RustMixApp {
                 s.stage = 8;
             }
             8 => {
-                if !self.save_output_capture("program-output-window", false)? {
+                if !self.wait_output_capture(ctx, "program-output-window", false, s)? {
                     return Ok(());
                 }
                 self.execute(Command::FadeBlack);
@@ -110,7 +110,7 @@ impl RustMixApp {
                 s.stage = 10;
             }
             10 => {
-                if !self.save_output_capture("program-output-black", true)? {
+                if !self.wait_output_capture(ctx, "program-output-black", true, s)? {
                     return Ok(());
                 }
                 self.execute(Command::FadeBlack);
@@ -141,7 +141,7 @@ impl RustMixApp {
                 s.stage = 13;
             }
             13 => {
-                if !self.save_output_capture("program-output-live", false)? {
+                if !self.wait_output_capture(ctx, "program-output-live", false, s)? {
                     return Ok(());
                 }
                 // Native close request must tear down only the child window.
@@ -214,6 +214,22 @@ impl RustMixApp {
             .program_pixels
             .as_ref()
             .is_some_and(|actual| actual.as_ref() == expected.as_ref()))
+    }
+
+    /// A screenshot request or readback can be lost while the child window
+    /// transitions between fullscreen states, so re-request on a bounded frame
+    /// cadence instead of waiting out the whole timeout on one lost capture.
+    fn wait_output_capture(
+        &self,
+        ctx: &egui::Context,
+        name: &str,
+        black: bool,
+        s: &smoke::Smoke,
+    ) -> Result<bool> {
+        if s.wait > 0 && s.wait.is_multiple_of(20) {
+            self.program_output.request_capture(ctx);
+        }
+        self.save_output_capture(name, black)
     }
 
     fn save_output_capture(&self, name: &str, black: bool) -> Result<bool> {
