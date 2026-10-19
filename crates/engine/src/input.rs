@@ -70,6 +70,47 @@ fn valid_audio_identity(value: &str) -> bool {
     value.len() <= 4096 && !value.trim().is_empty() && !value.chars().any(char::is_control)
 }
 
+/// Persisted video identity only; platform workers open and decode the file.
+/// A descriptor never establishes that its container's codec is supported.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum VideoSource {
+    File { path: String },
+}
+
+impl VideoSource {
+    pub fn label(&self) -> &'static str {
+        "Video file"
+    }
+
+    pub fn validate(&self) -> Result<()> {
+        let Self::File { path } = self;
+        if !valid_audio_identity(path) {
+            return Err(invalid(
+                "Video file source must reference a local MP4 path of at most 4096 bytes",
+            ));
+        }
+        let mut colons = path.match_indices(':');
+        let colon_is_drive = match colons.next() {
+            None => true,
+            Some((1, _)) => path.as_bytes().first().is_some_and(u8::is_ascii_alphabetic),
+            Some(_) => false,
+        } && colons.next().is_none();
+        if path.starts_with("//")
+            || path.starts_with(r"\\")
+            || !colon_is_drive
+            || !std::path::Path::new(path)
+                .extension()
+                .and_then(|extension| extension.to_str())
+                .is_some_and(|extension| extension.eq_ignore_ascii_case("mp4"))
+        {
+            return Err(invalid(
+                "Video file source must reference a local MP4 path of at most 4096 bytes",
+            ));
+        }
+        Ok(())
+    }
+}
+
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ImageFit {
     #[default]
@@ -97,6 +138,9 @@ pub struct InputConfig {
     /// Audio-only source; a consumer must display its explicit slate rather
     /// than presenting the input's procedural kind as decoded video.
     pub audio_source: Option<AudioSource>,
+    /// External video descriptor. Timestamped decoded frames live in the
+    /// bounded runtime feed, never inside the saved project.
+    pub video_source: Option<VideoSource>,
     pub image_fit: ImageFit,
 }
 impl Default for InputConfig {
@@ -115,18 +159,25 @@ impl Default for InputConfig {
             pip_source: None,
             media_path: None,
             audio_source: None,
+            video_source: None,
             image_fit: ImageFit::Contain,
         }
     }
 }
 impl InputConfig {
     pub(crate) fn validate(&self) -> Result<()> {
-        if self.media_path.is_some() && self.audio_source.is_some() {
+        if (self.media_path.is_some()
+            && (self.audio_source.is_some() || self.video_source.is_some()))
+            || (self.audio_source.is_some() && self.video_source.is_some())
+        {
             return Err(invalid(
-                "An input cannot contain both a PNG and an audio source",
+                "Assign only one PNG, audio or video source to an input",
             ));
         }
         if let Some(source) = &self.audio_source {
+            source.validate()?;
+        }
+        if let Some(source) = &self.video_source {
             source.validate()?;
         }
         for (value, low, high) in [

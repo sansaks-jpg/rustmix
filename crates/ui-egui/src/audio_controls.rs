@@ -43,6 +43,17 @@ pub(crate) struct AudioUi {
     add_error: Option<String>,
 }
 impl AudioUi {
+    pub(crate) fn validated_wav_metadata(&self) -> Option<(u32, usize)> {
+        self.wav_info
+            .as_ref()
+            .map(|info| (info.sample_rate, info.frames))
+    }
+    pub(crate) fn wav_validation_pending(&self) -> bool {
+        self.wav_job.is_some()
+    }
+    pub(crate) fn wav_validation_error(&self) -> Option<&str> {
+        self.add_error.as_deref()
+    }
     pub(crate) fn is_active(&self) -> bool {
         self.session.is_some()
     }

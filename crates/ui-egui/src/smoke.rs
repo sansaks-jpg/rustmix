@@ -64,6 +64,10 @@ impl RustMixApp {
         self.smoke = Some(s);
     }
     fn smoke_run(&mut self, ctx: &egui::Context, s: &mut Smoke) -> Result<()> {
+        if std::env::args().any(|arg| arg == "--ui-audio-smoke" || arg == "--ui-audio-smoke-reopen")
+        {
+            return self.smoke_audio(ctx, s);
+        }
         if std::env::args()
             .any(|arg| arg == "--ui-output-smoke" || arg == "--ui-output-smoke-reopen")
         {

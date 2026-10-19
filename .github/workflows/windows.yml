@@ -51,6 +51,7 @@ jobs:
           path: artifacts/
           if-no-files-found: warn
       - name: Package Windows executable
+        if: ${{ !cancelled() && hashFiles('target/release/rustmix.exe') != '' }}
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Path dist -Force | Out-Null
@@ -58,7 +59,9 @@ jobs:
           Copy-Item -LiteralPath README.md,ATTRIBUTION.md,LICENSE-MIT -Destination dist/
           ./scripts/collect-notices.ps1
           Get-FileHash -Algorithm SHA256 dist/rustmix.exe | Format-List | Out-File dist/SHA256.txt
+          'Experimental build. Check the associated GitHub run for actual test outcomes. Physical display/audio acceptance and complete vMix-class functionality are not qualified.' | Set-Content dist/BUILD-STATUS.txt
       - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() && hashFiles('dist/rustmix.exe') != '' }}
         with:
           name: rustmix-windows-x64
           path: dist/

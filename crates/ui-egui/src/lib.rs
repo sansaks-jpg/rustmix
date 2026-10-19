@@ -1,8 +1,10 @@
 #![forbid(unsafe_code)]
 mod audio_controls;
 mod audio_session;
+mod audio_smoke;
 mod controls;
 mod dialogs;
+mod extended_output;
 mod inputs;
 mod media;
 mod output_smoke;
@@ -18,6 +20,7 @@ mod workspace;
 
 use eframe::egui::{self, Color32, Pos2, Rect, RichText, Sense, Stroke, Vec2};
 use egui_dock::{DockArea, DockState, NodeIndex, TabViewer};
+use raw_window_handle::{HasWindowHandle, RawWindowHandle};
 use rustmix_engine::*;
 use serde::{Deserialize, Serialize};
 use std::{
@@ -458,6 +461,7 @@ pub(crate) enum Action {
     BasicMode,
     Multiview,
     Fullscreen,
+    ProgramOutputExtend,
     ProgramOutputOpen,
     ProgramOutputClose,
     ProgramOutputFullscreen,
@@ -602,6 +606,7 @@ pub struct RustMixApp {
     pub(crate) multiview_split: bool,
     pub(crate) fullscreen: bool,
     pub(crate) program_output: program_output::ProgramOutput,
+    pub(crate) extended_output: extended_output::ExtendedOutput,
     pub(crate) audio_ui: audio_controls::AudioUi,
     pub(crate) confirm_new: bool,
     pub(crate) confirm_close: bool,
@@ -621,11 +626,19 @@ pub struct RustMixApp {
     monitor_view_height: Option<f32>,
     /// Retained only to drain submitted work during explicit application exit.
     gpu_device: Option<eframe::wgpu::Device>,
+    pub(crate) operator_hwnd: Option<usize>,
 }
 
 impl RustMixApp {
     pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
         let mut app = Self::headless();
+        app.operator_hwnd = cc
+            .window_handle()
+            .ok()
+            .and_then(|handle| match handle.as_raw() {
+                RawWindowHandle::Win32(window) => Some(window.hwnd.get() as usize),
+                _ => None,
+            });
         app.gpu_device = cc
             .wgpu_render_state
             .as_ref()
@@ -644,6 +657,12 @@ impl RustMixApp {
             app.basic_mode = storage.get_string("basic-mode.v1").as_deref() == Some("true");
             app.program_output
                 .restore_preferences(storage.get_string("program-output.v1").as_deref());
+            app.extended_output.restore_selected_id(
+                storage
+                    .get_string("program-extended-display.v1")
+                    .as_deref()
+                    .filter(|id| !id.is_empty()),
+            );
         }
         if let Some(path) = std::env::args()
             .skip(1)
@@ -662,6 +681,8 @@ impl RustMixApp {
                     | "--ui-reference-smoke-reopen"
                     | "--ui-output-smoke"
                     | "--ui-output-smoke-reopen"
+                    | "--ui-audio-smoke"
+                    | "--ui-audio-smoke-reopen"
             )
         }) {
             app.smoke = Some(smoke::Smoke::default());
@@ -830,6 +851,7 @@ impl RustMixApp {
             multiview_split: true,
             fullscreen: false,
             program_output: program_output::ProgramOutput::default(),
+            extended_output: extended_output::ExtendedOutput::default(),
             audio_ui: audio_controls::AudioUi::default(),
             confirm_new: false,
             confirm_close: false,
@@ -848,6 +870,7 @@ impl RustMixApp {
             tbar_latched: false,
             monitor_view_height: None,
             gpu_device: None,
+            operator_hwnd: None,
         }
     }
 
@@ -1413,6 +1436,7 @@ impl RustMixApp {
             }
             Action::BasicMode => self.basic_mode = !self.basic_mode,
             Action::Multiview => self.multiview = !self.multiview,
+            Action::ProgramOutputExtend => self.toggle_extended_output(ctx),
             Action::Fullscreen => {
                 self.fullscreen = !self.fullscreen;
                 ctx.send_viewport_cmd(egui::ViewportCommand::Fullscreen(self.fullscreen));
@@ -1584,8 +1608,10 @@ impl RustMixApp {
                 let fullscreen = ui
                     .add(
                         egui::Button::new(
-                            RichText::new(if self.fullscreen {
-                                "Exit Fullscreen"
+                            RichText::new(if self.extended_output.is_active() {
+                                "Stop Fullscreen"
+                            } else if self.extended_output.is_pending() {
+                                "Starting…"
                             } else {
                                 "Fullscreen"
                             })
@@ -1594,15 +1620,22 @@ impl RustMixApp {
                         .min_size(egui::vec2(78.0, 22.0)),
                     )
                     .on_hover_text(
-                        "Expand the application window; use the adjacent menu for a separate Program window",
+                        "Send Program fullscreen to the extended display; the operator window stays here",
                     );
                 self.automation
                     .insert("toolbar.fullscreen".into(), fullscreen.rect);
                 if fullscreen.clicked() {
-                    self.actions.push(Action::Fullscreen);
+                    self.actions.push(Action::ProgramOutputExtend);
                 }
                 let menu = caret_menu_button(ui, 22.0, |ui| {
+                    self.extended_output_menu(ui);
+                    ui.separator();
                     self.program_output_menu(ui);
+                    ui.separator();
+                    if ui.button("Toggle operator window fullscreen").clicked() {
+                        self.actions.push(Action::Fullscreen);
+                        ui.close();
+                    }
                 });
                 self.automation.insert("output.program.menu".into(), menu.response.rect);
             }
@@ -1644,6 +1677,7 @@ impl RustMixApp {
                         ui.close();
                     }
                 });
+                self.automation.insert("toolbar.settings.menu".into(), settings_menu.response.rect);
                 settings_menu
                     .response
                     .on_hover_text("Open a specific Settings category");
@@ -2158,6 +2192,7 @@ impl RustMixApp {
         self.poll_job(&ctx);
         self.poll_media();
         self.poll_audio(&ctx);
+        self.poll_extended_output(&ctx);
         self.shortcuts(&ctx);
         self.refresh_textures(&ctx);
         let dialog_busy = self.add_open
@@ -2325,9 +2360,12 @@ impl eframe::App for RustMixApp {
                 submission_index: None,
                 timeout: Some(Duration::from_secs(10)),
             });
-            if self.smoke.is_some() {
+            if self.smoke.is_some() || std::env::args().any(|arg| arg == "--ui-perf") {
                 let evidence = match result {
-                    Ok(_) => "GPU submissions drained before native teardown".to_owned(),
+                    Ok(status) if status.is_queue_empty() => {
+                        "GPU submissions drained before native teardown".to_owned()
+                    }
+                    Ok(status) => format!("GPU shutdown drain did not empty the queue: {status:?}"),
                     Err(error) => format!("GPU shutdown drain failed: {error}"),
                 };
                 let _ = std::fs::write("artifacts/gpu-shutdown.txt", evidence);
@@ -2358,6 +2396,13 @@ impl eframe::App for RustMixApp {
     fn save(&mut self, storage: &mut dyn eframe::Storage) {
         storage.set_string("basic-mode.v1", self.basic_mode.to_string());
         storage.set_string("program-output.v1", self.program_output.preferences_json());
+        storage.set_string(
+            "program-extended-display.v1",
+            self.extended_output
+                .selected_id()
+                .unwrap_or_default()
+                .to_owned(),
+        );
         if let Ok(json) = serde_json::to_string(self.audio_restore.as_ref().unwrap_or(&self.dock)) {
             storage.set_string("workspace.v2", json);
         }

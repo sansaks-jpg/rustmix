@@ -4,7 +4,7 @@ pub mod audio_engine;
 pub mod categories;
 pub use categories::{InputCategory, PRESET_CATEGORIES};
 pub mod input;
-pub use input::{AudioSource, ImageFit, InputConfig};
+pub use input::{AudioSource, ImageFit, InputConfig, VideoSource};
 pub mod output;
 pub use output::{
     EXTERNAL_OUTPUTS, ExternalOutput, ExternalOutputBank, ExternalOutputConfig, MAX_AUDIO_DELAY_MS,
@@ -27,6 +27,7 @@ pub mod render;
 pub mod shortcuts;
 pub use shortcuts::{ShortcutAction, ShortcutBinding, default_key_bindings};
 pub mod video_clock;
+pub mod video_source;
 pub mod wav;
 
 use serde::{Deserialize, Serialize};
@@ -148,6 +149,20 @@ pub struct InputState {
     #[serde(default)]
     pub category: Option<u8>,
 }
+impl InputState {
+    /// The actual source contract, independent of its procedural fallback enum.
+    pub fn source_label(&self) -> &'static str {
+        if let Some(source) = &self.config.audio_source {
+            source.label()
+        } else if self.config.video_source.is_some() {
+            "MP4 video"
+        } else if self.config.media_path.is_some() {
+            "PNG image"
+        } else {
+            self.kind.label()
+        }
+    }
+}
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Position {
     LowerLeft,
@@ -185,12 +200,13 @@ pub struct WorkspaceState {
     pub name: String,
     pub dock_json: String,
 }
-/// Current project schema. Schema 7 adds typed audio-only source descriptors.
+/// Current project schema. Schema 8 adds typed video-file source descriptors.
+/// Schema 7 adds typed audio-only source descriptors.
 /// Schema 6 adds the four external output slots
 /// (routing and configuration); schema 5 replaced the four-overlay array with
-/// the sixteen-channel production bank; 1–6 load through the persistence
+/// the sixteen-channel production bank; 1–7 load through the persistence
 /// migration.
-pub const SCHEMA: u32 = 7;
+pub const SCHEMA: u32 = 8;
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ProjectState {
     pub schema: u32,

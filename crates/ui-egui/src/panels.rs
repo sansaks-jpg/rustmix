@@ -1029,7 +1029,7 @@ impl RustMixApp {
                 visible.contains(&i.id)
                     && (needle.is_empty()
                         || i.name.to_lowercase().contains(&needle)
-                        || i.kind.label().to_lowercase().contains(&needle)
+                        || i.source_label().to_lowercase().contains(&needle)
                         || self.engine.project().input_number(i.id).to_string() == needle)
             })
             .cloned()
@@ -1294,7 +1294,7 @@ impl RustMixApp {
                                                                 overlay.enabled = !selected;
                                                                 overlay.title = input.name.clone();
                                                                 overlay.subtitle =
-                                                                    input.kind.label().into();
+                                                                    input.source_label().into();
                                                                 self.actions.push(Action::Engine(
                                                                     Command::SetOverlay(
                                                                         slot, overlay,
@@ -1401,7 +1401,7 @@ impl RustMixApp {
                                                                 overlay.enabled = !selected;
                                                                 overlay.title = input.name.clone();
                                                                 overlay.subtitle =
-                                                                    input.kind.label().into();
+                                                                    input.source_label().into();
                                                                 self.actions.push(Action::Engine(
                                                                     Command::SetOverlay(
                                                                         slot, overlay,

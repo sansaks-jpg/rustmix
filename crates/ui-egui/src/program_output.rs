@@ -2,7 +2,7 @@
 //! it does not create a second media scheduler, encoder or device backend.
 use super::*;
 use std::sync::{
-    atomic::{AtomicBool, AtomicU32, Ordering},
+    atomic::{AtomicBool, AtomicU32, AtomicUsize, Ordering},
     mpsc::{SyncSender, sync_channel},
 };
 
@@ -37,6 +37,8 @@ struct Signals {
     capture_requested: AtomicBool,
     width: AtomicU32,
     height: AtomicU32,
+    target_monitor: AtomicUsize,
+    visible: AtomicBool,
 }
 
 pub(crate) struct Capture {
@@ -62,6 +64,8 @@ impl Default for ProgramOutput {
                 capture_requested: AtomicBool::new(false),
                 width: AtomicU32::new(preferences.width),
                 height: AtomicU32::new(preferences.height),
+                target_monitor: AtomicUsize::new(usize::MAX),
+                visible: AtomicBool::new(true),
             }),
             captures,
             capture_sender,
@@ -85,6 +89,10 @@ impl ProgramOutput {
         // A deliberate fresh start is always windowed, so an unplugged monitor
         // or a previous fullscreen session cannot hide a new output window.
         self.signals.fullscreen.store(false, Ordering::Release);
+        self.signals
+            .target_monitor
+            .store(usize::MAX, Ordering::Release);
+        self.signals.visible.store(true, Ordering::Release);
         self.signals.native_seen.store(false, Ordering::Release);
         self.signals
             .capture_requested
@@ -95,14 +103,50 @@ impl ProgramOutput {
     }
     pub fn close(&self, ctx: &egui::Context) {
         self.signals.open.store(false, Ordering::Release);
+        self.signals
+            .target_monitor
+            .store(usize::MAX, Ordering::Release);
         ctx.send_viewport_cmd_to(viewport_id(), egui::ViewportCommand::Close);
         ctx.request_repaint();
     }
     pub fn toggle_fullscreen(&self, ctx: &egui::Context) {
-        if self.is_open() {
+        if self.is_open() && self.target_monitor().is_none() {
             let next = !self.signals.fullscreen.fetch_xor(true, Ordering::AcqRel);
             ctx.send_viewport_cmd_to(viewport_id(), egui::ViewportCommand::Fullscreen(next));
             ctx.request_repaint();
+        }
+    }
+    pub fn target_monitor(&self) -> Option<usize> {
+        let index = self.signals.target_monitor.load(Ordering::Acquire);
+        (index != usize::MAX).then_some(index)
+    }
+    pub fn open_on_monitor(&self, ctx: &egui::Context, index: usize) {
+        self.open(ctx);
+        self.signals.target_monitor.store(index, Ordering::Release);
+        self.signals.fullscreen.store(true, Ordering::Release);
+        // A monitor index may become invalid after discovery. Verify the real
+        // native rectangle before revealing, so winit cannot expose a fallback
+        // window on the operator display during initial creation.
+        self.signals.visible.store(false, Ordering::Release);
+        // Reapply even if this viewport ID previously used the same monitor
+        // index: an optional window may have been moved since that builder.
+        ctx.send_viewport_cmd_to(viewport_id(), egui::ViewportCommand::Visible(false));
+        ctx.send_viewport_cmd_to(viewport_id(), egui::ViewportCommand::SetMonitor(index));
+    }
+    pub fn retarget_monitor(&self, ctx: &egui::Context, index: usize) {
+        self.signals.visible.store(false, Ordering::Release);
+        self.signals.target_monitor.store(index, Ordering::Release);
+        ctx.send_viewport_cmd_to(viewport_id(), egui::ViewportCommand::Visible(false));
+        ctx.send_viewport_cmd_to(viewport_id(), egui::ViewportCommand::SetMonitor(index));
+        ctx.request_repaint_of(viewport_id());
+    }
+    pub fn reveal_monitor(&self, ctx: &egui::Context) {
+        if self.is_open()
+            && self.target_monitor().is_some()
+            && !self.signals.visible.swap(true, Ordering::AcqRel)
+        {
+            ctx.send_viewport_cmd_to(viewport_id(), egui::ViewportCommand::Visible(true));
+            ctx.request_repaint_of(viewport_id());
         }
     }
     pub fn restore_preferences(&self, json: Option<&str>) {
@@ -144,95 +188,100 @@ impl ProgramOutput {
             signals.width.load(Ordering::Acquire) as f32,
             signals.height.load(Ordering::Acquire) as f32,
         );
-        ctx.show_viewport_deferred(
-            viewport_id(),
-            egui::ViewportBuilder::default()
-                .with_title("RustMix Program · F11 fullscreen · Escape closes output")
-                .with_inner_size(size)
-                .with_min_inner_size([320.0, 180.0])
-                .with_fullscreen(self.is_fullscreen()),
-            move |ui, class| {
-                // Never turn an embedded fallback into an apparent second output.
-                if class != egui::ViewportClass::Deferred {
-                    signals.open.store(false, Ordering::Release);
-                    ui.label("A separate native Program window is unavailable on this backend.");
-                    return;
-                }
-                signals.native_seen.store(true, Ordering::Release);
-                let ctx = ui.ctx().clone();
-                let native_fullscreen =
-                    ctx.input(|input| input.viewport().fullscreen == Some(true));
-                signals
-                    .native_fullscreen
-                    .store(native_fullscreen, Ordering::Release);
-                if ctx.input(|input| {
-                    input.viewport().close_requested() || input.key_pressed(egui::Key::Escape)
-                }) {
-                    signals.open.store(false, Ordering::Release);
-                    ctx.request_repaint_of(egui::ViewportId::ROOT);
-                    return;
-                }
-                if ctx.input(|input| input.key_pressed(egui::Key::F11)) {
-                    let next = !signals.fullscreen.fetch_xor(true, Ordering::AcqRel);
-                    ctx.send_viewport_cmd(egui::ViewportCommand::Fullscreen(next));
-                    ctx.request_repaint_of(egui::ViewportId::ROOT);
-                }
-                if !native_fullscreen && !signals.fullscreen.load(Ordering::Acquire) {
-                    let size = ctx.viewport_rect().size();
-                    if size.is_finite() && size.x >= 320.0 && size.y >= 180.0 {
-                        signals.width.store(
-                            size.x.round().clamp(320.0, 3840.0) as u32,
-                            Ordering::Release,
-                        );
-                        signals.height.store(
-                            size.y.round().clamp(180.0, 2160.0) as u32,
-                            Ordering::Release,
-                        );
-                    }
-                }
-                let bounds = ctx.viewport_rect();
-                ui.set_clip_rect(bounds);
-                ui.painter().rect_filled(bounds, 0.0, Color32::BLACK);
-                if let Some(texture) = &texture {
-                    ui.painter().image(
-                        texture.id(),
-                        fit_program(bounds),
-                        Rect::from_min_max(Pos2::ZERO, egui::pos2(1.0, 1.0)),
-                        Color32::WHITE,
+        let mut builder = egui::ViewportBuilder::default()
+            .with_title("RustMix Program · F11 fullscreen · Escape closes output")
+            .with_inner_size(size)
+            .with_min_inner_size([320.0, 180.0])
+            .with_fullscreen(self.is_fullscreen())
+            .with_visible(self.signals.visible.load(Ordering::Acquire));
+        if let Some(index) = self.target_monitor() {
+            builder = builder
+                .with_monitor(index)
+                .with_active(false)
+                .with_title("RustMix Program · Extended display · Escape closes output");
+        }
+        ctx.show_viewport_deferred(viewport_id(), builder, move |ui, class| {
+            // Never turn an embedded fallback into an apparent second output.
+            if class != egui::ViewportClass::Deferred {
+                signals.open.store(false, Ordering::Release);
+                signals.target_monitor.store(usize::MAX, Ordering::Release);
+                ui.label("A separate native Program window is unavailable on this backend.");
+                return;
+            }
+            signals.native_seen.store(true, Ordering::Release);
+            let ctx = ui.ctx().clone();
+            let native_fullscreen = ctx.input(|input| input.viewport().fullscreen == Some(true));
+            signals
+                .native_fullscreen
+                .store(native_fullscreen, Ordering::Release);
+            if ctx.input(|input| {
+                input.viewport().close_requested() || input.key_pressed(egui::Key::Escape)
+            }) {
+                signals.open.store(false, Ordering::Release);
+                signals.target_monitor.store(usize::MAX, Ordering::Release);
+                ctx.request_repaint_of(egui::ViewportId::ROOT);
+                return;
+            }
+            if signals.target_monitor.load(Ordering::Acquire) == usize::MAX
+                && ctx.input(|input| input.key_pressed(egui::Key::F11))
+            {
+                let next = !signals.fullscreen.fetch_xor(true, Ordering::AcqRel);
+                ctx.send_viewport_cmd(egui::ViewportCommand::Fullscreen(next));
+                ctx.request_repaint_of(egui::ViewportId::ROOT);
+            }
+            if !native_fullscreen && !signals.fullscreen.load(Ordering::Acquire) {
+                let size = ctx.viewport_rect().size();
+                if size.is_finite() && size.x >= 320.0 && size.y >= 180.0 {
+                    signals.width.store(
+                        size.x.round().clamp(320.0, 3840.0) as u32,
+                        Ordering::Release,
                     );
-                } else {
-                    ui.painter().text(
-                        bounds.center(),
-                        egui::Align2::CENTER_CENTER,
-                        "Waiting for a validated Program frame",
-                        egui::FontId::proportional(16.0),
-                        Color32::WHITE,
+                    signals.height.store(
+                        size.y.round().clamp(180.0, 2160.0) as u32,
+                        Ordering::Release,
                     );
                 }
-                // Screenshot readback is opt-in hosted acceptance only. The
-                // capacity-one mailbox cannot stall either viewport.
-                for event in ctx.input(|input| input.events.clone()) {
-                    if let egui::Event::Screenshot {
-                        viewport_id: id,
+            }
+            let bounds = ctx.viewport_rect();
+            ui.set_clip_rect(bounds);
+            ui.painter().rect_filled(bounds, 0.0, Color32::BLACK);
+            if let Some(texture) = &texture {
+                ui.painter().image(
+                    texture.id(),
+                    fit_program(bounds),
+                    Rect::from_min_max(Pos2::ZERO, egui::pos2(1.0, 1.0)),
+                    Color32::WHITE,
+                );
+            } else {
+                ui.painter().text(
+                    bounds.center(),
+                    egui::Align2::CENTER_CENTER,
+                    "Waiting for a validated Program frame",
+                    egui::FontId::proportional(16.0),
+                    Color32::WHITE,
+                );
+            }
+            // Screenshot readback is opt-in hosted acceptance only. The
+            // capacity-one mailbox cannot stall either viewport.
+            for event in ctx.input(|input| input.events.clone()) {
+                if let egui::Event::Screenshot {
+                    viewport_id: id,
+                    image,
+                    ..
+                } = event
+                    && id == viewport_id()
+                {
+                    let _ = captures.try_send(Capture {
+                        viewport: id,
                         image,
-                        ..
-                    } = event
-                        && id == viewport_id()
-                    {
-                        let _ = captures.try_send(Capture {
-                            viewport: id,
-                            image,
-                        });
-                        ctx.request_repaint_of(egui::ViewportId::ROOT);
-                    }
+                    });
+                    ctx.request_repaint_of(egui::ViewportId::ROOT);
                 }
-                if signals.capture_requested.swap(false, Ordering::AcqRel) {
-                    ctx.send_viewport_cmd(egui::ViewportCommand::Screenshot(
-                        egui::UserData::default(),
-                    ));
-                }
-            },
-        );
+            }
+            if signals.capture_requested.swap(false, Ordering::AcqRel) {
+                ctx.send_viewport_cmd(egui::ViewportCommand::Screenshot(egui::UserData::default()));
+            }
+        });
     }
 }
 
@@ -244,8 +293,8 @@ pub(crate) fn fit_program(bounds: Rect) -> Rect {
 
 impl RustMixApp {
     pub(crate) fn program_output_menu(&mut self, ui: &mut egui::Ui) {
-        ui.label("Separate Program monitor");
-        ui.label("Open windowed, drag to the target monitor, then Fullscreen / F11.");
+        ui.label("Optional windowed Program monitor");
+        ui.label("The top Fullscreen button sends Program directly to an extended display.");
         let open = ui.add_enabled(
             !self.program_output.is_open(),
             egui::Button::new("Open Program window"),
@@ -257,7 +306,7 @@ impl RustMixApp {
             ui.close();
         }
         let fullscreen = ui.add_enabled(
-            self.program_output.is_open(),
+            self.program_output.is_open() && self.program_output.target_monitor().is_none(),
             egui::Button::new(if self.program_output.is_fullscreen() {
                 "Windowed Program output"
             } else {

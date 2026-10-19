@@ -1,5 +1,11 @@
 # rustmix-ui
 
+Current top-button behavior supersedes the manual workflow below: Fullscreen sends
+Program directly to a verified extended display. The arrow selects the monitor;
+F11 and dragging are unnecessary. Startup never opens Program output. The optional
+windowed Program monitor remains available. Physical two-display qualification is
+pending; see ADR 0017.
+
 Separate Program monitor candidate: the arrow beside the application's Fullscreen
 button now opens a real native Program window. Open it windowed, drag its title bar
 to the extended monitor, then select Fullscreen Program output or press F11 in that

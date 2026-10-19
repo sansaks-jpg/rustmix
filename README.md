@@ -1,5 +1,11 @@
 # RustMix
 
+Fullscreen correction (2026-10-19): the top button now sends PGM directly to an
+extended display and leaves the operator window in place. No F11 or dragging is
+required. Select a display with its adjacent arrow. Missing/unsafe displays produce
+an operator message. Hosted verification and physical two-monitor acceptance are
+pending for this candidate; see [ADR 0017](docs/adr/0017-direct-extended-program-output.md).
+
 2026-10-19 full-production continuation: independent Program-window/fullscreen controls and a
 real 48 kHz sample mixer, bounded WAV decoder and Windows audio adapter are being integrated and
 verified through hosted CI. New source candidates do not inherit previous test acceptance. See

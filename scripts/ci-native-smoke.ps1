@@ -71,6 +71,14 @@ Invoke-NativeSmoke @('--ui-output-smoke-reopen','artifacts/program-output.rustmi
 foreach ($file in @('program-output-window.png','program-output-black.png','program-output-live.png','program-output-window.json','program-output-black.json','program-output-live.json','program-output-ok.json','program-output-reopen-ok.json','program-output.rustmix.json')) {
     if (-not (Test-Path (Join-Path artifacts $file))) { throw "Missing independent Program viewport evidence: $file" }
 }
+Invoke-NativeSmoke @('--ui-audio-smoke')
+Invoke-NativeSmoke @('--ui-audio-smoke-reopen','artifacts/audio.rustmix.json')
+foreach ($file in @('audio-fixture.wav','audio-input.png','audio-io.png','audio-source.png','audio-input-elements.json','audio-io-elements.json','audio-source-elements.json','audio-validation.json','audio-workflow-ok.json','audio-workflow-reopen-ok.json','audio.rustmix.json')) {
+    if (-not (Test-Path (Join-Path artifacts $file))) { throw "Missing native audio descriptor evidence: $file" }
+}
+$audioSaved = Get-Content -LiteralPath artifacts/audio-workflow-ok.json -Raw
+$audioReopened = Get-Content -LiteralPath artifacts/audio-workflow-reopen-ok.json -Raw
+if ($audioSaved -cne $audioReopened) { throw 'Audio descriptors changed across native save/reopen' }
 Invoke-NativeSmoke @('--ui-perf')
 $cadence = Get-Content artifacts/program-cadence.json -Raw | ConvertFrom-Json
 if ($cadence.samples.Count -ne 3) { throw 'Missing frame-rate measurement samples' }
