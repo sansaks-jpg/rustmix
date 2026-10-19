@@ -893,7 +893,7 @@ impl RustMixApp {
         }
         Ok(())
     }
-    fn validate_dialog_geometry(&self, ctx: &egui::Context, prefix: &str) -> Result<()> {
+    pub(crate) fn validate_dialog_geometry(&self, ctx: &egui::Context, prefix: &str) -> Result<()> {
         let bounds = ctx.viewport_rect();
         let body = self
             .automation

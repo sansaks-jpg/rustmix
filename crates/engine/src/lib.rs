@@ -7,7 +7,7 @@ pub use input::{ImageFit, InputConfig};
 pub mod output;
 pub use output::{
     EXTERNAL_OUTPUTS, ExternalOutput, ExternalOutputBank, ExternalOutputConfig, MAX_AUDIO_DELAY_MS,
-    OutputSource,
+    MAX_OUTPUT_HEIGHT, MAX_OUTPUT_WIDTH, OutputSource,
 };
 pub mod overlays;
 pub use overlays::{ActiveStinger, OverlayBank, OverlayChannelKind, StingerChannel};
