@@ -322,7 +322,7 @@ mod tests {
     #[test]
     fn external_media_inputs_render_black_in_the_reference_generator() {
         let demo = ProjectState::demo();
-        let Some(mut input) = demo.input(InputId(1)).cloned() else {
+        let Some(mut input) = demo.input(crate::InputId(1)).cloned() else {
             return;
         };
         input.kind = InputKind::Color;
