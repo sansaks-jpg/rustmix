@@ -859,19 +859,22 @@ impl RustMixApp {
                             let command = Command::RunTransitionSlot(index);
                             let enabled = self.engine.enabled(&command);
                             let button = ui
-                                .add_enabled(
-                                    enabled.is_ok(),
-                                    egui::Button::new((
-                                        egui::Atom::grow(),
-                                        RichText::new(slot.kind.label()).strong().size(12.0),
-                                        egui::Atom::grow(),
-                                    ))
-                                    .gap(0.0)
-                                    .truncate()
-                                    .min_size(egui::vec2(center - 22.0, transition_height)),
-                                )
+                                .add_enabled_ui(enabled.is_ok(), |ui| {
+                                    // A minimum width permits long effect names to
+                                    // push their caret out of the compact stack.
+                                    // Bound the real child and elide within it.
+                                    ui.add_sized(
+                                        egui::vec2(center - 22.0, transition_height),
+                                        egui::Button::new(
+                                            RichText::new(slot.kind.label()).strong().size(12.0),
+                                        )
+                                        .truncate(),
+                                    )
+                                })
+                                .inner
                                 .on_hover_text(format!(
-                                    "Slot {} · {} ms",
+                                    "{}\nSlot {} · {} ms",
+                                    slot.kind.label(),
                                     index + 1,
                                     slot.duration_ms
                                 ))

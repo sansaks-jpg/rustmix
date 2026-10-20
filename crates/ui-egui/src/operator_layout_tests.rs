@@ -86,6 +86,14 @@ fn painted_monitor_titles_start_beside_left_inset_and_take_labels_are_centered()
                 .unwrap();
             let ink = text_in(&output.shapes, slot.kind.label(), button);
             assert!((ink.center().x - button.center().x).abs() <= 2.0);
+            let take = *app.automation.get("switcher.cut").unwrap();
+            let menu = *app
+                .automation
+                .get(&format!("switcher.slot.{}.settings", index + 1))
+                .unwrap();
+            assert!((button.width() - (take.width() - 22.0)).abs() <= 1.0);
+            assert!(menu.left() >= button.right());
+            assert!(menu.right() <= take.right() + 1.0);
         }
     }
 }

@@ -63,3 +63,11 @@ preserving the accepted page/rail/footer bounds. Use familiar Size/Frame Rate/
 Bit Rate/Audio labels; values still describe actual Program and unavailable output.
 Require actual painted-glyph gutter and field-width regressions at compact/large
 sizes, plus fresh exact-source hosted/native screenshots. Do not relax any gate.
+
+The exact1100 capture also reveals the long Vertical wipe label expanding its
+minimum-width button and pushing the caret beyond the other take rows. Allocate
+a bounded sized child for each transition effect and elide its actual accessible
+text inside that width. The full label stays available on hover. Add headless
+and native gates for all four effect/caret pairs inside the take column. No
+transition mapping, engine command or enabled-state change. Supersede the
+not-yet-accepted9d2c863 native candidate with the combined visual correction.

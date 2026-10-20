@@ -1470,6 +1470,26 @@ impl RustMixApp {
             ));
         }
         if !self.basic_mode {
+            for index in 1..=4 {
+                let button = self
+                    .automation
+                    .get(&format!("switcher.slot.{index}"))
+                    .ok_or_else(|| Error::Invalid("Transition slot was not rendered".into()))?;
+                let menu = self
+                    .automation
+                    .get(&format!("switcher.slot.{index}.settings"))
+                    .ok_or_else(|| {
+                        Error::Invalid("Transition slot menu was not rendered".into())
+                    })?;
+                if (button.left() - cut.left()).abs() > 1.0
+                    || menu.left() < button.right()
+                    || menu.right() > cut.right() + 1.0
+                {
+                    return Err(Error::Invalid(format!(
+                        "Transition slot {index} exceeds the take column"
+                    )));
+                }
+            }
             let fade = self
                 .automation
                 .get("switcher.fade")
