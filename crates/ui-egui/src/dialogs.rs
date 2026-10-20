@@ -328,14 +328,12 @@ enum OverlaySwitchDecision {
     Keep,
 }
 
-fn overlay_field_label(ui: &mut egui::Ui, label: &str, width: f32) {
-    ui.allocate_ui_with_layout(
-        Vec2::new(width, 26.0),
-        egui::Layout::right_to_left(Align::Center),
-        |ui| {
-            ui.label(label);
-        },
-    );
+fn overlay_field_label(ui: &mut egui::Ui, label: &str, width: f32) -> Rect {
+    // Grid measures occupied child bounds, not the requested child size.
+    // Reserve the whole column before painting its right-aligned label.
+    let (rect, _) = ui.allocate_exact_size(Vec2::new(width, 26.0), Sense::hover());
+    ui.put(rect, egui::Label::new(label).halign(Align::Max));
+    rect
 }
 
 /// A selected staged panel rendered by the Program compositor, with no live mutation.
@@ -1711,7 +1709,8 @@ impl RustMixApp {
                         let label_width = (ui.available_width() * 0.16).clamp(96.0, 156.0);
                         let field_width = (ui.available_width() - label_width - 12.0).max(240.0);
                         egui::Grid::new("overlay.fields").num_columns(2).spacing([12.0, 6.0]).show(ui, |ui| {
-                            overlay_field_label(ui, "Number", label_width);
+                            let label = overlay_field_label(ui, "Number", label_width);
+                            self.automation.insert("dialog.overlay.label.number".into(), label);
                             ui.horizontal(|ui| {
                                 ui.spacing_mut().item_spacing.x = 3.0;
                                 for i in 0..8 {
@@ -1721,15 +1720,18 @@ impl RustMixApp {
                                 }
                             });
                             ui.end_row();
-                            overlay_field_label(ui, "Title", label_width);
+                            let label = overlay_field_label(ui, "Title", label_width);
+                            self.automation.insert("dialog.overlay.label.title".into(), label);
                             let title = ui.add_sized([field_width, 28.0], egui::TextEdit::singleline(&mut draft.title).char_limit(96));
                             self.automation.insert("dialog.overlay.title".into(), title.rect);
                             ui.end_row();
-                            overlay_field_label(ui, "Subtitle", label_width);
+                            let label = overlay_field_label(ui, "Subtitle", label_width);
+                            self.automation.insert("dialog.overlay.label.subtitle".into(), label);
                             let subtitle = ui.add_sized([field_width, 28.0], egui::TextEdit::singleline(&mut draft.subtitle).char_limit(160));
                             self.automation.insert("dialog.overlay.subtitle".into(), subtitle.rect);
                             ui.end_row();
-                            overlay_field_label(ui, "Position", label_width);
+                            let label = overlay_field_label(ui, "Position", label_width);
+                            self.automation.insert("dialog.overlay.label.position".into(), label);
                             ui.horizontal(|ui| {
                                 for (position, label) in [(Position::LowerLeft, "Lower left"), (Position::LowerRight, "Lower right"), (Position::TopLeft, "Top left")] {
                                     let response = ui.selectable_value(&mut draft.position, position, label);
@@ -1737,7 +1739,8 @@ impl RustMixApp {
                                 }
                             });
                             ui.end_row();
-                            overlay_field_label(ui, "Visibility", label_width);
+                            let label = overlay_field_label(ui, "Visibility", label_width);
+                            self.automation.insert("dialog.overlay.label.visibility".into(), label);
                             let enabled = ui.checkbox(&mut draft.enabled, "Show on Program when applied");
                             self.automation.insert("dialog.overlay.enabled".into(), enabled.rect);
                             ui.end_row();
@@ -1768,6 +1771,7 @@ impl RustMixApp {
                             ui.set_width(pane_width);
                             ui.strong("Channel capabilities");
                             light_form_frame(ui, 6, |ui| {
+                                ui.set_min_width((pane_width - 12.0).max(0.0));
                                 egui::Grid::new("overlay.capabilities").num_columns(2).spacing([8.0, 3.0]).show(ui, |ui| {
                                     for (id, label, value, reason) in [
                                         ("type", "Type", "Title panel only", "Only title-panel composition is implemented."),
@@ -3200,6 +3204,28 @@ mod operator_dialog_tests {
             let subtitle = app.automation.get("dialog.overlay.subtitle").unwrap();
             assert!((title.left() - subtitle.left()).abs() < 0.5);
             assert!(title.width() >= body.width() * 0.70);
+            for (label, field) in [
+                ("number", "slot.1"),
+                ("title", "title"),
+                ("subtitle", "subtitle"),
+                ("position", "position.LowerLeft"),
+                ("visibility", "enabled"),
+            ] {
+                let label = app
+                    .automation
+                    .get(&format!("dialog.overlay.label.{label}"))
+                    .unwrap();
+                let field = app
+                    .automation
+                    .get(&format!("dialog.overlay.{field}"))
+                    .unwrap();
+                assert!(label.width() >= 96.0);
+                assert!(
+                    label.right() + 6.0 <= field.left(),
+                    "label overlaps field at {size:?}: {label:?}, {field:?}"
+                );
+                assert!(body.contains_rect(*label));
+            }
             assert_eq!(*app.engine.project(), before);
         }
     }
