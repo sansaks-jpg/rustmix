@@ -332,7 +332,7 @@ fn overlay_field_label(ui: &mut egui::Ui, label: &str, width: f32) -> Rect {
     // Grid measures occupied child bounds, not the requested child size.
     // Reserve the whole column before painting its right-aligned label.
     let (rect, _) = ui.allocate_exact_size(Vec2::new(width, 26.0), Sense::hover());
-    ui.put(rect, egui::Label::new(label).halign(Align::Max));
+    ui.place(rect, egui::Label::new(label).halign(Align::Max));
     rect
 }
 
