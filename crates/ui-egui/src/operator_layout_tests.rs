@@ -91,6 +91,37 @@ fn painted_monitor_titles_start_beside_left_inset_and_take_labels_are_centered()
 }
 
 #[test]
+fn recording_labels_have_a_readable_gutter_and_filename_uses_the_page_width() {
+    for size in [
+        Vec2::new(734.0, 466.0),
+        Vec2::new(1100.0, 700.0),
+        Vec2::new(1600.0, 900.0),
+        Vec2::new(1920.0, 1200.0),
+    ] {
+        let mut app = RustMixApp::headless();
+        let ctx = egui::Context::default();
+        app.theme(&ctx);
+        app.recording_setup = true;
+        for _ in 0..4 {
+            let _ = paint(&mut app, &ctx, size);
+        }
+        let output = paint(&mut app, &ctx, size);
+        let page = *app.automation.get("dialog.recording.page").unwrap();
+        let label = text_in(&output.shapes, "Size", page);
+        let value = text_in(&output.shapes, "640×360 CPU reference", page);
+        let gutter = value.left() - label.right();
+        assert!(
+            (11.0..=15.0).contains(&gutter),
+            "Recording label/value ink needs a 12-point gutter, got {gutter}"
+        );
+        if size.x == 1600.0 {
+            let filename = *app.automation.get("dialog.recording.filename").unwrap();
+            assert!((335.0..=350.0).contains(&filename.width()));
+        }
+    }
+}
+
+#[test]
 fn recording_native_guard_rejects_overlapping_footer_and_side_by_side_browse() {
     let mut app = RustMixApp::headless();
     let ctx = egui::Context::default();

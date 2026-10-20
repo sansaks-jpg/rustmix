@@ -48,3 +48,18 @@ Label::halign alone does not override add_sized's centered child layout. Reserve
 the title field with an explicitly left-to-right child, as existing source-card
 names do. Preserve the original 8-point inset gate and all tolerances. The failed
 run did not build or launch the application; exact revised acceptance is pending.
+
+2f9d63c/run39449101218 passes every hosted check,126 UI tests plus all suites,
+release build and all13 native processes. Exact workspace and Recording PNG/JSON
+were inspected. Monitor titles and take labels are corrected and recording uses
+one page with bounded navigation/footer;13 GPU drains pass and stderr is empty.
+The native step takes629s versus99s on UI-022; cadence targets still fail. The
+fresh-runner repeat39450879950 remains pending. This is not GPU/production readiness.
+
+Visual follow-up: Recording's label column leaves only4px of separation and a
+316.4px filename field at1600. Relative to the observed page, reserve21% for the
+label (86..112px) and12px separation, bringing the filename close to340px while
+preserving the accepted page/rail/footer bounds. Use familiar Size/Frame Rate/
+Bit Rate/Audio labels; values still describe actual Program and unavailable output.
+Require actual painted-glyph gutter and field-width regressions at compact/large
+sizes, plus fresh exact-source hosted/native screenshots. Do not relax any gate.

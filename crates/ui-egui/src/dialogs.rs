@@ -107,7 +107,7 @@ fn recording_form_row<R>(
     contents: impl FnOnce(&mut egui::Ui) -> R,
 ) -> egui::InnerResponse<R> {
     ui.horizontal(|ui| {
-        let label_width = (ui.available_width() * 0.28).clamp(86.0, 125.0);
+        let label_width = (ui.available_width() * 0.21).clamp(86.0, 112.0);
         ui.allocate_ui_with_layout(
             Vec2::new(label_width, 22.0),
             egui::Layout::right_to_left(Align::Center),
@@ -115,6 +115,7 @@ fn recording_form_row<R>(
                 ui.label(label);
             },
         );
+        ui.add_space(8.0);
         contents(ui)
     })
 }
@@ -2328,13 +2329,13 @@ impl RustMixApp {
                             });
                             ui.add_space(6.0);
                             let video = ui.vertical(|ui| {
-                                let raster = recording_form_row(ui, "Program raster", |ui| {
+                                let raster = recording_form_row(ui, "Size", |ui| {
                                     ui.label("640×360 CPU reference")
                                 })
                                 .inner;
                                 self.automation
                                     .insert("dialog.recording.programRaster".into(), raster.rect);
-                                let rate = recording_form_row(ui, "Program rate", |ui| {
+                                let rate = recording_form_row(ui, "Frame Rate", |ui| {
                                     ui.label(recording_rate_description(program_rate))
                                 })
                                 .inner;
@@ -2348,7 +2349,7 @@ impl RustMixApp {
                                     "Codec · unavailable"
                                 };
                                 recording_form_row(ui, "Codec", |ui| ui.label(codec));
-                                recording_form_row(ui, "Video bit rate", |ui| {
+                                recording_form_row(ui, "Bit Rate", |ui| {
                                     ui.add_sized(
                                         [70.0, 22.0],
                                         egui::TextEdit::singleline(&mut self.rec_bitrate),
@@ -2374,17 +2375,17 @@ impl RustMixApp {
                             ui.add_space(10.0);
                             ui.separator();
                             let audio = ui.vertical(|ui| {
-                                recording_form_row(ui, "Audio bus", |ui| {
+                                recording_form_row(ui, "Audio", |ui| {
                                     ui.checkbox(&mut self.rec_audio_master, "Master · unavailable");
                                 });
-                                recording_form_row(ui, "Audio delay", |ui| {
+                                recording_form_row(ui, "Audio Delay", |ui| {
                                     ui.add_sized(
                                         [70.0, 22.0],
                                         egui::TextEdit::singleline(&mut self.rec_audio_delay),
                                     );
                                     ui.label("ms");
                                 });
-                                recording_form_row(ui, "Audio bit rate", |ui| {
+                                recording_form_row(ui, "Audio Bit Rate", |ui| {
                                     ui.add_sized(
                                         [70.0, 22.0],
                                         egui::TextEdit::singleline(&mut self.rec_audio_kbps),
@@ -2395,7 +2396,7 @@ impl RustMixApp {
                             self.automation
                                 .insert("dialog.recording.audio".into(), audio.response.rect);
                             ui.add_space(8.0);
-                            recording_form_row(ui, "New file every", |ui| {
+                            recording_form_row(ui, "New File Every", |ui| {
                                 ui.label(format!("{} · unavailable", self.rec_split_mins))
                             });
                         });
