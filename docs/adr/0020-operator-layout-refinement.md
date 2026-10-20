@@ -50,3 +50,12 @@ source dialogs grow proportionally with viewport width and height while compact 
 bounded. Mixer content/rails scale independently of dock width, retaining horizontal scrolling.
 Production actions/setup targets grow across1100–1920. New proportions and exact-raster screenshots
 must be reviewed on the exact final revision; no full visual correspondence is claimed from source.
+
+
+Native run39362838055/7e0d0b7 failed the inherited caption capture proof342/692 after PNG reopen
+passed. The capture validator rounded geometric pixel-center coordinates to screenshot indices,
+introducing a positive half-pixel error at1.5x scaling. Independent bilinear reproduction matched
+342/692 exactly; floor indexing yields692/692 without threshold changes. The revised validator
+uses floor, has an independent3:2 bilinear synthetic positive/absent-caption negative regression,
+and saves failed captures as -unverified.png before any validation. Canonical accepted filenames
+and success JSON are produced only after checks. Revised exact-patch native acceptance pending.

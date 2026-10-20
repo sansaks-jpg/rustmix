@@ -257,6 +257,22 @@ impl RustMixApp {
         let Some(capture) = self.program_output.take_capture() else {
             return Ok(false);
         };
+        // Preserve a failed readback without giving it an accepted-artifact name.
+        let unverified_path = format!("artifacts/{name}-unverified.png");
+        let bytes: Vec<u8> = capture
+            .image
+            .pixels
+            .iter()
+            .flat_map(|pixel| pixel.to_array())
+            .collect();
+        image::save_buffer(
+            &unverified_path,
+            &bytes,
+            capture.image.width() as u32,
+            capture.image.height() as u32,
+            image::ColorType::Rgba8,
+        )
+        .map_err(|error| Error::Invalid(error.to_string()))?;
         if capture.viewport != program_output::viewport_id() || !self.program_output.native_seen() {
             return Err(Error::Invalid(
                 "Program screenshot came from the wrong viewport".into(),
@@ -281,20 +297,7 @@ impl RustMixApp {
         } else {
             serde_json::json!({})
         };
-        let bytes: Vec<u8> = capture
-            .image
-            .pixels
-            .iter()
-            .flat_map(|pixel| pixel.to_array())
-            .collect();
-        image::save_buffer(
-            format!("artifacts/{name}.png"),
-            &bytes,
-            capture.image.width() as u32,
-            capture.image.height() as u32,
-            image::ColorType::Rgba8,
-        )
-        .map_err(|error| Error::Invalid(error.to_string()))?;
+        std::fs::rename(&unverified_path, format!("artifacts/{name}.png"))?;
         let mut evidence = serde_json::json!({
             "viewport": format!("{:?}", capture.viewport),
             "native": true, "program": self.engine.project().program.0,
@@ -374,8 +377,12 @@ fn validate_caption_ink(
             if !title && !subtitle {
                 continue;
             }
-            let ix = (raster.left() + raster.width() * (px as f32 + 0.5) / w as f32).round() as i64;
-            let iy = (raster.top() + raster.height() * (py as f32 + 0.5) / h as f32).round() as i64;
+            // These are geometric texel-center coordinates. A screenshot pixel
+            // occupies [index, index + 1), with its center at index + 0.5.
+            // Rounding instead biases the readback by half a pixel, sampling
+            // dark glyph edges at the native window's 1.5x bilinear scale.
+            let ix = (raster.left() + raster.width() * (px as f32 + 0.5) / w as f32).floor() as i64;
+            let iy = (raster.top() + raster.height() * (py as f32 + 0.5) / h as f32).floor() as i64;
             if ix < 0 || iy < 0 || ix >= image.width() as i64 || iy >= image.height() as i64 {
                 continue;
             }
@@ -465,4 +472,92 @@ fn validate_output_capture(image: &egui::ColorImage, program: &[u8], black: bool
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used, clippy::indexing_slicing)]
+    use super::*;
+
+    fn caption_fixture() -> (Vec<[u8; 4]>, Vec<OverlayState>) {
+        let mut raster = vec![[16, 16, 16, 255]; 640 * 360];
+        // Independent synthetic strokes inside the lower-left overlay panel:
+        // two-pixel title stems and single-pixel subtitle stems. No production
+        // glyph rasterizer or forward capture-coordinate mapper is reused.
+        for stem in 0..10 {
+            for y in 283..297 {
+                for x in 45 + stem * 4..47 + stem * 4 {
+                    raster[y * 640 + x] = [255, 255, 255, 255];
+                }
+            }
+            for y in 301..308 {
+                raster[y * 640 + 46 + stem * 3] = [190, 190, 190, 255];
+            }
+        }
+        let overlay = OverlayState {
+            enabled: true,
+            title: "Synthetic title strokes".into(),
+            subtitle: "Synthetic subtitle strokes".into(),
+            position: Position::LowerLeft,
+        };
+        (raster, vec![overlay])
+    }
+
+    fn bilinear_capture_3_over_2(source: &[[u8; 4]]) -> egui::ColorImage {
+        let mut pixels = Vec::with_capacity(960 * 540);
+        for y in 0..540 {
+            for x in 0..960 {
+                // Inverse destination-center sampling, independently derived
+                // from the 3:2 scale; source texel centers have integer indices.
+                let sx = ((x as f64 + 0.5) * 2.0 / 3.0 - 0.5).clamp(0.0, 639.0);
+                let sy = ((y as f64 + 0.5) * 2.0 / 3.0 - 0.5).clamp(0.0, 359.0);
+                let left = sx.floor() as usize;
+                let top = sy.floor() as usize;
+                let right = (left + 1).min(639);
+                let bottom = (top + 1).min(359);
+                let fx = sx - left as f64;
+                let fy = sy - top as f64;
+                let mut color = [0_u8; 4];
+                for (channel, value) in color.iter_mut().enumerate() {
+                    let upper = f64::from(source[top * 640 + left][channel]) * (1.0 - fx)
+                        + f64::from(source[top * 640 + right][channel]) * fx;
+                    let lower = f64::from(source[bottom * 640 + left][channel]) * (1.0 - fx)
+                        + f64::from(source[bottom * 640 + right][channel]) * fx;
+                    *value = (upper * (1.0 - fy) + lower * fy).round() as u8;
+                }
+                pixels.push(Color32::from_rgba_unmultiplied(
+                    color[0], color[1], color[2], color[3],
+                ));
+            }
+        }
+        egui::ColorImage::new([960, 540], pixels)
+    }
+
+    #[test]
+    fn caption_ink_survives_independent_one_and_a_half_bilinear_capture() {
+        let (raster, overlays) = caption_fixture();
+        let capture = bilinear_capture_3_over_2(&raster);
+        let program: Vec<u8> = raster.iter().flatten().copied().collect();
+        let ink = validate_caption_ink(&capture, &program, &overlays).unwrap();
+        assert_eq!(ink.title_ink, 280);
+        assert_eq!(ink.subtitle_ink, 70);
+        assert_eq!(ink.title_bright, 280);
+        assert_eq!(ink.subtitle_bright, 70);
+    }
+
+    #[test]
+    fn caption_ink_rejects_capture_with_missing_captions() {
+        let (raster, overlays) = caption_fixture();
+        let program: Vec<u8> = raster.iter().flatten().copied().collect();
+        let missing = vec![[16, 16, 16, 255]; 640 * 360];
+        let capture = bilinear_capture_3_over_2(&missing);
+        let error = validate_caption_ink(&capture, &program, &overlays)
+            .err()
+            .unwrap();
+        assert!(
+            error
+                .to_string()
+                .contains("Overlay title ink did not reach")
+        );
+    }
 }

@@ -45,3 +45,29 @@ and numerical geometry before closing these gaps. No backend completeness follow
   and screenshots were still pending when this report was prepared.
 - Run39363210970 /db29d67: transition sizing revision under verification; do not reuse an earlier
   run as proof of its final appearance.
+
+
+## Intermediate native inspection: 7e0d0b7
+
+Downloaded screenshot/JSON evidence from run39362838055 into local ignored artifacts/ui020-7e0d0b7.
+Inspected workspace-1600.png and input-properties-1600.png directly against the supplied references.
+Vertical mixer order is visibly corrected; the old dark form and small take targets remain visibly
+different. These captures precede db29d67 and7517b9f, so they do not accept those later refinements.
+Numeric extraction is saved locally as ui020-measured-geometry.json beside the screenshots.
+
+| Control / region | Measured intermediate geometry | Review consequence |
+|---|---|---|
+| Settings at1920x1080 | 82x28 | Height close after client normalization; width still below observed115 |
+| Fullscreen | 106x28 | Below observed150-wide group; compare current menu/button combined width |
+| CUT / FADE | 110x26 /88x25 | Confirmed undersized before db29d67 transition expansion |
+| Production Add /Record gear | 72x30 /26x30 | Confirmed narrow before7517b9f responsive widths |
+| Master header /strip | 76x16 /82x242 | Vertical layout corrected; width below reference before7517b9f |
+| PVW/PGM videos | Both847.6x476.8 | Symmetry and16:9 preserved; different viewport aspect from supplied reference |
+| Add body at1600x900 | 1106x520 at247,174; buttons92x29 | Body width improved; footer controls remain smaller than observed reference |
+| Properties body at1600x900 | 1146x540 at227,164; preview337.8x190 | Wider form; preview is partly clipped in default scroll view and requires review after height refinement |
+
+Run39362838055 passed PNG native save/reopen after the generation acknowledgment fix but failed
+the later caption framebuffer assertion342/692. Independent pixel-center reproduction gives342/692
+with rounded coordinate indexing and692/692 with floor indexing. Acceptance brightness thresholds
+remain unchanged. Missing live failure image motivated retaining unverified captures in the next
+harness revision. This is a failed overall native run, not full acceptance.
