@@ -94,3 +94,15 @@ layer/asset/reference guards pass. New geometry, disabled-state paint and worksp
 prepared for hosted Windows execution; no local compile, tests or application launch occurred.
 These changes do not implement missing record/stream/capture/network backends. Fresh native captures
 must be inspected before accepting their visual result. GPU reliability and cadence remain open.
+
+## GPU texture allocation candidate
+
+Pinned egui-wgpu 0.35 update_texture creates a new GPU texture for every full ImageDelta,
+including same-sized TextureHandle::set calls. Properties uploaded a full static PNG preview
+on every UI frame while waiting for its screenshot. The new shared update_texture_image helper
+uses set_partial([0,0]) when dimensions match; resizing retains full replacement. Program,
+Properties, source thumbnails and Add Input preview use it. Pixel payload/filter/ID are preserved;
+no clock, screenshot gate, timeout or shutdown check changes. An actual Context delta regression
+checks first allocation, same-size update, resize and subsequent same-size update including payload.
+This removes demonstrated allocation churn; resolution of the intermittent WARP stall is unproven
+until exact-revision hosted native execution. Local formatting/diff/repository guards pass.

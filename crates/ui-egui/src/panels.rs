@@ -364,7 +364,7 @@ impl RustMixApp {
                 }
                 let image = colour_image([384, 216], &processed);
                 if let Some(texture) = self.textures.get_mut(&input.id) {
-                    texture.set(image, egui::TextureOptions::LINEAR);
+                    update_texture_image(texture, image);
                 } else {
                     self.textures.insert(
                         input.id,
@@ -406,7 +406,7 @@ impl RustMixApp {
             .extend(pixels.iter().flatten().copied());
         let image = colour_image([640, 360], &pixels);
         if let Some(texture) = &mut self.program_texture {
-            texture.set(image, egui::TextureOptions::LINEAR);
+            update_texture_image(texture, image);
         } else {
             self.program_texture =
                 Some(ctx.load_texture("program.composite", image, egui::TextureOptions::LINEAR));

@@ -411,7 +411,7 @@ impl RustMixApp {
             &pixels.iter().flatten().copied().collect::<Vec<_>>(),
         );
         if let Some(texture) = &mut self.properties_texture {
-            texture.set(image, egui::TextureOptions::LINEAR);
+            update_texture_image(texture, image);
         } else {
             self.properties_texture =
                 Some(ctx.load_texture("input.draft", image, egui::TextureOptions::LINEAR));

@@ -52,6 +52,17 @@ pub(crate) const CHIP_BG: Color32 = Color32::from_rgb(32, 39, 49);
 pub(crate) const FORM_LIGHT: Color32 = Color32::from_rgb(244, 245, 247);
 pub(crate) const FORM_TEXT: Color32 = Color32::from_rgb(28, 35, 42);
 
+/// Reuse an existing GPU image allocation while its dimensions are unchanged.
+/// egui-wgpu recreates textures for full deltas; partial deltas retain them.
+/// An actual resize still requires a full delta to update the allocation and UVs.
+pub(crate) fn update_texture_image(texture: &mut egui::TextureHandle, image: egui::ColorImage) {
+    if texture.size() == image.size {
+        texture.set_partial([0, 0], image, egui::TextureOptions::LINEAR);
+    } else {
+        texture.set(image, egui::TextureOptions::LINEAR);
+    }
+}
+
 type CachedRgba = (u32, u32, Arc<Vec<[u8; 4]>>);
 
 /// Decoded image cache plus the engine's committed processing configuration.
@@ -2477,6 +2488,61 @@ impl eframe::App for RustMixApp {
         );
         if let Ok(json) = serde_json::to_string(self.audio_restore.as_ref().unwrap_or(&self.dock)) {
             storage.set_string("workspace.v2", json);
+        }
+    }
+}
+
+#[cfg(test)]
+mod texture_update_tests {
+    #![allow(clippy::unwrap_used)]
+    use super::*;
+
+    #[test]
+    fn texture_updates_reuse_same_size_and_replace_only_on_resize() {
+        let ctx = egui::Context::default();
+        let mut texture = None;
+        let initial = ctx.run_ui(egui::RawInput::default(), |ui| {
+            texture = Some(ui.ctx().load_texture(
+                "texture-update-fixture",
+                egui::ColorImage::filled([2, 2], Color32::RED),
+                egui::TextureOptions::LINEAR,
+            ));
+        });
+        let texture = texture.as_mut().unwrap();
+        let id = texture.id();
+        let initial_delta = &initial
+            .textures_delta
+            .set
+            .iter()
+            .find(|(key, _)| *key == id)
+            .unwrap()
+            .1;
+        assert_eq!(initial_delta.pos, None);
+        assert_eq!(initial_delta.image.size(), [2, 2]);
+
+        for (size, color, expected_position) in [
+            ([2, 2], Color32::GREEN, Some([0, 0])),
+            ([3, 1], Color32::BLUE, None),
+            ([3, 1], Color32::WHITE, Some([0, 0])),
+        ] {
+            let output = ctx.run_ui(egui::RawInput::default(), |_| {
+                update_texture_image(texture, egui::ColorImage::filled(size, color));
+            });
+            let delta = &output
+                .textures_delta
+                .set
+                .iter()
+                .find(|(key, _)| *key == id)
+                .unwrap()
+                .1;
+            assert_eq!(delta.pos, expected_position);
+            assert_eq!(delta.image.size(), size);
+            let egui::ImageData::Color(image) = &delta.image;
+            assert!(image.pixels.iter().all(|pixel| *pixel == color));
+            assert_eq!(delta.options, egui::TextureOptions::LINEAR);
+            assert_eq!(texture.id(), id);
+            assert_eq!(texture.size(), size);
+            assert!(output.textures_delta.free.is_empty());
         }
     }
 }

@@ -438,7 +438,7 @@ impl RustMixApp {
                 let image = egui::ColorImage::from_rgba_unmultiplied([320, 180], &bytes);
                 if let Some((cached_kind, texture)) = &mut self.add_preview {
                     *cached_kind = self.add_kind;
-                    texture.set(image, egui::TextureOptions::LINEAR);
+                    update_texture_image(texture, image);
                 } else {
                     self.add_preview = Some((
                         self.add_kind,
