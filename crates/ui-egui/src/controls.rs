@@ -317,31 +317,42 @@ impl RustMixApp {
                                             .min_scrolled_height(pane_height)
                                             .auto_shrink([false, false])
                                             .show(ui, |ui| {
-                                                for (index, input) in inputs.iter().enumerate() {
-                                                    let row = ui.selectable_label(
-                                                        index == self.playlist_selected_avail,
-                                                        format!(
-                                                            "{} · {}{}",
-                                                            index + 1,
-                                                            input.name,
-                                                            if input.online {
-                                                                ""
-                                                            } else {
-                                                                " [OFFLINE]"
+                                                ui.with_layout(
+                                                    egui::Layout::top_down_justified(
+                                                        egui::Align::Min,
+                                                    ),
+                                                    |ui| {
+                                                        for (index, input) in
+                                                            inputs.iter().enumerate()
+                                                        {
+                                                            let row = ui.selectable_label(
+                                                                index
+                                                                    == self.playlist_selected_avail,
+                                                                format!(
+                                                                    "{} · {}{}",
+                                                                    index + 1,
+                                                                    input.name,
+                                                                    if input.online {
+                                                                        ""
+                                                                    } else {
+                                                                        " [OFFLINE]"
+                                                                    }
+                                                                ),
+                                                            );
+                                                            self.automation.insert(
+                                                                format!(
+                                                                    "dialog.playlist.available.{}",
+                                                                    input.id.0
+                                                                ),
+                                                                row.rect,
+                                                            );
+                                                            if row.clicked() {
+                                                                self.playlist_selected_avail =
+                                                                    index;
                                                             }
-                                                        ),
-                                                    );
-                                                    self.automation.insert(
-                                                        format!(
-                                                            "dialog.playlist.available.{}",
-                                                            input.id.0
-                                                        ),
-                                                        row.rect,
-                                                    );
-                                                    if row.clicked() {
-                                                        self.playlist_selected_avail = index;
-                                                    }
-                                                }
+                                                        }
+                                                    },
+                                                );
                                             });
                                     });
                                     self.automation.insert(
@@ -415,31 +426,42 @@ impl RustMixApp {
                                             .min_scrolled_height(pane_height)
                                             .auto_shrink([false, false])
                                             .show(ui, |ui| {
-                                                for (index, item) in draft.items.iter().enumerate()
-                                                {
-                                                    let name = inputs
-                                                        .iter()
-                                                        .find(|p| p.id == item.input)
-                                                        .map_or("Missing input", |p| {
-                                                            p.name.as_str()
-                                                        });
-                                                    let row = ui.selectable_label(
-                                                        index == self.playlist_selected_item,
-                                                        format!(
-                                                            "{} · {} · {:.1}s",
-                                                            index + 1,
-                                                            name,
-                                                            item.hold_ms as f64 / 1000.0
-                                                        ),
-                                                    );
-                                                    self.automation.insert(
-                                                        format!("dialog.playlist.item.{index}"),
-                                                        row.rect,
-                                                    );
-                                                    if row.clicked() {
-                                                        self.playlist_selected_item = index;
-                                                    }
-                                                }
+                                                ui.with_layout(
+                                                    egui::Layout::top_down_justified(
+                                                        egui::Align::Min,
+                                                    ),
+                                                    |ui| {
+                                                        for (index, item) in
+                                                            draft.items.iter().enumerate()
+                                                        {
+                                                            let name = inputs
+                                                                .iter()
+                                                                .find(|p| p.id == item.input)
+                                                                .map_or("Missing input", |p| {
+                                                                    p.name.as_str()
+                                                                });
+                                                            let row = ui.selectable_label(
+                                                                index
+                                                                    == self.playlist_selected_item,
+                                                                format!(
+                                                                    "{} · {} · {:.1}s",
+                                                                    index + 1,
+                                                                    name,
+                                                                    item.hold_ms as f64 / 1000.0
+                                                                ),
+                                                            );
+                                                            self.automation.insert(
+                                                                format!(
+                                                                    "dialog.playlist.item.{index}"
+                                                                ),
+                                                                row.rect,
+                                                            );
+                                                            if row.clicked() {
+                                                                self.playlist_selected_item = index;
+                                                            }
+                                                        }
+                                                    },
+                                                );
                                             });
                                     });
                                     self.automation.insert(
@@ -742,6 +764,111 @@ mod playlist_layout_tests {
             assert_eq!(app.engine.project().program, program);
             assert_eq!(app.engine.project().preview, preview);
         }
+    }
+
+    #[test]
+    fn playlist_rows_fill_pane_width_keep_text_left_and_accept_far_edge_clicks() {
+        let mut app = RustMixApp::headless();
+        app.playlist_open = true;
+        let mut playlist = app.engine.project().playlists.first().unwrap().clone();
+        for input in [InputId(2), InputId(3)] {
+            playlist.items.push(PlaylistItem {
+                input,
+                hold_ms: 3500,
+                transition: draft_default_slot(app.engine.project()),
+            });
+        }
+        app.engine
+            .execute(Command::UpdatePlaylist(playlist), 0)
+            .unwrap();
+        let program = app.engine.project().program;
+        let preview = app.engine.project().preview;
+        let ctx = egui::Context::default();
+        app.theme(&ctx);
+        let size = Vec2::new(1600.0, 900.0);
+        for _ in 0..4 {
+            frame(&mut app, &ctx, size, vec![]);
+        }
+        let output = ctx.run_ui(
+            egui::RawInput {
+                screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, size)),
+                ..Default::default()
+            },
+            |_| {
+                app.automation.clear();
+                app.playlist_dialog(&ctx);
+            },
+        );
+        for (pane_id, row_ids, caption) in [
+            (
+                "dialog.playlist.available.body",
+                ["dialog.playlist.available.1", "dialog.playlist.available.2"],
+                "1 · Camera A",
+            ),
+            (
+                "dialog.playlist.items.body",
+                ["dialog.playlist.item.0", "dialog.playlist.item.1"],
+                "1 · Camera B · 3.5s",
+            ),
+        ] {
+            let pane = *app.automation.get(pane_id).unwrap();
+            for id in row_ids {
+                let row = *app.automation.get(id).unwrap();
+                assert!(
+                    row.width() >= pane.width() - 26.0,
+                    "full pane hit area: {id}"
+                );
+                assert!(row.width() <= pane.width() - 8.0, "retain pane inset: {id}");
+                assert!((row.left() - pane.left() - 5.0).abs() <= 1.0);
+                assert!(pane.contains_rect(row));
+            }
+            let row = *app.automation.get(row_ids[0]).unwrap();
+            let text = output
+                .shapes
+                .iter()
+                .find_map(|shape| {
+                    if let egui::Shape::Text(text) = &shape.shape
+                        && text.galley.job.text == caption
+                    {
+                        Some(text.visual_bounding_rect())
+                    } else {
+                        None
+                    }
+                })
+                .unwrap();
+            assert!(
+                text.left() >= row.left() && text.left() <= row.left() + 12.0,
+                "caption starts at the left inset: {caption}"
+            );
+            assert!(
+                text.right() < row.center().x,
+                "short captions must not be centered"
+            );
+        }
+        for id in ["dialog.playlist.available.2", "dialog.playlist.item.1"] {
+            let row = *app.automation.get(id).unwrap();
+            let pos = egui::pos2(row.right() - 2.0, row.center().y);
+            for pressed in [true, false] {
+                frame(
+                    &mut app,
+                    &ctx,
+                    size,
+                    vec![
+                        egui::Event::PointerMoved(pos),
+                        egui::Event::PointerButton {
+                            pos,
+                            button: egui::PointerButton::Primary,
+                            pressed,
+                            modifiers: egui::Modifiers::NONE,
+                        },
+                    ],
+                );
+            }
+        }
+        assert_eq!(app.playlist_selected_avail, 1);
+        assert_eq!(app.playlist_selected_item, 1);
+        assert_eq!(app.engine.project().program, program);
+        assert_eq!(app.engine.project().preview, preview);
     }
 
     #[test]

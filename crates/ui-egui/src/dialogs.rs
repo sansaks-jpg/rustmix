@@ -1771,7 +1771,8 @@ impl RustMixApp {
                             ui.set_width(pane_width);
                             ui.strong("Channel capabilities");
                             light_form_frame(ui, 6, |ui| {
-                                ui.set_min_width((pane_width - 12.0).max(0.0));
+                                // Six pixels of margin plus the one-pixel stroke on each side.
+                                ui.set_min_width((pane_width - 14.0).max(0.0));
                                 egui::Grid::new("overlay.capabilities").num_columns(2).spacing([8.0, 3.0]).show(ui, |ui| {
                                     for (id, label, value, reason) in [
                                         ("type", "Type", "Title panel only", "Only title-panel composition is implemented."),

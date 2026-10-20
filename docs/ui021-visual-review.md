@@ -15,6 +15,15 @@ It also fills the capability pane's formerly202px light frame across its allocat
 Those corrections require a new exact-code screenshot; f6db67c Overlay visual acceptance is rejected.
 Dirty-channel prompt/buttons, genuine title/subtitle preview and footer were visibly intact.
 
+Follow-up a21d358/run39421878826 passed check/Clippy but failed the existing strict preview
+containment regression: the expanded capability frame pushed the preview2px beyond the body.
+The next candidate subtracts both1px frame strokes as well as its margins. The regression remains
+unchanged. Run39421789232/2992781 was cancelled as superseded before acceptance.
+
+Playlist native review also found shortened text-only row hit areas. The follow-up restores
+full-width selectable rows and tests painted left alignment and pointer selection at the far
+right edge of both lists, preserving Preview/Program. Fresh native visual proof is required.
+
 Playlist screenshot visibly places transfers between lists, reorder controls right, flags below
 order and footer right, with all7 input rows visible. Further dimensions remain compared below.
 
