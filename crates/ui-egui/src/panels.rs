@@ -10,13 +10,13 @@ fn mixer_widths(viewport_width: f32) -> (f32, f32) {
     )
 }
 
-/// Vertical blue group label (`OUTPUTS` / `INPUTS`) with modern rounded corners.
+/// Vertical blue group label (`OUTPUTS` / `INPUTS`) on a flat operator rail.
 fn mixer_rail(ui: &mut egui::Ui, width: f32, height: f32, label: &str) -> Rect {
     let (rect, _) = ui.allocate_exact_size(egui::vec2(width, height), Sense::hover());
-    ui.painter().rect_filled(rect, 3.0, MIXER_RAIL);
+    ui.painter().rect_filled(rect, 0.0, MIXER_RAIL);
     ui.painter().rect_stroke(
         rect,
-        3.0,
+        0.0,
         Stroke::new(1.0, Color32::from_rgb(38, 142, 230)),
         egui::StrokeKind::Inside,
     );
@@ -1136,7 +1136,7 @@ impl RustMixApp {
                                     |ui| {
                                         egui::Frame::new()
                                             .fill(Color32::from_rgb(20, 25, 32))
-                                            .corner_radius(4.0)
+                                            .corner_radius(1.0)
                                             .stroke(Stroke::new(1.5, border))
                                             .inner_margin(1.0)
                                             .show(ui, |ui| {
@@ -1146,12 +1146,7 @@ impl RustMixApp {
                                                 // Tile header bar
                                                 egui::Frame::new()
                                                     .fill(header_fill)
-                                                    .corner_radius(egui::CornerRadius {
-                                                        nw: 3,
-                                                        ne: 3,
-                                                        sw: 0,
-                                                        se: 0,
-                                                    })
+                                                    .corner_radius(0)
                                                     .inner_margin(egui::Margin::symmetric(6, 2))
                                                     .show(ui, |ui| {
                                                         ui.set_width((inner_w - 12.0).max(40.0));
@@ -1638,7 +1633,7 @@ impl RustMixApp {
         ui.push_id(&id, |ui| {
             let strip = egui::Frame::new()
                 .fill(Color32::from_rgb(20, 25, 32))
-                .corner_radius(4.0)
+                .corner_radius(1.0)
                 .stroke(Stroke::new(1.0, Color32::from_rgb(52, 62, 74)))
                 .inner_margin(2.0)
                 .show(ui, |ui| {

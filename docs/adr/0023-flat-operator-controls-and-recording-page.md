@@ -35,3 +35,9 @@ per docs/testing.md. Compilation, Clippy, all tests, release build and full nati
 workflow run on GitHub Windows. Continue the same task-scoped hosted-validation
 authorization recorded in ADR 0020. Existing uncommitted documentation is preserved.
 No full vMix equivalence, GPU reliability, cadence or production-readiness claim.
+
+First run 39447863807/0d04901 failed compilation: egui 0.35 has no
+Context::style. Read the current Ui visuals instead, consistent with the existing
+frontend. No tests or native milestones passed that failed run. Flat source-card,
+mixer-frame and rail corners complete the same presentation treatment without
+changing control geometry. Exact revised hosted validation remains required.

@@ -2324,10 +2324,10 @@ impl RustMixApp {
             || self.confirm_close
             || self.confirm_open;
         let toolbar_frame = egui::Frame::new()
-            .fill(if ctx.style().visuals.dark_mode {
+            .fill(if ui.visuals().dark_mode {
                 Color32::from_rgb(10, 15, 20)
             } else {
-                ctx.style().visuals.panel_fill
+                ui.visuals().panel_fill
             })
             .inner_margin(egui::Margin::symmetric(8, 2));
         egui::Panel::top("toolbar")
