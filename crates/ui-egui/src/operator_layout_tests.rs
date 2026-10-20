@@ -157,9 +157,7 @@ fn unfilled_vector_controls_paint_readable_glyphs_in_both_themes() {
         let mut caret = Rect::NOTHING;
         let output = ctx.run_ui(egui::RawInput::default(), |ui| {
             gear = vector_icon_button(ui, VectorIcon::Gear, Vec2::splat(24.0), false, None).rect;
-            caret = caret_menu_button(ui, Vec2::new(22.0, 24.0), |_| {})
-                .response
-                .rect;
+            caret = caret_menu_button(ui, 24.0, |_| {}).response.rect;
         });
         let expected = ctx.style_of(theme).visuals.text_color();
         for area in [gear, caret] {

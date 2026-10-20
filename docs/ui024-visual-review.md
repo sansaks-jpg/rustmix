@@ -37,3 +37,9 @@ First candidate 16f42da/run39461892507 failed `cargo check`: the new wrapper
 omitted the existing Shortcuts caller's min_size override. Tests, build and native
 acceptance did not run. Preserve that small-window override in the wrapper and
 repeat exact-source verification; no check or warning is disabled.
+
+Second candidate 31626d7/run39462227659 passed workspace check, then Clippy's
+test-target compilation rejected a new contrast test passing a Vec2 to the
+existing caret helper's scalar-height argument. Correct the test call to 24.0;
+the production helper and warnings-as-errors policy stay unchanged. No Rust test
+or native acceptance ran in this failure.
