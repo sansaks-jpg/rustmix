@@ -339,6 +339,7 @@ impl RustMixApp {
         let start = Instant::now();
         let p = self.engine.project().clone();
         self.textures.retain(|id, _| p.input(*id).is_some());
+        self.thumbnail_pixels.retain(|id, _| p.input(*id).is_some());
         let mut raw_sources: HashMap<InputId, Vec<[u8; 4]>> = HashMap::new();
         for input in &p.inputs {
             let input_ms = self
@@ -350,10 +351,18 @@ impl RustMixApp {
             }
         }
 
-        let processed_preview = processed_sources(&p, &raw_sources, &self.input_fx, 384, 216);
+        let mut processed_preview = processed_sources(&p, &raw_sources, &self.input_fx, 384, 216);
         for input in &p.inputs {
-            if let Some(processed) = processed_preview.get(&input.id) {
-                let image = colour_image([384, 216], processed);
+            if let Some(processed) = processed_preview.remove(&input.id) {
+                // A project revision can change audio/routing without changing any
+                // thumbnail pixels. Exact comparison avoids redundant GPU uploads;
+                // a missing texture still uploads even when its pixels are cached.
+                if self.textures.contains_key(&input.id)
+                    && self.thumbnail_pixels.get(&input.id) == Some(&processed)
+                {
+                    continue;
+                }
+                let image = colour_image([384, 216], &processed);
                 if let Some(texture) = self.textures.get_mut(&input.id) {
                     texture.set(image, egui::TextureOptions::LINEAR);
                 } else {
@@ -366,6 +375,9 @@ impl RustMixApp {
                         ),
                     );
                 }
+                // Move the processed allocation into a bounded per-input cache:
+                // at most 32 * 384 * 216 * 4 bytes, approximately 10.2 MiB.
+                self.thumbnail_pixels.insert(input.id, processed);
             }
         }
         if self.program_worker.is_none() {
@@ -2032,6 +2044,98 @@ mod processing_tests {
             .unwrap();
         assert!(rail.expand(1.0).contains_rect(text.visual_bounding_rect()));
     }
+    fn thumbnail_frame(app: &mut RustMixApp, ctx: &egui::Context) -> egui::FullOutput {
+        ctx.run_ui(egui::RawInput::default(), |ui| {
+            app.refresh_textures(ui.ctx());
+        })
+    }
+
+    #[test]
+    fn paused_thumbnail_textures_are_retained_without_reupload_on_audio_revision() {
+        let mut app = RustMixApp::headless();
+        let ctx = egui::Context::default();
+        app.engine
+            .execute(Command::SetInputsPaused(true), 0)
+            .unwrap();
+        let initial = thumbnail_frame(&mut app, &ctx);
+        let source_ids: Vec<_> = app.textures.values().map(egui::TextureHandle::id).collect();
+        assert_eq!(source_ids.len(), app.engine.project().inputs.len());
+        assert_eq!(app.thumbnail_pixels.len(), source_ids.len());
+        assert_eq!(
+            initial
+                .textures_delta
+                .set
+                .iter()
+                .filter(|(id, _)| source_ids.contains(id))
+                .count(),
+            source_ids.len()
+        );
+        let pixels = app.thumbnail_pixels.clone();
+        let handles: HashMap<_, _> = app
+            .textures
+            .iter()
+            .map(|(id, handle)| (*id, handle.id()))
+            .collect();
+        let revision = app.engine.project().revision;
+        let mut master = app.engine.project().buses.first().cloned().unwrap();
+        master.gain_db = -3.0;
+        app.engine
+            .execute(Command::SetBus(0, master), 1000)
+            .unwrap();
+        assert!(app.engine.project().revision > revision);
+        app.now = 1000;
+        app.engine.tick(app.now);
+        let changed = thumbnail_frame(&mut app, &ctx);
+        assert!(
+            changed
+                .textures_delta
+                .set
+                .iter()
+                .all(|(id, _)| !source_ids.contains(id)),
+            "Audio-only revisions must not reupload source textures"
+        );
+        assert_eq!(app.thumbnail_pixels, pixels);
+        assert_eq!(app.textures.len(), handles.len());
+        for (id, previous) in handles {
+            assert_eq!(app.textures.get(&id).unwrap().id(), previous);
+        }
+    }
+
+    #[test]
+    fn changing_source_pixels_still_upload_to_existing_thumbnail_textures() {
+        let mut app = RustMixApp::headless();
+        let ctx = egui::Context::default();
+        let _ = thumbnail_frame(&mut app, &ctx);
+        let before = app.thumbnail_pixels.clone();
+        let handles: HashMap<_, _> = app
+            .textures
+            .iter()
+            .map(|(id, handle)| (*id, handle.id()))
+            .collect();
+        app.now = 1000;
+        app.engine.tick(app.now);
+        let frame = thumbnail_frame(&mut app, &ctx);
+        let mut changed_count = 0;
+        for (id, pixels) in &app.thumbnail_pixels {
+            if before.get(id) != Some(pixels) {
+                changed_count += 1;
+                let texture = handles.get(id).unwrap();
+                assert!(
+                    frame
+                        .textures_delta
+                        .set
+                        .iter()
+                        .any(|(uploaded, _)| uploaded == texture)
+                );
+                assert_eq!(app.textures.get(id).unwrap().id(), *texture);
+            }
+        }
+        assert!(
+            changed_count > 0,
+            "Moving generators must produce fresh thumbnail pixels"
+        );
+    }
+
     fn mixer_frame(
         app: &mut RustMixApp,
         ctx: &egui::Context,

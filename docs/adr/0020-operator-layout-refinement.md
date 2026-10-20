@@ -59,3 +59,18 @@ introducing a positive half-pixel error at1.5x scaling. Independent bilinear rep
 uses floor, has an independent3:2 bilinear synthetic positive/absent-caption negative regression,
 and saves failed captures as -unverified.png before any validation. Canonical accepted filenames
 and success JSON are produced only after checks. Revised exact-patch native acceptance pending.
+
+
+Hosted run39365300339 (61f4286) passed every workflow step, including98 UI tests, all other
+workspace suites, native workflows, caption692/692 and236/236, media, save/reopen and packaging.
+The three cadence targets still failed (39.56/44.49/42.79fps against50/59.94/60 at640x360).
+Other intermediate runs e7e714d/e175423 hit a real WARP queue-drain/destructor timeout after
+functional assertions. The passing run is not proof that intermittent teardown failure is fixed.
+
+A follow-up candidate exactly caches last uploaded thumbnail pixels per source and skips uploads
+when only project/audio state changed; dynamic pixels continue to upload. It moves existing
+processed buffers into a32-source384x216 cache (10,616,832bytes,10.125MiB maximum plus container
+overhead). Program composition is unchanged; no lossy hash or newdependency. Actual Context
+texture-delta regressions cover unchanged audio-only revisions and moving generators. Drain timeout
+and fatal failure checks stay intact. New exact-patch acceptance remains required, and a passing
+short smoke is not GPU hang/endurance qualification.

@@ -501,6 +501,8 @@ pub struct RustMixApp {
     pub(crate) start: Instant,
     pub(crate) now: u64,
     pub(crate) textures: HashMap<InputId, egui::TextureHandle>,
+    /// Exact last uploaded thumbnail pixels, bounded by 32 inputs at 384x216.
+    thumbnail_pixels: HashMap<InputId, Vec<[u8; 4]>>,
     pub(crate) program_texture: Option<egui::TextureHandle>,
     pub(crate) last_program_rgba: Vec<u8>,
     program_worker: Option<program::ProgramWorker>,
@@ -755,6 +757,7 @@ impl RustMixApp {
             start: Instant::now(),
             now: 0,
             textures: HashMap::new(),
+            thumbnail_pixels: HashMap::new(),
             program_texture: None,
             last_program_rgba: Vec::new(),
             program_worker: None,
