@@ -83,3 +83,27 @@ targets; resize regression caps row pitch at33. Source names also remained visua
 Ui::add_sized centered the Label despite its halign. An explicit left-to-right child now positions
 the name and records its own bounds; regression checks the left tile inset. These corrections still
 need exact-patch captures. The overall db29d67 run failed the same caption sampling342/692 assertion.
+
+
+## Full changed-surface inspection: 7517b9f
+
+Viewed all nine dialog captures with their matching JSON and workspace1600/1920 against supplied
+reference images. Add Input and General are readable with light forms/dark navigation; all21 Add
+choices and footers remain visible. Add body1117.2x570, navigation205.6 (18.4%); Properties body
+1155.6x570, navigation164.1 (14.2%). Production Add150x36, setup50x36 and Record92x36 at1920 closely
+follow observed dimensions. Mixer header124.8 wide and rails28 wide now follow the measured width.
+
+Actionable findings: Properties preview y538.5..766.5 exceeded page bottom744 by22.5px; unavailable
+record/stream/multicorder forms faded into gray-on-gray; mixer rail text was displaced outside the
+blue rail; fader18x100 used only part of the adjacent14x182 meter height. The next candidate fits
+preview to the remaining unscrolled page height, preserves readable opacity without enabling
+unsupported controls, centers rotated rail text and gives the vertical Slider its actual height.
+Add's Number selector moves beside confirmation. Regression assertions cover preview containment,
+footer grouping, rail text bounds and fader height. Fresh native inspection remains required.
+
+Remaining visual/workflow differences: Settings light card leaves a dark side/lower region; Overlay
+Settings is a simplified title editor; Playlist lists remain dark with a smaller Close action;
+Shortcuts is a3x4 bank rather than the observed wide bank. Mixer header is16 high versus observed21;
+source pictures232x131 versus260x146, controls20 versus25; take groups110 wide versus122. These
+are not accepted as equivalent, even if the functional native workflow passes. These screens need
+further focused increments and matching visual evidence.

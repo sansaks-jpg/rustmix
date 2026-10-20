@@ -73,6 +73,11 @@ fn light_form_frame<R>(
         .inner_margin(margin)
         .show(ui, |ui| {
             *ui.visuals_mut() = form_visuals();
+            // Unsupported forms stay non-interactive, but their entire light
+            // background and labels must not fade into the dark workspace.
+            if !ui.is_enabled() {
+                ui.set_opacity(1.0);
+            }
             add_contents(ui)
         })
 }
@@ -622,17 +627,6 @@ impl RustMixApp {
             );
             ui.separator();
             ui.horizontal(|ui| {
-                ui.label(RichText::new("Number").size(12.0).color(Color32::WHITE));
-                ui.add_enabled_ui(!self.add_loading, |ui| {
-                egui::ComboBox::from_id_salt("dialog.add.number")
-                    .width(54.0)
-                    .selected_text(self.add_number.to_string())
-                    .show_ui(ui, |ui| {
-                        for n in 1..=self.engine.project().inputs.len() + 1 {
-                            ui.selectable_value(&mut self.add_number, n, n.to_string());
-                        }
-                    });
-                });
                 if !matches!(self.add_tab, 12 | 13 | VIDEO_TAB) && self.add_name.trim().is_empty() {
                     ui.colored_label(PREVIEW, "Enter a non-empty source label.");
                 }
@@ -663,6 +657,19 @@ impl RustMixApp {
                             self.request_add_input()
                         };
                     }
+                    ui.add_space(12.0);
+                    ui.add_enabled_ui(!self.add_loading, |ui| {
+                        let number = egui::ComboBox::from_id_salt("dialog.add.number")
+                            .width(64.0)
+                            .selected_text(self.add_number.to_string())
+                            .show_ui(ui, |ui| {
+                                for n in 1..=self.engine.project().inputs.len() + 1 {
+                                    ui.selectable_value(&mut self.add_number, n, n.to_string());
+                                }
+                            });
+                        self.automation.insert("dialog.add.number".into(), number.response.rect);
+                    });
+                    ui.label(RichText::new("Number").size(12.0).color(Color32::WHITE));
                     if self.add_loading { ui.label("Loading PNG…"); }
                 });
             });
@@ -1202,6 +1209,8 @@ impl RustMixApp {
                     });
                     ui.add_space(4.0);
                     // Bottom black preview section with live GPU texture and zoom slider.
+                    let consumed = ui.cursor().top() - ui.min_rect().top();
+                    let visible_preview_height = (height - consumed - 16.0).max(96.0);
                     egui::Frame::new()
                         .fill(Color32::from_rgb(8, 10, 14))
                         .corner_radius(4.0)
@@ -1211,7 +1220,7 @@ impl RustMixApp {
                             ui.horizontal(|ui| {
                                 let avail_w = (ui.available_width() - 42.0).max(160.0);
                                 let preview_h = if ctx.viewport_rect().height() >= 850.0 {
-                                    (height * 0.40).clamp(190.0, 320.0)
+                                    (height * 0.40).clamp(190.0, 320.0).min(visible_preview_height)
                                 } else { 132.0_f32 };
                                 let preview_w = (preview_h * 16.0 / 9.0).min(avail_w);
                                 let pad_left = ((avail_w - preview_w) * 0.5).max(0.0);
@@ -2895,6 +2904,17 @@ mod operator_dialog_tests {
                         body.height() > 520.0,
                         "large workspaces should expose more source content"
                     );
+                    if prefix == "dialog.properties" {
+                        let preview = app.automation["dialog.properties.preview"];
+                        assert!(
+                            body.contains_rect(preview),
+                            "Default source preview is clipped"
+                        );
+                    } else {
+                        let number = app.automation["dialog.add.number"];
+                        let confirm = app.automation["dialog.add.confirm"];
+                        assert!(confirm.left() - number.right() < 24.0);
+                    }
                 }
                 assert!(body.contains_rect(*navigation));
                 assert_eq!(app.engine.project().program, InputId(1));

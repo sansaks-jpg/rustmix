@@ -23,8 +23,9 @@ fn mixer_rail(ui: &mut egui::Ui, width: f32, height: f32, label: &str) -> Rect {
     let galley =
         ui.painter()
             .layout_no_wrap(label.to_owned(), FontId::proportional(10.5), Color32::WHITE);
+    let text_origin = rect.center() - galley.size() * 0.5;
     ui.painter().add(
-        egui::epaint::TextShape::new(rect.center(), galley, Color32::WHITE)
+        egui::epaint::TextShape::new(text_origin, galley, Color32::WHITE)
             .with_angle_and_anchor(-std::f32::consts::FRAC_PI_2, Align2::CENTER_CENTER),
     );
     rect
@@ -1682,6 +1683,7 @@ impl RustMixApp {
                                 }
                             });
                             // Right column inside strip: vertical fader with scale ticks + stereo level meter
+                            ui.spacing_mut().slider_width = fader_h;
                             let fader = ui
                                 .add_sized(
                                     [24.0, fader_h],
@@ -2010,6 +2012,26 @@ impl RustMixApp {
 mod processing_tests {
     #![allow(clippy::unwrap_used)]
     use super::*;
+    #[test]
+    fn rotated_mixer_label_stays_inside_the_blue_rail() {
+        let ctx = egui::Context::default();
+        let mut rail = Rect::NOTHING;
+        let output = ctx.run_ui(egui::RawInput::default(), |ui| {
+            rail = mixer_rail(ui, 28.0, 225.0, "OUTPUTS");
+        });
+        let text = output
+            .shapes
+            .iter()
+            .find_map(|shape| {
+                if let egui::Shape::Text(text) = &shape.shape {
+                    Some(text)
+                } else {
+                    None
+                }
+            })
+            .unwrap();
+        assert!(rail.expand(1.0).contains_rect(text.visual_bounding_rect()));
+    }
     fn mixer_frame(
         app: &mut RustMixApp,
         ctx: &egui::Context,
@@ -2072,6 +2094,10 @@ mod processing_tests {
             let header = bounds("header");
             let fader = bounds("gain");
             let meter = bounds("meter");
+            assert!(
+                fader.height() >= meter.height() * 0.95,
+                "The fader must use the available channel height"
+            );
             let mute = bounds("mute");
             assert!(
                 strip.width() <= 90.0,
