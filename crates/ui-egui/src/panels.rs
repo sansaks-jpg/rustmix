@@ -437,20 +437,30 @@ impl RustMixApp {
                 ui.set_min_width((ui.available_width() - 1.0).max(20.0));
                 ui.horizontal(|ui| {
                     let badge = if program { "PGM" } else { "PVW" };
-                    let title = ui.add_sized(
-                        [(ui.available_width() - 96.0).max(40.0), 18.0],
-                        egui::Label::new(
-                            RichText::new(format!(
-                                "{}  {} · {badge}",
-                                p.input_number(id),
-                                input.name
-                            ))
-                            .strong()
-                            .color(Color32::WHITE),
+                    // add_sized centers its child even when Label::halign is
+                    // left. Reserve the field with an explicitly left-to-right
+                    // child so actual glyphs start beside the monitor inset.
+                    let title = ui
+                        .allocate_ui_with_layout(
+                            egui::vec2((ui.available_width() - 96.0).max(40.0), 18.0),
+                            egui::Layout::left_to_right(egui::Align::Center),
+                            |ui| {
+                                ui.add(
+                                    egui::Label::new(
+                                        RichText::new(format!(
+                                            "{}  {} · {badge}",
+                                            p.input_number(id),
+                                            input.name
+                                        ))
+                                        .strong()
+                                        .color(Color32::WHITE),
+                                    )
+                                    .truncate()
+                                    .halign(egui::Align::Min),
+                                )
+                            },
                         )
-                        .truncate()
-                        .halign(egui::Align::Min),
-                    );
+                        .inner;
                     self.automation.insert(
                         format!(
                             "monitor.{}.title",

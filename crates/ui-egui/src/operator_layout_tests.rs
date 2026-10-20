@@ -56,7 +56,10 @@ fn painted_monitor_titles_start_beside_left_inset_and_take_labels_are_centered()
             );
             let ink = text_in(&output.shapes, &label, header);
             assert!(header.contains_rect(title));
-            assert!((ink.left() - header.left() - 8.0).abs() <= 2.0);
+            assert!(
+                (ink.left() - header.left() - 8.0).abs() <= 2.0,
+                "{bus} title must start beside the inset: ink={ink:?}, header={header:?}"
+            );
             let gear = *app
                 .automation
                 .get(&format!("monitor.{bus}.properties"))
@@ -70,7 +73,10 @@ fn painted_monitor_titles_start_beside_left_inset_and_take_labels_are_centered()
         ] {
             let button = *app.automation.get(id).unwrap();
             let ink = text_in(&output.shapes, label, button);
-            assert!((ink.center().x - button.center().x).abs() <= 2.0);
+            assert!(
+                (ink.center().x - button.center().x).abs() <= 2.0,
+                "{id} must center its painted label: ink={ink:?}, button={button:?}"
+            );
             assert!((ink.center().y - button.center().y).abs() <= 2.0);
         }
         for (index, slot) in app.engine.project().transition_slots.iter().enumerate() {

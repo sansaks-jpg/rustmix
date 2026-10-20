@@ -41,3 +41,10 @@ Context::style. Read the current Ui visuals instead, consistent with the existin
 frontend. No tests or native milestones passed that failed run. Flat source-card,
 mixer-frame and rail corners complete the same presentation treatment without
 changing control geometry. Exact revised hosted validation remains required.
+
+Second run 39448348943/85e72a1 passed check and warnings-as-errors Clippy;
+125 UI tests passed and the new painted monitor-title regression failed.
+Label::halign alone does not override add_sized's centered child layout. Reserve
+the title field with an explicitly left-to-right child, as existing source-card
+names do. Preserve the original 8-point inset gate and all tolerances. The failed
+run did not build or launch the application; exact revised acceptance is pending.
