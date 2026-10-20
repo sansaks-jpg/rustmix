@@ -42,3 +42,11 @@ native acceptance was still running when the next geometry refinement was prepar
 targets now grow with the monitor bank (26–44 logical points); compact overlay rows stay 20 high
 so the manual T-Bar remains inside the bank. Resize coverage asserts take/fade target minimums
 and bank containment. New geometry still needs exact-patch native evidence and precise comparison.
+
+
+Precision follow-up: measured source-dialog, rail/strip and production-control differences are
+tracked in ui020-visual-review.md. Light native forms now contrast with dark headers/navigation;
+source dialogs grow proportionally with viewport width and height while compact footers remain
+bounded. Mixer content/rails scale independently of dock width, retaining horizontal scrolling.
+Production actions/setup targets grow across1100–1920. New proportions and exact-raster screenshots
+must be reviewed on the exact final revision; no full visual correspondence is claimed from source.

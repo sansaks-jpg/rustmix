@@ -4,7 +4,37 @@ use egui::{Align, Color32, RichText, Sense, Stroke, Vec2};
 
 const SIDEBAR: Color32 = Color32::from_rgb(14, 18, 24);
 const HEADER_DARK: Color32 = Color32::from_rgb(20, 26, 34);
-const FORM_BORDER: Color32 = Color32::from_rgb(54, 66, 82);
+const FORM_BORDER: Color32 = Color32::from_rgb(190, 196, 203);
+
+fn form_visuals() -> egui::Visuals {
+    let mut visuals = egui::Visuals::light();
+    visuals.override_text_color = Some(FORM_TEXT);
+    visuals.widgets.noninteractive.bg_fill = FORM_LIGHT;
+    visuals.widgets.noninteractive.fg_stroke = Stroke::new(1.0, FORM_TEXT);
+    visuals.widgets.inactive.bg_fill = Color32::from_rgb(252, 252, 253);
+    visuals.widgets.inactive.fg_stroke = Stroke::new(1.0, FORM_TEXT);
+    visuals.widgets.inactive.bg_stroke = Stroke::new(1.0, FORM_BORDER);
+    visuals.widgets.hovered.bg_fill = Color32::from_rgb(229, 237, 245);
+    visuals.widgets.hovered.fg_stroke = Stroke::new(1.0, FORM_TEXT);
+    visuals.widgets.active.bg_fill = Color32::from_rgb(204, 224, 241);
+    visuals.widgets.active.fg_stroke = Stroke::new(1.0, FORM_TEXT);
+    visuals.selection.bg_fill = Color32::from_rgb(204, 224, 241);
+    visuals.selection.stroke = Stroke::new(1.0, FORM_TEXT);
+    visuals.extreme_bg_color = Color32::WHITE;
+    visuals
+}
+
+// Keep compact/DPI-scaled workspaces on the existing footer-safe height policy.
+// Large production workspaces give the form and source monitor room to grow.
+fn source_dialog_body_height(viewport_height: f32) -> f32 {
+    if viewport_height <= 700.0 {
+        (viewport_height - 180.0).clamp(200.0, 520.0)
+    } else {
+        (viewport_height * 0.70 - 60.0)
+            .max(520.0)
+            .min(viewport_height - 180.0)
+    }
+}
 
 pub(super) fn operator_window<'a>(
     ctx: &egui::Context,
@@ -42,19 +72,7 @@ fn light_form_frame<R>(
         .stroke(Stroke::new(1.0, FORM_BORDER))
         .inner_margin(margin)
         .show(ui, |ui| {
-            let mut visuals = egui::Visuals::dark();
-            visuals.override_text_color = Some(FORM_TEXT);
-            visuals.widgets.noninteractive.bg_fill = Color32::from_rgb(18, 23, 30);
-            visuals.widgets.noninteractive.fg_stroke = Stroke::new(1.0, FORM_TEXT);
-            visuals.widgets.inactive.bg_fill = Color32::from_rgb(34, 42, 54);
-            visuals.widgets.inactive.fg_stroke = Stroke::new(1.0, FORM_TEXT);
-            visuals.widgets.inactive.bg_stroke = Stroke::new(1.0, Color32::from_rgb(64, 76, 92));
-            visuals.widgets.hovered.bg_fill = Color32::from_rgb(46, 58, 74);
-            visuals.widgets.hovered.fg_stroke = Stroke::new(1.0, Color32::WHITE);
-            visuals.widgets.active.bg_fill = PROGRAM;
-            visuals.widgets.active.fg_stroke = Stroke::new(1.0, Color32::WHITE);
-            visuals.extreme_bg_color = Color32::from_rgb(14, 18, 24);
-            *ui.visuals_mut() = visuals;
+            *ui.visuals_mut() = form_visuals();
             add_contents(ui)
         })
 }
@@ -304,7 +322,12 @@ impl RustMixApp {
         let (body, _) = ui.allocate_exact_size(Vec2::new(width, height), Sense::hover());
         // A wider source library keeps long source names readable on production
         // workspaces; compact displays retain room for the independently scrolling form.
-        let navigation_width = if width >= 900.0 { 212.0 } else { 164.0 };
+        let navigation_width = if width >= 900.0 {
+            let ratio = if id == "dialog.add" { 0.184 } else { 0.142 };
+            (width * ratio).max(164.0)
+        } else {
+            164.0
+        };
         let navigation_rect =
             egui::Rect::from_min_size(body.min, Vec2::new(navigation_width, height));
         let page_rect = egui::Rect::from_min_max(
@@ -336,6 +359,13 @@ impl RustMixApp {
                 .layout(egui::Layout::top_down(Align::Min)),
         );
         page_ui.set_clip_rect(page_rect.intersect(ui.clip_rect()));
+        if matches!(id, "dialog.add" | "dialog.properties") {
+            page_ui.painter().rect_filled(page_rect, 0.0, FORM_LIGHT);
+            *page_ui.visuals_mut() = form_visuals();
+        }
+        self.automation
+            .insert(format!("{id}.navigation"), navigation_rect);
+        self.automation.insert(format!("{id}.page"), page_rect);
         egui::ScrollArea::vertical()
             .id_salt((id, "page.scroll"))
             .max_width(page_rect.width())
@@ -418,13 +448,13 @@ impl RustMixApp {
         }
         let mut open = self.add_open;
         let mut close_requested = false;
-        let height = (ctx.viewport_rect().height() - 180.0).clamp(200.0, 520.0);
+        let height = source_dialog_body_height(ctx.viewport_rect().height());
         operator_window(
             ctx,
             "Input Select",
             "dialog.add_input",
             &mut open,
-            Vec2::new(1120.0, 640.0),
+            Vec2::new((ctx.viewport_rect().width() * 0.707).max(780.0), height + 70.0),
         )
         .show(ctx, |ui| {
             self.dialog_columns(
@@ -508,7 +538,7 @@ impl RustMixApp {
                         ui.columns(2, |cols| {
                             if let [left_col, right_col, ..] = cols {
                                 egui::Frame::new()
-                                    .fill(Color32::from_rgb(18, 23, 30))
+                                    .fill(Color32::WHITE)
                                     .corner_radius(4.0)
                                     .stroke(Stroke::new(1.0, FORM_BORDER))
                                     .inner_margin(6.0)
@@ -545,7 +575,7 @@ impl RustMixApp {
                                         .show(ui, |ui| {
                                             if app.add_image.is_none() && (app.add_tab == 1 || Path::new(&app.add_name).extension().is_some()) {
                                                 ui.allocate_space(egui::vec2(180.0, 95.0));
-                                                ui.label("PNG is validated on import");
+                                                ui.label(RichText::new("PNG is validated on import").color(Color32::WHITE));
                                             } else if let Some((_, texture)) = &app.add_preview {
                                                 let w = ui.available_width().clamp(140.0, 260.0);
                                                 let r = ui.add(
@@ -661,13 +691,13 @@ impl RustMixApp {
             .map(|input| input.name.as_str())
             .unwrap_or(draft.name.as_str())
             .to_owned();
-        let height = (ctx.viewport_rect().height() - 180.0).clamp(200.0, 540.0);
+        let height = source_dialog_body_height(ctx.viewport_rect().height());
         operator_window(
             ctx,
             format!("Input: {} {title_name}", self.engine.project().input_number(id)),
             "dialog.input_properties",
             &mut open,
-            Vec2::new(1160.0, 660.0),
+            Vec2::new((ctx.viewport_rect().width() * 0.731).max(790.0), height + 70.0),
         )
         .show(ctx, |ui| {
             self.dialog_columns(
@@ -744,7 +774,7 @@ impl RustMixApp {
                                 ui.add_sized([label_w, 20.0], egui::Label::new(RichText::new(&path_lbl).color(Color32::WHITE).size(12.0)).truncate())
                                     .on_hover_text(&path_lbl);
                                 ui.with_layout(egui::Layout::right_to_left(Align::Center), |ui| {
-                                    let change = ui.add_enabled(!app.properties_loading, egui::Button::new("Change").fill(CHIP_BG));
+                                    let change = ui.add_enabled(!app.properties_loading, egui::Button::new(RichText::new("Change").color(Color32::WHITE)).fill(CHIP_BG));
                                     app.automation.insert("dialog.properties.change".into(), change.rect);
                                     if change.clicked() && app.smoke.is_none() {
                                         app.start_png_picker(media::MediaTarget::Properties { id, token: app.properties_token });
@@ -1180,7 +1210,9 @@ impl RustMixApp {
                             ui.set_min_width((ui.available_width() - 2.0).max(80.0));
                             ui.horizontal(|ui| {
                                 let avail_w = (ui.available_width() - 42.0).max(160.0);
-                                let preview_h = if ctx.viewport_rect().height() >= 850.0 { 190.0_f32 } else { 132.0_f32 };
+                                let preview_h = if ctx.viewport_rect().height() >= 850.0 {
+                                    (height * 0.40).clamp(190.0, 320.0)
+                                } else { 132.0_f32 };
                                 let preview_w = (preview_h * 16.0 / 9.0).min(avail_w);
                                 let pad_left = ((avail_w - preview_w) * 0.5).max(0.0);
                                 ui.add_space(pad_left);
@@ -1703,7 +1735,7 @@ impl RustMixApp {
             );
             body_ui.set_clip_rect(body.intersect(ui.clip_rect()));
             body_ui.painter().rect_filled(body, 4.0, FORM_LIGHT);
-            *body_ui.visuals_mut() = egui::Visuals::dark();
+            *body_ui.visuals_mut() = form_visuals();
             egui::ScrollArea::vertical()
                 .id_salt("dialog.external.scroll")
                 .max_height(height)
@@ -2503,7 +2535,7 @@ impl RustMixApp {
                                         "Stopped"
                                     })
                                     .size(18.0)
-                                    .color(if self.mc_running { RED } else { FORM_TEXT }),
+                                    .color(if self.mc_running { RED } else { Color32::WHITE }),
                                 );
                             });
                         let toggle = ui.add_enabled_ui(false, |ui| {
@@ -2787,11 +2819,17 @@ mod operator_dialog_tests {
     use super::*;
 
     fn frame(app: &mut RustMixApp, ctx: &egui::Context, events: Vec<egui::Event>) {
+        frame_at_size(app, ctx, events, Vec2::new(1600.0, 900.0));
+    }
+
+    fn frame_at_size(
+        app: &mut RustMixApp,
+        ctx: &egui::Context,
+        events: Vec<egui::Event>,
+        size: Vec2,
+    ) {
         let raw = egui::RawInput {
-            screen_rect: Some(egui::Rect::from_min_size(
-                egui::Pos2::ZERO,
-                Vec2::new(1600.0, 900.0),
-            )),
+            screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, size)),
             events,
             ..Default::default()
         };
@@ -2821,6 +2859,46 @@ mod operator_dialog_tests {
                     },
                 ],
             );
+        }
+    }
+
+    #[test]
+    fn source_dialog_proportions_grow_while_compact_footers_stay_reachable() {
+        for size in [
+            Vec2::new(734.0, 466.0),
+            Vec2::new(1600.0, 900.0),
+            Vec2::new(1920.0, 1080.0),
+        ] {
+            for (action, prefix, width_ratio, navigation_ratio) in [
+                (Action::Add, "dialog.add", 0.707, 0.184),
+                (
+                    Action::Properties(InputId(3)),
+                    "dialog.properties",
+                    0.731,
+                    0.142,
+                ),
+            ] {
+                let mut app = RustMixApp::headless();
+                let ctx = egui::Context::default();
+                app.theme(&ctx);
+                app.dispatch(action, &ctx);
+                for _ in 0..4 {
+                    frame_at_size(&mut app, &ctx, vec![], size);
+                }
+                app.validate_dialog_geometry(&ctx, prefix).unwrap();
+                let body = app.automation.get(&format!("{prefix}.body")).unwrap();
+                let navigation = app.automation.get(&format!("{prefix}.navigation")).unwrap();
+                if size.x >= 1600.0 {
+                    assert!((body.width() / size.x - width_ratio).abs() < 0.04);
+                    assert!((navigation.width() / body.width() - navigation_ratio).abs() < 0.02);
+                    assert!(
+                        body.height() > 520.0,
+                        "large workspaces should expose more source content"
+                    );
+                }
+                assert!(body.contains_rect(*navigation));
+                assert_eq!(app.engine.project().program, InputId(1));
+            }
         }
     }
 

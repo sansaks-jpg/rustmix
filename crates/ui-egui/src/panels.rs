@@ -1,9 +1,18 @@
 use super::*;
 use eframe::egui::{self, Align2, FontId, Rect, Sense, Stroke, Vec2};
 
+/// Keep the mixer proportional to the operator viewport, independently of its
+/// scrollable dock width. Compact embedded banks retain their usable minimum.
+fn mixer_widths(viewport_width: f32) -> (f32, f32) {
+    (
+        (viewport_width * 0.065).clamp(76.0, 125.0),
+        (viewport_width * 0.0146).clamp(20.0, 28.0),
+    )
+}
+
 /// Vertical blue group label (`OUTPUTS` / `INPUTS`) with modern rounded corners.
-fn mixer_rail(ui: &mut egui::Ui, height: f32, label: &str) {
-    let (rect, _) = ui.allocate_exact_size(egui::vec2(20.0, height), Sense::hover());
+fn mixer_rail(ui: &mut egui::Ui, width: f32, height: f32, label: &str) -> Rect {
+    let (rect, _) = ui.allocate_exact_size(egui::vec2(width, height), Sense::hover());
     ui.painter().rect_filled(rect, 3.0, MIXER_RAIL);
     ui.painter().rect_stroke(
         rect,
@@ -18,6 +27,7 @@ fn mixer_rail(ui: &mut egui::Ui, height: f32, label: &str) {
         egui::epaint::TextShape::new(rect.center(), galley, Color32::WHITE)
             .with_angle_and_anchor(-std::f32::consts::FRAC_PI_2, Align2::CENTER_CENTER),
     );
+    rect
 }
 
 /// CPU reference effects applied before bus composition.
@@ -1484,6 +1494,7 @@ impl RustMixApp {
         let p = self.engine.project().clone();
         let solo = p.inputs.iter().any(|i| i.audio.solo);
         let height = (ui.available_height() - 12.0).clamp(150.0, 240.0);
+        let (_, rail_width) = mixer_widths(ui.ctx().viewport_rect().width());
         egui::ScrollArea::horizontal()
             .id_salt("audio.strips")
             .show(ui, |ui| {
@@ -1491,19 +1502,25 @@ impl RustMixApp {
                     ui.spacing_mut().item_spacing.x = 3.0;
                     // Pin button stacked directly above the OUTPUTS rail
                     ui.allocate_ui_with_layout(
-                        egui::vec2(20.0, height),
+                        egui::vec2(rail_width, height),
                         egui::Layout::top_down(egui::Align::Min),
                         |ui| {
                             ui.spacing_mut().item_spacing.y = 2.0;
                             let _ = vector_icon_button(
                                 ui,
                                 VectorIcon::Pin,
-                                egui::vec2(20.0, 20.0),
+                                egui::vec2(rail_width, rail_width),
                                 true,
                                 None,
                             )
                             .on_hover_text("Docked mixer; pinning is unavailable");
-                            mixer_rail(ui, (height - 22.0).max(80.0), "OUTPUTS");
+                            let rail = mixer_rail(
+                                ui,
+                                rail_width,
+                                (height - rail_width - 2.0).max(80.0),
+                                "OUTPUTS",
+                            );
+                            self.automation.insert("audio.rail.outputs".into(), rail);
                         },
                     );
                     if let Some(a) = p.buses.first() {
@@ -1520,7 +1537,8 @@ impl RustMixApp {
                             self.actions.push(Action::Engine(Command::SetBus(0, a)));
                         }
                     }
-                    mixer_rail(ui, height, "INPUTS");
+                    let rail = mixer_rail(ui, rail_width, height, "INPUTS");
+                    self.automation.insert("audio.rail.inputs".into(), rail);
                     for input in &p.inputs {
                         let peaks = audio::input_peaks(input, solo, self.now);
                         let changed = self.strip(
@@ -1556,6 +1574,7 @@ impl RustMixApp {
         let before = a.clone();
         let is_master = input_id.is_none();
         let header_fill = if !a.muted { PROGRAM } else { CHIP_BG };
+        let (strip_width, _) = mixer_widths(ui.ctx().viewport_rect().width());
         ui.push_id(&id, |ui| {
             let strip = egui::Frame::new()
                 .fill(Color32::from_rgb(20, 25, 32))
@@ -1566,7 +1585,7 @@ impl RustMixApp {
                     // The mixer bank is horizontal; Frame inherits that layout.
                     // Each channel must establish its own vertical signal strip.
                     ui.vertical(|ui| {
-                        ui.set_width(76.0);
+                        ui.set_width(strip_width);
                         ui.set_min_height(height - 4.0);
                         let header = egui::Frame::new()
                             .fill(header_fill)
@@ -1578,7 +1597,7 @@ impl RustMixApp {
                             })
                             .inner_margin(egui::Margin::symmetric(4, 2))
                             .show(ui, |ui| {
-                                ui.set_width(68.0);
+                                ui.set_width(strip_width - 8.0);
                                 ui.vertical_centered(|ui| {
                                     ui.add(
                                         egui::Label::new(
@@ -1596,7 +1615,9 @@ impl RustMixApp {
                         ui.add_space(4.0);
                         let fader_h = (height - 58.0).max(68.0);
                         ui.horizontal_top(|ui| {
-                            ui.spacing_mut().item_spacing.x = 3.0;
+                            // Separate the settings column and fader/meter as the header widens.
+                            let gap = ((strip_width - 66.0) * 0.5).clamp(3.0, 26.0);
+                            ui.spacing_mut().item_spacing.x = gap;
                             // Left button column inside strip: [Gear], [i / S], [Speaker]
                             ui.vertical(|ui| {
                                 ui.spacing_mut().item_spacing.y = 4.0;
@@ -1768,7 +1789,9 @@ impl RustMixApp {
                                 ui.spacing_mut().item_spacing.x = 2.0;
                                 ui.spacing_mut().button_padding = egui::vec2(3.0, 1.0);
                                 for (v, label) in a.sends.iter_mut().zip(["M", "A", "B"]) {
-                                    ui.toggle_value(v, RichText::new(label).size(10.0));
+                                    let send = ui.toggle_value(v, RichText::new(label).size(10.0));
+                                    self.automation
+                                        .insert(format!("audio.{id}.send.{label}"), send.rect);
                                 }
                             }
                         });
@@ -1993,11 +2016,21 @@ mod processing_tests {
         events: Vec<egui::Event>,
         height: f32,
     ) {
+        mixer_frame_at_width(app, ctx, events, height, 400.0);
+    }
+
+    fn mixer_frame_at_width(
+        app: &mut RustMixApp,
+        ctx: &egui::Context,
+        events: Vec<egui::Event>,
+        height: f32,
+        viewport_width: f32,
+    ) {
         let _ = ctx.run_ui(
             egui::RawInput {
                 screen_rect: Some(Rect::from_min_size(
                     egui::Pos2::ZERO,
-                    egui::vec2(400.0, 320.0),
+                    egui::vec2(viewport_width, 320.0),
                 )),
                 events,
                 ..Default::default()
@@ -2050,6 +2083,71 @@ mod processing_tests {
             assert!(fader.right() <= meter.left());
             for rect in [header, fader, meter, mute] {
                 assert!(strip.contains_rect(rect));
+            }
+        }
+    }
+
+    #[test]
+    fn mixer_production_widths_keep_header_fader_meter_and_sends_inside_each_strip() {
+        for width in [1100.0, 1600.0, 1920.0] {
+            let mut app = RustMixApp::headless();
+            let ctx = egui::Context::default();
+            for _ in 0..3 {
+                mixer_frame_at_width(&mut app, &ctx, vec![], 225.0, width);
+            }
+            let id = app.engine.project().inputs.first().unwrap().id.0;
+            let bounds = |suffix: &str| {
+                *app.automation
+                    .get(&format!("audio.input.{id}.{suffix}"))
+                    .unwrap()
+            };
+            let strip = bounds("strip");
+            let header = bounds("header");
+            let (expected_width, _) = mixer_widths(width);
+            assert!((header.width() - expected_width).abs() <= 1.0);
+            assert!(strip.width() <= expected_width + 8.0);
+            let fader = bounds("gain");
+            let meter = bounds("meter");
+            assert!(fader.top() >= header.bottom());
+            assert!(fader.right() < meter.left());
+            for suffix in [
+                "header", "gain", "meter", "mute", "send.M", "send.A", "send.B",
+            ] {
+                assert!(
+                    strip.contains_rect(bounds(suffix)),
+                    "Width {width}: {suffix} escaped strip"
+                );
+            }
+            for suffix in ["send.M", "send.A", "send.B"] {
+                assert!(bounds(suffix).top() >= fader.bottom());
+            }
+        }
+    }
+
+    #[test]
+    fn mixer_rails_scale_with_viewport_even_inside_a_narrow_scrolling_dock() {
+        for width in [400.0, 1100.0, 1600.0, 1920.0] {
+            let mut app = RustMixApp::headless();
+            let ctx = egui::Context::default();
+            for _ in 0..3 {
+                let _ = ctx.run_ui(
+                    egui::RawInput {
+                        screen_rect: Some(Rect::from_min_size(
+                            egui::Pos2::ZERO,
+                            egui::vec2(width, 320.0),
+                        )),
+                        ..Default::default()
+                    },
+                    |ui| {
+                        ui.set_width(360.0);
+                        app.audio(ui);
+                    },
+                );
+            }
+            let (_, expected_rail_width) = mixer_widths(width);
+            for id in ["audio.rail.outputs", "audio.rail.inputs"] {
+                let rail = app.automation.get(id).unwrap();
+                assert!((rail.width() - expected_rail_width).abs() <= 0.1);
             }
         }
     }
