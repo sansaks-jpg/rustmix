@@ -1,9 +1,10 @@
 # RustMix
 
-2026-10-20 UI-020 candidate: reference-guided operator layout improvements are being implemented
-in the native frontend (responsive toolbar targets, vertical mixer strips and bounded source dialogs).
-Source/static verification only; exact-patch hosted build, widget tests and native screenshot review
-are pending. No full visual or functional parity is claimed. See [UI-020](docs/adr/0020-operator-layout-refinement.md).
+UI-020 (2026-10-20): operator proportions, mixer strips and bounded dialogs were refined and
+visually compared against the supplied references. Code bec97a8 passed hosted check, Clippy,
+106 UI tests plus all other suites, and release build. Native screenshots were reviewed, but
+GPU shutdown drain failed; complete native workflows and full reference equivalence remain open.
+See [visual review](docs/ui020-visual-review.md) and [ADR 0020](docs/adr/0020-operator-layout-refinement.md).
 
 Fullscreen correction (2026-10-19): the top button now sends PGM directly to an
 extended display and leaves the operator window in place. No F11 or dragging is

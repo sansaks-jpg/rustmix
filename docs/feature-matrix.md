@@ -4,7 +4,7 @@
 
 | Feature | Status | Scope | Test evidence | Platform | Hardware tested | Known limitations | Last verified date | Owner/task ID |
 |---|---|---|---|---|---|---|---|---|
-| Operator layout refinement | experimental; source candidate | Responsive toolbar targets, vertical mixer channels, source-tile readability, bounded source dialogs | Formatting/repository guards and source review only; widget/native regressions prepared, unrun | Windows target | None for this patch | Exact-patch build, native screenshot comparison and full reference equivalence pending; unavailable backends remain unavailable | 2026-10-20 static checks only | UI-020 / ADR 0020 |
+| Operator layout refinement | experimental; selected visual corrections tested | Responsive toolbar/monitors/cards/mixer and dialogs; same-size texture reuse | bec97a8/run39413208502 check, Clippy, all suites including106 UI tests and build pass; exact screenshots inspected; native GPU drain FAIL | Hosted Windows2022 | Software runner only; no physical devices | Reopen and later workflows not run after shutdown rejection; remaining form/overlay gaps; full equivalence and production readiness open | 2026-10-20 | UI-020 / ADR 0020 |
 
 ## Task 1.3 source continuation (2026-10-19; runtime acceptance pending)
 

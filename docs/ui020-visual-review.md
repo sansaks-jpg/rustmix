@@ -128,3 +128,55 @@ presets and split menus, Settings light page extent, disabled form background co
 list separation/Close target, Shortcuts nine-wide large-display bank and compact wrapping, and
 MultiCorder folder/duration separation. Inspect all changed screens at their exact CI revision.
 The simplified Overlay Settings and missing production backends remain outstanding.
+
+## Overlay Settings follow-up observation
+
+Read-only parallel review viewed the supplied Overlay Settings reference and61f4286 native capture
+with matching bounds. Reference width is approximately .620 of viewport versus RustMix .474;
+RustMix title/subtitle fields and420x236 preview leave unused space. Source review also found that
+preview paints only the title with UI typography, omits subtitle and ignores draft.enabled; switching
+channels replaces an unsaved draft. These are open UX/correctness gaps, not accepted correspondence.
+Future scoped work should preserve drafts/explicit discard, show truthful title/subtitle/visibility,
+and group fields with a bounded preview. Effect/alpha/free-transform/border controls must remain
+unavailable until their engine paths exist. Verify Cancel/slot switching without unintended Program
+mutation, long captions and resize1100/1600/1920. No overlay-dialog implementation is included here.
+
+## Exact current code review: bec97a8 / run39413208502
+
+Status: specific visual corrections accepted; full native workflow FAILED. Windows2022 check,
+warnings-as-errors Clippy, all workspace suites including106 UI tests, and release build passed.
+The main native process produced workspace1100/1600/1920, all nine dialogs, pause/stability and
+smoke-ok evidence, then exited0 with a failed10s GPU drain proof. Harness correctly rejected it.
+No reopen/PNG/reference/output/audio/video/perf acceptance ran after that failure. Original GPU
+reliability remains open; this run does not demonstrate a fixed hang. Previous023002b/run39412738765
+failed main native stage34 after741 frames and also failed GPU drain.
+
+Viewed current workspace1100/1920 and Overlay Settings directly; two read-only agents independently
+viewed all eight other dialogs with their matching JSON and supplied reference images. At1920:
+
+| Element | Current logical size/placement | Visual finding |
+|---|---|---|
+| PVW / PGM picture |809.1x455.1 each; x32.8 /1078.1|16:9 with symmetric separation; observed picture dimensions closely correspond|
+| CUT |122x44|Observed large-display target dimensions reached|
+| T-Bar |122x36; y478..514|Inside monitor bank, visible at1100 too|
+| Input picture |260x146.3|Observed large-display picture size reached|
+| Input control rows |25high;1px inter-row gap|Both rows visible on first row of cards; later cards use scrolling|
+| Mixer headers |124.8x21|Observed width/height reached; bank remains horizontally scrollable|
+| New / Save / Last |94x30 each|Targets bounded; Open/SaveAs split groups93.3x30 incl3px gap|
+| Pause / Basic |120x30 /108x30|Observed large-display target dimensions reached|
+
+Settings page now fills its light content extent597..1173 by219..739. Playlist light bodies401x150
+are separate by4px, Close92x29. Shortcuts exposes nine102.6x74 tiles at6px gaps and a second row of
+three, with clear footer. MultiCorder folder/duration have12px separation and all10 rows fit.
+Add nav18.4%, Number64x22 sits16px before OK92x29; Properties nav14.2%, preview347.6x195.5 ends734
+inside pagebottom744. Disabled record/stream form text is now legible on an opaque nearwhite fill.
+
+Remaining differences: Settings width47.5% versus observed~60%,17.5-high sidebar rows are too dense;
+Playlist panes are shorter and transfer/reorder placement differs, Close is mid-footer; Shortcuts
+needs stronger key/action hierarchy; MultiCorder field text remains centered and setup structure
+is narrower/different. Properties fields/preview remain compressed, CopyFrom placement differs.
+Add capture uses Generators/PNG, so it does not establish Video-page correspondence. Recording
+combines multiple format sections instead of format navigation/single selected page; Streaming
+Profile/channel arrangement differs and its disabled green Start looks overly active. Overlay
+Settings retains the previously documented draft/preview gaps. No full parity or production
+readiness claimed. No reference artwork was imported or committed.

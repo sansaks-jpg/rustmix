@@ -1,10 +1,11 @@
 # Known gaps
 
-2026-10-20 UI-020: larger responsive toolbar targets and a corrected vertical mixer layout are
-source candidates. Source dialog geometry and truthful staged fields are included in this increment.
-Exact-patch compilation, regression execution, desktop captures and visual acceptance remain pending.
-Full UI equivalence, accessibility/device delivery, all source types and production output readiness
-remain open. No reference vendor artwork or proprietary implementation was imported. See ADR 0020.
+2026-10-20 UI-020: code bec97a8 passed hosted check/Clippy/all tests (106 UI) and build, with
+all main native workspace/dialog captures inspected against supplied references. Main native
+shutdown failed its GPU drain proof; later workflow stages did not run. Same-size texture reuse
+is not a proven GPU hang fix. Full UI equivalence remains open: Overlay Settings draft/preview,
+Settings proportions, Playlist controls, record/stream layout and disabled action affordance.
+See ADR 0020 and ui020-visual-review.md for exact evidence and remaining measurements.
 
 Task 1.3 continuation (2026-10-19): four external-output configuration slots and staged editing
 are implemented in source, with schema 6 and atomic source/config changes. New regression tests

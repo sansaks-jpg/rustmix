@@ -1,9 +1,10 @@
 # Roadmap
 
-- UI-020 candidate (2026-10-20): refine the operator toolbar, source tiles/mixer and source dialogs
-  against observed screenshots in rustmix-reference. Preserve engine-owned commands and independent
-  Preview/Program. Local format/repository guards only; hosted build/tests/native screenshot review
-  remain required. This is an incremental UI correction, not full reference acceptance. See ADR 0020.
+- UI-020 (2026-10-20): responsive operator proportions and dialog corrections are implemented
+  with exact-code screenshot comparison. bec97a8 passed hosted check/Clippy/tests/build but failed
+  native GPU shutdown drain. Next: qualify GPU reliability, preserve Overlay Settings drafts and
+  truthful preview, then refine remaining Settings/Playlist/record/stream form differences. Full
+  parity and production acceptance remain open. See docs/ui020-visual-review.md and ADR 0020.
 
 - Task 1.3 continuation (2026-10-19): finish the existing four-slot external-output configuration
   slice, atomic source/config Apply, preserved drafts, schema-6 migration and validation tests.

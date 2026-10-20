@@ -106,3 +106,16 @@ no clock, screenshot gate, timeout or shutdown check changes. An actual Context 
 checks first allocation, same-size update, resize and subsequent same-size update including payload.
 This removes demonstrated allocation churn; resolution of the intermittent WARP stall is unproven
 until exact-revision hosted native execution. Local formatting/diff/repository guards pass.
+
+## Hosted result for bec97a8
+
+Run39413208502 passed locked workspace check, Clippy-Dwarnings, all workspace tests including106
+UI tests and release build. Main native produced all12 workspace/dialog captures plus pause,
+stability and smoke-ok evidence. It exited0, but gpu-shutdown.txt reported a10s drain timeout;
+the harness rejected it at ci-native-smoke.ps1:41. Later reopen/media/output/audio/video/perf
+workflows did not run. Same-size texture reuse removes proven allocation churn but has NOT
+resolved the reliability blocker. Run39412738765/023002b failed native stage34 and GPU drain.
+Exact current screenshots and matching JSON were visually reviewed against supplied references;
+accepted dimensions and remaining UI gaps are detailed in docs/ui020-visual-review.md.
+No local build/test/native run occurred. Previous fully accepted code remains61f4286/run39365300339;
+its cadence targets failed and it is not production-ready either.

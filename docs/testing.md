@@ -8,10 +8,15 @@ checks visible targets for clipping/overlap and clicks Pause Inputs without exch
 The existing native monitor-geometry gate now checks toolbar target bounds/overlap too. Mixer widget
 regressions exercise vertical strip geometry under a horizontal parent and the real mute widget's
 typed command without switching buses. Source-dialog regressions cover the changed staged controls.
-These tests are prepared, not executed. Required acceptance: locked workspace check, Clippy with
-warnings denied, all-target tests, release build and native smoke on the exact patch, followed by
-inspection of workspace/dialog PNGs at the supported sizes. Existing screenshots describe the old
-revision; they do not verify UI-020. No local executable build or launch was performed.
+Hosted Windows2022 run39413208502 (bec97a8) passed locked check, warnings-as-errors Clippy,
+all suites including106 UI tests, and release build. Main native generated all workspace/dialog
+captures, pause/stability and smoke-ok evidence; exact screenshots/bounds were inspected. Its
+process exited0 but the10s GPU drain proof failed, so full native acceptance FAILED and later
+reopen/PNG/reference/output/audio/video/perf workflows did not run. Same-size texture reuse is
+covered by actual Context delta tests but is not a proven hang fix. Code61f4286/run39365300339
+is the last fully green baseline; its cadence targets still fail. Full reference/physical-device
+qualification remains open. No local executable build/test/launch was performed. See ADR0020 and
+ui020-visual-review.md for measured corrections and unresolved visual differences.
 
 ## Task 1.3 prepared acceptance (2026-10-19)
 

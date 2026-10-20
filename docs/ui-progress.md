@@ -546,3 +546,10 @@ Explicit non-claims: no hosted run covers this commit yet; no control endpoint, 
 vendor category identity is implemented; the text matcher stays a UI concern; nothing here changes
 rendering, audio or Program routing. See ADR 0013.
 
+
+
+UI-020 current code bec97a8 (2026-10-20): all hosted check/Clippy/tests (106 UI) and build pass.
+Exact workspace/dialog screenshots were compared against the supplied references; selected
+proportion/readability corrections are accepted. Native GPU shutdown drain failed, so later
+workflow stages did not run and complete native/full-reference acceptance remains open.
+See ui020-visual-review.md and ADR0020 for dimensions, failures and next priorities.
