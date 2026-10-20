@@ -1,6 +1,19 @@
 //! Independently implemented category, search and operator appearance controls.
 use super::*;
 
+fn display_label(ui: &mut egui::Ui, label: &str, width: f32) -> Rect {
+    let (rect, _) = ui.allocate_exact_size(egui::vec2(width, 26.0), Sense::hover());
+    let mut child = ui.new_child(
+        egui::UiBuilder::new()
+            .max_rect(rect)
+            .layout(egui::Layout::right_to_left(egui::Align::Center)),
+    );
+    child
+        .add(egui::Label::new(label).truncate())
+        .on_hover_text(label);
+    rect
+}
+
 impl RustMixApp {
     pub(crate) fn preview_color(&self) -> Color32 {
         let [r, g, b] = self.engine.project().preferences.preview_color;
@@ -151,7 +164,7 @@ impl RustMixApp {
         }
     }
     pub(crate) fn appearance_controls(&mut self, ui: &mut egui::Ui, draft: &mut Preferences) {
-        egui::ComboBox::from_id_salt("settings.theme")
+        let theme = egui::ComboBox::from_id_salt("settings.theme")
             .selected_text(match draft.ui_theme {
                 UiTheme::Dark => "RustMix Dark",
                 UiTheme::Light => "RustMix Light",
@@ -160,17 +173,152 @@ impl RustMixApp {
                 ui.selectable_value(&mut draft.ui_theme, UiTheme::Dark, "RustMix Dark");
                 ui.selectable_value(&mut draft.ui_theme, UiTheme::Light, "RustMix Light");
             });
-        ui.end_row();
-        ui.label("Preview Colour");
-        let p = ui.color_edit_button_srgb(&mut draft.preview_color);
         self.automation
-            .insert("dialog.settings.previewColor".into(), p.rect);
-        ui.end_row();
-        ui.label("Output Colour");
-        let p = ui.color_edit_button_srgb(&mut draft.program_color);
+            .insert("dialog.settings.theme".into(), theme.response.rect);
+    }
+
+    pub(crate) fn display_settings(
+        &mut self,
+        ui: &mut egui::Ui,
+        draft: &mut Preferences,
+        field_width: f32,
+    ) {
+        let viewport = ui.ctx().viewport_rect().size();
+        let label_width = (viewport.x * 172.0 / 1912.0).clamp(104.0, 172.0);
+        let compact = viewport.y < 600.0;
+        egui::Grid::new("settings.display.primary").num_columns(2)
+            .spacing([12.0, 6.0]).show(ui, |ui| {
+                let label = display_label(ui, "Theme:", label_width);
+                self.automation.insert("dialog.settings.label.theme".into(), label);
+                self.appearance_controls(ui, draft);
+                ui.end_row();
+                let label = display_label(ui, "Preview Colour:", label_width);
+                self.automation.insert("dialog.settings.label.previewColor".into(), label);
+                ui.horizontal(|ui| {
+                    let swatch = (viewport.x * 30.0 / 1912.0).clamp(22.0, 30.0);
+                    let preview = ui.scope(|ui| {
+                        ui.spacing_mut().interact_size = Vec2::splat(swatch);
+                        ui.color_edit_button_srgb(&mut draft.preview_color)
+                    }).inner;
+                    self.automation.insert("dialog.settings.previewColor".into(), preview.rect);
+                    ui.add_space((viewport.x * 76.0 / 1912.0 - 4.0).clamp(16.0, 72.0));
+                    let label = display_label(ui, "Output Colour:", 72.0);
+                    self.automation.insert("dialog.settings.label.programColor".into(), label);
+                    ui.add_space(8.0);
+                    let program = ui.scope(|ui| {
+                        ui.spacing_mut().interact_size = Vec2::splat(swatch);
+                        ui.color_edit_button_srgb(&mut draft.program_color)
+                    }).inner;
+                    self.automation.insert("dialog.settings.programColor".into(), program.rect);
+                });
+                ui.end_row();
+                let label = display_label(ui, "Master Frame Rate:", label_width);
+                self.automation.insert("dialog.settings.label.frameRate".into(), label);
+                let rate = egui::ComboBox::from_id_salt("settings.rate").width(field_width)
+                    .selected_text(format!("{}p", draft.rate.label())).show_ui(ui, |ui| {
+                        for (num, den, label) in [
+                            (24,1,"24p"), (25,1,"25p"), (30000,1001,"NTSC 29.97p"),
+                            (30,1,"30p"), (50,1,"50p"), (60000,1001,"NTSC 59.94p"), (60,1,"60p"),
+                        ] {
+                            let rate = Rate { numerator: num, denominator: den };
+                            let option = ui.selectable_value(&mut draft.rate, rate, label);
+                            self.automation.insert(format!("dialog.settings.rate.{}", rate.label()), option.rect);
+                        }
+                    });
+                self.automation.insert("dialog.settings.frameRate".into(), rate.response.rect);
+                ui.end_row();
+                let label = display_label(ui, "Output Size:", label_width);
+                self.automation.insert("dialog.settings.label.outputSize".into(), label);
+                let raster = egui::ComboBox::from_id_salt("settings.canvas").width(field_width)
+                    .selected_text(format!("{}×{}", draft.width, draft.height)).show_ui(ui, |ui| {
+                        for (width, height) in [(1280,720),(1920,1080),(2560,1440),(3840,2160)] {
+                            let selected = draft.width == width && draft.height == height;
+                            let option = ui.selectable_label(selected, format!("{width}×{height}"));
+                            self.automation.insert(format!("dialog.settings.canvas.{width}"), option.rect);
+                            if option.clicked() { draft.width = width; draft.height = height; ui.close(); }
+                        }
+                    });
+                self.automation.insert("dialog.settings.outputSize".into(), raster.response.rect);
+                raster.response.on_hover_text("Project canvas size. Actual Program processing remains 640×360 in this experimental build.");
+                ui.end_row();
+                if compact {
+                    self.display_project_name(ui, label_width, field_width);
+                }
+            });
+        if compact {
+            ui.collapsing("More display settings", |ui| {
+                self.display_details(ui, label_width, field_width, false);
+            });
+        } else {
+            self.display_details(ui, label_width, field_width, true);
+        }
+    }
+
+    fn display_project_name(&mut self, ui: &mut egui::Ui, label_width: f32, field_width: f32) {
+        display_label(ui, "Production Name:", label_width);
+        let name = ui.add_sized(
+            [field_width, 22.0],
+            egui::TextEdit::singleline(&mut self.settings_name).char_limit(64),
+        );
         self.automation
-            .insert("dialog.settings.programColor".into(), p.rect);
+            .insert("dialog.settings.projectName".into(), name.rect);
         ui.end_row();
+    }
+
+    fn display_details(
+        &mut self,
+        ui: &mut egui::Ui,
+        label_width: f32,
+        field_width: f32,
+        include_name: bool,
+    ) {
+        egui::Grid::new("settings.display.details").num_columns(2)
+            .spacing([12.0, 6.0]).show(ui, |ui| {
+                display_label(ui, "Output Aspect Ratio:", label_width);
+                let aspect = ui.add_enabled_ui(false, |ui| {
+                    egui::ComboBox::from_id_salt("settings.aspect").width(field_width)
+                        .selected_text("Widescreen (16:9)").show_ui(ui, |_| {})
+                }).inner;
+                self.automation.insert("dialog.settings.aspectRatio".into(), aspect.response.rect);
+                aspect.response.on_disabled_hover_text("Only 16:9 project canvases are supported.");
+                ui.end_row();
+                ui.add_space(12.0); ui.add_space(12.0); ui.end_row();
+                display_label(ui, "Fullscreen:", label_width);
+                ui.horizontal(|ui| {
+                    let width = ((field_width - 4.0) * 0.5).max(86.0);
+                    let menu = ui.allocate_ui_with_layout(egui::vec2(width,32.0),
+                        egui::Layout::centered_and_justified(egui::Direction::LeftToRight), |ui| {
+                            ui.menu_button("Fullscreen 1", |ui| {
+                                self.extended_output_menu(ui);
+                                ui.separator();
+                                self.program_output_menu(ui);
+                            })
+                        }).inner;
+                    self.automation.insert("dialog.settings.programWindow".into(), menu.response.rect);
+                    let secondary = ui.add_enabled(false, egui::Button::new("Fullscreen 2")
+                        .min_size(egui::vec2(width,32.0)))
+                        .on_disabled_hover_text("Unavailable: no independent secondary-output router.");
+                    self.automation.insert("dialog.settings.secondaryOutput".into(), secondary.rect);
+                });
+                ui.end_row();
+                display_label(ui, "Display:", label_width);
+                let selected = self.extended_output.selected_id().unwrap_or("No extended display selected");
+                let display = ui.add_sized([field_width,22.0], egui::Label::new(selected).truncate());
+                self.automation.insert("dialog.settings.display".into(), display.rect);
+                display.on_hover_text("Configure the display through Fullscreen 1. No output starts until explicitly requested.");
+                ui.end_row();
+                display_label(ui, "Actual Program:", label_width);
+                ui.label("640×360 CPU reference");
+                ui.end_row();
+                ui.add_space(20.0); ui.add_space(20.0); ui.end_row();
+                display_label(ui, "Input Size:", label_width);
+                let input_size = ui.add_enabled(false, egui::Button::new("Automatic · 16:9 thumbnails")
+                    .min_size(egui::vec2(field_width,22.0)))
+                    .on_disabled_hover_text("Source cards currently size automatically with the operator viewport.");
+                self.automation.insert("dialog.settings.inputSize".into(), input_size.rect);
+                ui.end_row();
+                if include_name { self.display_project_name(ui, label_width, field_width); }
+            });
     }
     pub(crate) fn category_settings(&mut self, ui: &mut egui::Ui, draft: &mut Preferences) {
         ui.label(

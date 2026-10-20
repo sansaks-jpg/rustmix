@@ -9,6 +9,7 @@ mod inputs;
 mod media;
 #[cfg(test)]
 mod operator_layout_tests;
+mod operator_window;
 mod output_smoke;
 mod panels;
 mod profile;
@@ -324,7 +325,12 @@ pub(crate) fn vector_icon_button(
         btn = btn.fill(f);
     }
     let resp = ui.add(btn);
-    paint_vector_icon(ui.painter(), resp.rect, icon, Color32::WHITE);
+    let foreground = if fill.is_some() || selected {
+        Color32::WHITE
+    } else {
+        ui.visuals().text_color()
+    };
+    paint_vector_icon(ui.painter(), resp.rect, icon, foreground);
     resp
 }
 
@@ -347,7 +353,7 @@ pub(crate) fn caret_menu_button<R>(
     ];
     ui.painter().add(egui::Shape::convex_polygon(
         pts,
-        Color32::WHITE,
+        ui.visuals().text_color(),
         Stroke::NONE,
     ));
     inner
@@ -2403,6 +2409,17 @@ impl RustMixApp {
             .show_inside(ui, &mut Viewer { app: self });
         self.dock = dock;
         self.dialogs(&ctx);
+        for chrome in operator_window::current_chrome(&ctx) {
+            for (suffix, rect) in [
+                ("window", chrome.window),
+                ("header", chrome.header),
+                ("title", chrome.title),
+                ("close", chrome.close),
+            ] {
+                self.automation
+                    .insert(format!("{}.chrome.{suffix}", chrome.name), rect);
+            }
+        }
         for action in std::mem::take(&mut self.actions) {
             self.dispatch(action, &ctx);
         }

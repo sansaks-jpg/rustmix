@@ -25,6 +25,163 @@ fn text_in(shapes: &[egui::epaint::ClippedShape], label: &str, area: Rect) -> Re
         .expect("Painted label must be contained in the expected control")
 }
 
+fn event_frame(app: &mut RustMixApp, ctx: &egui::Context, events: Vec<egui::Event>) {
+    let _ = ctx.run_ui(
+        egui::RawInput {
+            screen_rect: Some(Rect::from_min_size(Pos2::ZERO, Vec2::new(1600.0, 900.0))),
+            events,
+            ..Default::default()
+        },
+        |ui| app.frame_ui(ui),
+    );
+}
+
+fn click(app: &mut RustMixApp, ctx: &egui::Context, id: &str) {
+    for _ in 0..4 {
+        event_frame(app, ctx, vec![]);
+    }
+    let pos = app.automation.get(id).expect("visible control").center();
+    for pressed in [true, false] {
+        event_frame(
+            app,
+            ctx,
+            vec![
+                egui::Event::PointerMoved(pos),
+                egui::Event::PointerButton {
+                    pos,
+                    button: egui::PointerButton::Primary,
+                    pressed,
+                    modifiers: egui::Modifiers::NONE,
+                },
+            ],
+        );
+    }
+}
+
+#[test]
+fn display_labels_are_right_aligned_and_colours_share_one_row() {
+    for size in [
+        Vec2::new(1100.0, 700.0),
+        Vec2::new(1600.0, 900.0),
+        Vec2::new(1917.0, 1198.0),
+    ] {
+        let mut app = RustMixApp::headless();
+        let ctx = egui::Context::default();
+        app.theme(&ctx);
+        app.dispatch(Action::Settings, &ctx);
+        for _ in 0..4 {
+            let _ = paint(&mut app, &ctx, size);
+        }
+        let output = paint(&mut app, &ctx, size);
+        let page = *app.automation.get("dialog.settings.page").unwrap();
+        let mut fields = vec![];
+        for (name, label, field) in [
+            ("theme", "Theme:", "theme"),
+            ("previewColor", "Preview Colour:", "previewColor"),
+            ("frameRate", "Master Frame Rate:", "frameRate"),
+            ("outputSize", "Output Size:", "outputSize"),
+        ] {
+            let column = *app
+                .automation
+                .get(&format!("dialog.settings.label.{name}"))
+                .unwrap();
+            let field = *app
+                .automation
+                .get(&format!("dialog.settings.{field}"))
+                .unwrap();
+            let ink = text_in(&output.shapes, label, column);
+            assert!(
+                (ink.right() - column.right()).abs() <= 2.0,
+                "actual label ink must align right: {label} at {size:?}"
+            );
+            assert!(column.right() + 8.0 <= field.left());
+            assert!(page.contains_rect(field));
+            fields.push(field);
+        }
+        assert!(fields.windows(2).all(|pair| {
+            pair.first()
+                .zip(pair.get(1))
+                .is_some_and(|(left, right)| (left.left() - right.left()).abs() <= 1.0)
+        }));
+        let preview = *app.automation.get("dialog.settings.previewColor").unwrap();
+        let program = *app.automation.get("dialog.settings.programColor").unwrap();
+        assert!((preview.center().y - program.center().y).abs() <= 1.0);
+        assert!(preview.right() < program.left() && page.contains_rect(program));
+        let confirm = *app.automation.get("dialog.settings.apply").unwrap();
+        let cancel = *app.automation.get("dialog.settings.cancel").unwrap();
+        let scale = (size.x / 1912.0).clamp(0.6, 1.0);
+        assert!(confirm.width() >= (140.0 * scale).max(92.0) - 1.0);
+        assert!(cancel.width() >= (186.0 * scale).max(112.0) - 1.0);
+        assert!(confirm.height() >= (42.0 * scale).max(29.0) - 1.0);
+        assert!(confirm.right() <= cancel.left());
+    }
+}
+
+#[test]
+fn canvas_selection_is_staged_header_close_cancels_and_ok_commits_once() {
+    let mut app = RustMixApp::headless();
+    let ctx = egui::Context::default();
+    app.theme(&ctx);
+    let original = app.engine.project().clone();
+    app.dispatch(Action::Settings, &ctx);
+    click(&mut app, &ctx, "dialog.settings.outputSize");
+    click(&mut app, &ctx, "dialog.settings.canvas.1280");
+    assert_eq!(app.settings_draft.as_ref().unwrap().width, 1280);
+    assert_eq!(*app.engine.project(), original);
+    click(&mut app, &ctx, "dialog.settings.chrome.close");
+    assert!(!app.settings && app.settings_draft.is_none());
+    assert_eq!(*app.engine.project(), original);
+    app.dispatch(Action::Settings, &ctx);
+    click(&mut app, &ctx, "dialog.settings.outputSize");
+    click(&mut app, &ctx, "dialog.settings.canvas.1280");
+    click(&mut app, &ctx, "dialog.settings.apply");
+    assert!(!app.settings && app.settings_draft.is_none());
+    let committed = app.engine.project();
+    assert_eq!(
+        (committed.preferences.width, committed.preferences.height),
+        (1280, 720)
+    );
+    assert_eq!(committed.revision, original.revision + 1);
+    assert_eq!(
+        (committed.program, committed.preview),
+        (original.program, original.preview)
+    );
+}
+
+#[test]
+fn unfilled_vector_controls_paint_readable_glyphs_in_both_themes() {
+    for theme in [egui::Theme::Light, egui::Theme::Dark] {
+        let ctx = egui::Context::default();
+        ctx.set_theme(theme);
+        let mut gear = Rect::NOTHING;
+        let mut caret = Rect::NOTHING;
+        let output = ctx.run_ui(egui::RawInput::default(), |ui| {
+            gear = vector_icon_button(ui, VectorIcon::Gear, Vec2::splat(24.0), false, None).rect;
+            caret = caret_menu_button(ui, Vec2::new(22.0, 24.0), |_| {})
+                .response
+                .rect;
+        });
+        let expected = ctx.style_of(theme).visuals.text_color();
+        for area in [gear, caret] {
+            assert!(
+                output.shapes.iter().any(|shape| match &shape.shape {
+                    egui::Shape::Path(path) =>
+                        area.contains_rect(path.visual_bounding_rect())
+                            && (path.fill == expected
+                                || matches!(&path.stroke.color, egui::epaint::ColorMode::Solid(color) if *color == expected)),
+                    egui::Shape::LineSegment { points, stroke } =>
+                        points.iter().all(|p| area.contains(*p)) && stroke.color == expected,
+                    egui::Shape::Circle(circle) =>
+                        area.contains_rect(circle.visual_bounding_rect())
+                            && circle.stroke.color == expected,
+                    _ => false,
+                }),
+                "{theme:?} vector glyph must use a readable foreground in {area:?}"
+            );
+        }
+    }
+}
+
 #[test]
 fn painted_monitor_titles_start_beside_left_inset_and_take_labels_are_centered() {
     for size in [

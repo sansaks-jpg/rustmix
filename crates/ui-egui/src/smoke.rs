@@ -342,6 +342,25 @@ impl RustMixApp {
                     "artifacts/workspace-1100.png".into()
                 } else if s.stage == 50 {
                     "artifacts/overlay-unsaved-1600.png".into()
+                } else if s.stage == 54 {
+                    let expected = ctx.viewport_rect().size() * ctx.pixels_per_point();
+                    if image.width() != expected.x.round() as usize
+                        || image.height() != expected.y.round() as usize
+                    {
+                        return Err(Error::Invalid(
+                            "Reference workspace screenshot has the wrong raster".into(),
+                        ));
+                    }
+                    std::fs::write(
+                        "artifacts/workspace-reference-raster.json",
+                        serde_json::to_vec_pretty(&serde_json::json!({
+                            "requested_points": [1917,1198],
+                            "actual_points": [ctx.viewport_rect().width(),ctx.viewport_rect().height()],
+                            "actual_pixels": [image.width(),image.height()],
+                            "pixels_per_point": ctx.pixels_per_point(),
+                        }))?,
+                    )?;
+                    "artifacts/workspace-reference-1917x1198.png".into()
                 } else if let Some((name, _, _)) = s
                     .stage
                     .checked_sub(20)
@@ -685,6 +704,20 @@ impl RustMixApp {
                         s.stage += 1;
                     }
                     1 => {
+                        self.validate_operator_chrome(
+                            ctx,
+                            match kind {
+                                0 => "dialog.add_input",
+                                1 => "dialog.input_properties",
+                                2 => "dialog.settings",
+                                3 => "dialog.overlay_settings",
+                                4 => "dialog.recording_setup",
+                                5 => "dialog.streaming_setup",
+                                6 => "dialog.multicorder",
+                                7 => "dialog.playlist",
+                                _ => "dialog.shortcuts",
+                            },
+                        )?;
                         if *kind <= 3 {
                             self.validate_dialog_geometry(
                                 ctx,
@@ -767,6 +800,36 @@ impl RustMixApp {
                     return Err(Error::Invalid("Cancel left the overlay editor open".into()));
                 }
                 self.validate_basic_state(s)?;
+                self.assert_smoke_state()?;
+                s.stage = 52;
+            }
+            52 => {
+                ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(egui::vec2(1917.0, 1198.0)));
+                s.stage = 53;
+            }
+            53 => {
+                if (ctx.viewport_rect().size() - egui::vec2(1917.0, 1198.0)).length() > 1.0 {
+                    return Err(Error::Invalid(
+                        "Native workspace did not reach the reference viewport".into(),
+                    ));
+                }
+                self.validate_monitor_geometry(ctx.viewport_rect().width())?;
+                self.validate_toolbar_geometry(ctx.viewport_rect().width())?;
+                std::fs::write(
+                    "artifacts/workspace-reference-elements.json",
+                    serde_json::to_vec_pretty(
+                        &self
+                            .automation
+                            .iter()
+                            .map(|(id, rect)| (id, format!("{rect:?}")))
+                            .collect::<HashMap<_, _>>(),
+                    )?,
+                )?;
+                ctx.send_viewport_cmd(egui::ViewportCommand::Screenshot(egui::UserData::default()));
+                s.captured = false;
+                s.stage = 54;
+            }
+            54 if s.captured => {
                 self.assert_smoke_state()?;
                 self.saved_revision = self.engine.project().revision;
                 ctx.send_viewport_cmd(egui::ViewportCommand::Close);
@@ -1204,6 +1267,14 @@ impl RustMixApp {
         Ok(())
     }
     pub(crate) fn validate_dialog_geometry(&self, ctx: &egui::Context, prefix: &str) -> Result<()> {
+        let window = match prefix {
+            "dialog.add" => "dialog.add_input",
+            "dialog.properties" => "dialog.input_properties",
+            "dialog.overlay" => "dialog.overlay_settings",
+            "dialog.external" => "dialog.external_settings",
+            _ => prefix,
+        };
+        self.validate_operator_chrome(ctx, window)?;
         let bounds = ctx.viewport_rect();
         let body = self
             .automation
@@ -1266,6 +1337,28 @@ impl RustMixApp {
                     "Settings navigation proportion differs from its reference target".into(),
                 ));
             }
+        }
+        Ok(())
+    }
+
+    fn validate_operator_chrome(&self, ctx: &egui::Context, name: &str) -> Result<()> {
+        let get = |suffix| self.native_geometry_rect(ctx, &format!("{name}.chrome.{suffix}"));
+        let window = get("window")?;
+        let header = get("header")?;
+        let title = get("title")?;
+        let close = get("close")?;
+        if !window.contains_rect(header)
+            || !header.contains_rect(title)
+            || !header.contains_rect(close)
+            || title.right() >= close.left()
+            || !(24.0..=34.0).contains(&(title.left() - header.left()))
+            || !(24.0..=32.1).contains(&header.height())
+            || close.width() < 34.0
+            || (close.right() - header.right()).abs() > 1.0
+        {
+            return Err(Error::Invalid(format!(
+                "Operator caption is clipped or misaligned: {name}"
+            )));
         }
         Ok(())
     }

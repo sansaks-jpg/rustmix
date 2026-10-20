@@ -1,4 +1,6 @@
 //! Operator dialogs modeled after the reference workflows in `rustmix-reference`.
+pub(super) use super::operator_window::operator_window;
+use super::operator_window::{FooterRole, footer_size};
 use super::*;
 use egui::{Align, Color32, RichText, Sense, Stroke, Vec2};
 
@@ -34,28 +36,6 @@ fn source_dialog_body_height(viewport_height: f32) -> f32 {
             .max(520.0)
             .min(viewport_height - 180.0)
     }
-}
-
-pub(super) fn operator_window<'a>(
-    ctx: &egui::Context,
-    title: impl Into<egui::WidgetText>,
-    id: &str,
-    open: &'a mut bool,
-    preferred: Vec2,
-) -> egui::Window<'a> {
-    let bounds = ctx.viewport_rect().shrink(12.0);
-    let maximum = (bounds.size() - Vec2::new(12.0, 28.0)).max(Vec2::new(280.0, 220.0));
-    let size = preferred.min(maximum);
-    egui::Window::new(title)
-        .id(egui::Id::new(id))
-        .open(open)
-        .collapsible(false)
-        .resizable(true)
-        .default_size(size)
-        .default_pos(bounds.center() - size * 0.5)
-        .min_size(Vec2::new(560.0, 300.0).min(maximum))
-        .max_size(maximum)
-        .constrain_to(bounds)
 }
 
 /// Applies the compact, flat form surface used inside operator dialogs (`Add Input`,
@@ -716,7 +696,7 @@ impl RustMixApp {
                     let cancel = ui.add(
                         egui::Button::new("Cancel")
                             .fill(CHIP_BG)
-                            .min_size(Vec2::new(92.0, 29.0)),
+                            .min_size(footer_size(ui, FooterRole::Cancel)),
                     );
                     self.automation
                         .insert("dialog.add.cancel".into(), cancel.rect);
@@ -726,7 +706,7 @@ impl RustMixApp {
                     let confirm = ui.add_enabled(!self.add_loading && (matches!(self.add_tab, 12 | 13 | VIDEO_TAB) || !self.add_name.trim().is_empty()),
                         egui::Button::new(RichText::new("OK").color(Color32::WHITE).strong())
                             .fill(PROGRAM)
-                            .min_size(Vec2::new(92.0, 29.0)),
+                            .min_size(footer_size(ui, FooterRole::Confirm)),
                     );
                     self.automation
                         .insert("dialog.add.confirm".into(), confirm.rect);
@@ -1355,7 +1335,7 @@ impl RustMixApp {
                     let cancel = ui.add(
                         egui::Button::new("Cancel")
                             .fill(CHIP_BG)
-                            .min_size(Vec2::new(92.0, 29.0)),
+                            .min_size(footer_size(ui, FooterRole::Cancel)),
                     );
                     self.automation
                         .insert("dialog.properties.cancel".into(), cancel.rect);
@@ -1365,7 +1345,7 @@ impl RustMixApp {
                     let apply = ui.add_enabled(!self.properties_loading,
                         egui::Button::new(RichText::new("OK").color(Color32::WHITE).strong())
                             .fill(PROGRAM)
-                            .min_size(Vec2::new(92.0, 29.0)),
+                            .min_size(footer_size(ui, FooterRole::Confirm)),
                     );
                     self.automation
                         .insert("dialog.properties.apply".into(), apply.rect);
@@ -1478,72 +1458,7 @@ impl RustMixApp {
                         ui.spacing_mut().combo_width = field_width;
                         match app.settings_page {
                         SettingsPage::Display => {
-                            egui::Grid::new("settings_display_grid")
-                                .num_columns(2)
-                                .spacing([18.0, 6.0])
-                                .show(ui, |ui| {
-                                    ui.label(RichText::new("Theme").size(11.5).color(FORM_TEXT));
-                                    app.appearance_controls(ui, &mut draft);
-
-                                    ui.label(
-                                        RichText::new("Master Frame Rate")
-                                            .size(11.5)
-                                            .color(FORM_TEXT),
-                                    );
-                                    let rate = egui::ComboBox::from_id_salt("settings.rate")
-                                        .width(field_width)
-                                        .selected_text(format!("{}p", draft.rate.label()))
-                                        .show_ui(ui, |ui| {
-                                            for (num, den, lbl) in [
-                                                (24, 1, "24p"),
-                                                (25, 1, "25p"),
-                                                (30000, 1001, "NTSC 29.97p"),
-                                                (30, 1, "NTSC 30p"),
-                                                (50, 1, "PAL 50p"),
-                                                (60000, 1001, "NTSC 59.94p"),
-                                                (60, 1, "60p"),
-                                            ] {
-                                                let rate = Rate {
-                                                    numerator: num,
-                                                    denominator: den,
-                                                };
-                                                let r =
-                                                    ui.selectable_value(&mut draft.rate, rate, lbl);
-                                                app.automation.insert(
-                                                    format!(
-                                                        "dialog.settings.rate.{}",
-                                                        rate.label()
-                                                    ),
-                                                    r.rect,
-                                                );
-                                            }
-                                        });
-                                    app.automation.insert("dialog.settings.frameRate".into(), rate.response.rect);
-                                    ui.end_row();
-
-                                    ui.label("Actual Program raster"); ui.label("640×360 CPU reference"); ui.end_row();
-                                    ui.label("Program window / fullscreen");
-                                    let program_window = ui.add_sized([field_width, 32.0], egui::Label::new("Available through the Fullscreen menu").wrap());
-                                    app.automation.insert("dialog.settings.programWindow".into(), program_window.rect);
-                                    ui.end_row();
-                                    ui.label("Independent secondary output");
-                                    let secondary = ui.add_sized([field_width, 32.0], egui::Label::new("Unavailable: no independent output router").wrap());
-                                    app.automation.insert("dialog.settings.secondaryOutput".into(), secondary.rect);
-                                    ui.end_row();
-                                    ui.label(
-                                        RichText::new("Production Name")
-                                            .size(11.5)
-                                            .color(FORM_TEXT),
-                                    );
-                                    let title = ui.add_sized(
-                                        [field_width, 20.0],
-                                        egui::TextEdit::singleline(&mut app.settings_name)
-                                            .char_limit(64),
-                                    );
-                                    app.automation
-                                        .insert("dialog.settings.projectName".into(), title.rect);
-                                    ui.end_row();
-                                });
+                            app.display_settings(ui, &mut draft, field_width);
                         }
                         SettingsPage::Appearance => {
                             ui.label(
@@ -1665,7 +1580,7 @@ impl RustMixApp {
                     let cancel = ui.add(
                         egui::Button::new("Cancel")
                             .fill(CHIP_BG)
-                            .min_size(Vec2::new(92.0, 29.0)),
+                            .min_size(footer_size(ui, FooterRole::Cancel)),
                     );
                     self.automation
                         .insert("dialog.settings.cancel".into(), cancel.rect);
@@ -1675,7 +1590,7 @@ impl RustMixApp {
                     let apply = ui.add(
                         egui::Button::new(RichText::new("OK").color(Color32::WHITE).strong())
                             .fill(CHIP_BG)
-                            .min_size(Vec2::new(92.0, 29.0)),
+                            .min_size(footer_size(ui, FooterRole::Confirm)),
                     );
                     self.automation
                         .insert("dialog.settings.apply".into(), apply.rect);
@@ -1872,10 +1787,10 @@ impl RustMixApp {
             ui.separator();
             ui.horizontal(|ui| {
                 ui.with_layout(egui::Layout::right_to_left(Align::Center), |ui| {
-                    let cancel = ui.add_sized([92.0, 29.0], egui::Button::new("Cancel").fill(CHIP_BG));
+                    let cancel = ui.add_sized(footer_size(ui, FooterRole::Cancel), egui::Button::new("Cancel").fill(CHIP_BG));
                     self.automation.insert("dialog.overlay.cancel".into(), cancel.rect);
                     cancel_clicked = cancel.clicked();
-                    let apply = ui.add_enabled(valid_draft && pending.is_none(), egui::Button::new(RichText::new("OK").color(Color32::WHITE).strong()).fill(CHIP_BG).min_size(Vec2::new(92.0, 29.0)));
+                    let apply = ui.add_enabled(valid_draft && pending.is_none(), egui::Button::new(RichText::new("OK").color(Color32::WHITE).strong()).fill(CHIP_BG).min_size(footer_size(ui, FooterRole::Confirm)));
                     self.automation.insert("dialog.overlay.apply".into(), apply.rect);
                     apply_clicked = apply.clicked();
                 });
@@ -2185,7 +2100,7 @@ impl RustMixApp {
                     let cancel = ui.add(
                         egui::Button::new("Cancel")
                             .fill(CHIP_BG)
-                            .min_size(Vec2::new(92.0, 29.0)),
+                            .min_size(footer_size(ui, FooterRole::Cancel)),
                     );
                     self.automation
                         .insert("dialog.external.cancel".into(), cancel.rect);
@@ -2195,7 +2110,7 @@ impl RustMixApp {
                     let apply = ui.add(
                         egui::Button::new(RichText::new("Apply selected output").color(Color32::WHITE).strong())
                             .fill(CHIP_BG)
-                            .min_size(Vec2::new(92.0, 29.0)),
+                            .min_size(footer_size(ui, FooterRole::Confirm)),
                     );
                     self.automation
                         .insert("dialog.external.apply".into(), apply.rect);
@@ -2419,15 +2334,17 @@ impl RustMixApp {
                 self.automation
                     .insert("dialog.recording.start".into(), start.rect);
                 ui.with_layout(egui::Layout::right_to_left(Align::Center), |ui| {
-                    let cancel =
-                        ui.add_sized([92.0, 29.0], egui::Button::new("Cancel").fill(CHIP_BG));
+                    let cancel = ui.add_sized(
+                        footer_size(ui, FooterRole::Cancel),
+                        egui::Button::new("Cancel").fill(CHIP_BG),
+                    );
                     self.automation
                         .insert("dialog.recording.cancel".into(), cancel.rect);
                     if cancel.clicked() {
                         close_clicked = true;
                     }
                     let ok = ui.add_sized(
-                        [92.0, 29.0],
+                        footer_size(ui, FooterRole::Confirm),
                         egui::Button::new(RichText::new("OK").color(Color32::WHITE).strong())
                             .fill(PROGRAM),
                     );
@@ -2642,7 +2559,7 @@ impl RustMixApp {
                 let close = ui.add(
                     egui::Button::new("Close")
                         .fill(CHIP_BG)
-                        .min_size(Vec2::new(92.0, 29.0)),
+                        .min_size(footer_size(ui, FooterRole::Confirm)),
                 );
                 self.automation
                     .insert("dialog.streaming.close".into(), close.rect);
@@ -2868,7 +2785,7 @@ impl RustMixApp {
                 let close = ui.add(
                     egui::Button::new("Close")
                         .fill(CHIP_BG)
-                        .min_size(Vec2::new(92.0, 29.0)),
+                        .min_size(footer_size(ui, FooterRole::Confirm)),
                 );
                 self.automation
                     .insert("dialog.multicorder.close".into(), close.rect);
@@ -2970,7 +2887,7 @@ impl RustMixApp {
                     let close = ui.add(
                         egui::Button::new("Close")
                             .fill(CHIP_BG)
-                            .min_size(Vec2::new(92.0, 29.0)),
+                            .min_size(footer_size(ui, FooterRole::Confirm)),
                     );
                     self.automation
                         .insert("dialog.shortcuts.close".into(), close.rect);
