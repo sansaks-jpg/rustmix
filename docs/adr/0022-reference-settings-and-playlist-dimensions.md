@@ -1,6 +1,6 @@
 # UI-022: reference Settings and Playlist dimensions
 
-Status: implemented experimental candidate; exact-code hosted acceptance pending.
+Status: experimental; selected visual corrections and short hosted workflow accepted.
 Date:2026-10-20. Follow-up to ADR0021, not a new parity or production-readiness claim.
 
 ## Evidence and decisions
@@ -52,3 +52,13 @@ independent combined-source review found no definite blocker; compilation/tests/
 unrun locally by policy. The harness requires non-null queue samples, at most one unobserved
 token and at least one observed callback in every accepted smoke mode. These are diagnostic
 evidence checks, not a relaxed GPU drain or a performance claim.
+
+## Exact hosted result
+
+7aeac9c/run39434584384 passes all hosted checks,121 UI tests plus other suites, release build,
+all13 native processes/workflows and packaging. Exact Settings/Playlist/Overlay normal+pending
+captures and bounds were independently reviewed: selected dimension/alignment corrections accepted.
+Queue callback evidence is real and bounded;13 GPU drains pass. Cadence still misses50/59.94/60
+targets and the earlier intermittent shutdown failure has no demonstrated causal resolution.
+Full reference equivalence, hardware/endurance and production qualification remain open.
+Measurements, remaining visual differences and trace interpretation are in ui022-visual-review.md.

@@ -1,6 +1,6 @@
 # RustMix
 
-UI-022 candidate: Settings/Playlist reference dimensions, right-aligned Overlay labels and bounded queue completion diagnostics implemented. Local format/source guards pass; exact-source hosted tests/native visual acceptance pending. Existing GPU failure remains unresolved. See [ADR0022](docs/adr/0022-reference-settings-and-playlist-dimensions.md).
+UI-022 (2026-10-20): Settings/Playlist reference dimensions and right-aligned Overlay labels are implemented and verified against exact-source screenshots. 7aeac9c/run39434584384 passed hosted checks,121 UI tests plus all suites, build and all13 native processes. Cadence, intermittent GPU reliability and full UI/feature equivalence remain open. See [visual review](docs/ui022-visual-review.md).
 
 UI-021 (2026-10-20): overlay draft decisions/engine preview and Playlist layout/full-width selection implemented and checked against exact-source screenshots. be79b2e passed hosted check, Clippy, all tests including115 UI tests and build, but main native failed GPU shutdown. Full reference equivalence and runtime acceptance remain open. See [visual review](docs/ui021-visual-review.md).
 

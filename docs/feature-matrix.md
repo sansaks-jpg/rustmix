@@ -1,6 +1,13 @@
 # Feature matrix
 
-UI-022 experimental candidate: Settings/Playlist dimensions, Overlay label alignment and bounded diagnostic queue token sampling. Scope: UI and opt-in test instrumentation only; no backend/schema/dependency change. Windows CI/visual proof pending; no hardware tested. Owner UI-022, source reviewed2026-10-20; GPU/cadence/full reference gaps remain. See ADR0022.
+UI-022 experimental: exact-source7aeac9c/run39434584384 accepted short hosted workflows and selected visual corrections. Full reference equivalence, intermittent GPU reliability, cadence/endurance and hardware qualification stay open. See ADR0022/ui022-visual-review.md.
+
+## UI-022 measured operator dimensions (2026-10-20)
+
+| Feature | Status | Scope | Test evidence | Platform | Hardware tested | Known limitations | Last verified date | Owner/task ID |
+|---|---|---|---|---|---|---|---|---|
+| Settings/Playlist/Overlay dimension alignment | Experimental; selected corrections tested | Responsive Settings/sidebar/fields, measured Playlist panes/buttons/gaps and actual Overlay label alignment; typed commands and staged Cancel/Apply preserved | 7aeac9c/run39434584384:121 UI tests plus all suites/check/Clippy/build,13 native processes; exact PNG/JSON review | Windows2022 x64 | Microsoft Basic Render Driver DX12 CPU only | Header/footer placement and typography still differ; advanced overlay/record/stream capabilities missing; no physical/DPI/endurance qualification | 2026-10-20 | UI-022 / ADR0022 |
+| Bounded queue completion diagnostic | Tested in opt-in native harness | One outstanding atomic callback token, sampled delivery-observation interval, strict native geometry/drain gates |12 trace files/167 samples with gap<=1 and monotonic tokens;13 drain proofs; no errors | Windows2022 x64 | Same software adapter/driver10.0.20348.5386,4CPU | Observation interval is not GPU latency; successful run does not causally resolve earlier intermittent hang; cadence still below targets | 2026-10-20 | UI-022 / ADR0022 |
 
 UI-021 experimental: staged overlay Apply/Discard/Keep, cached engine caption preview and Playlist layout/full-width selection. Windows2022/be79b2e:115 UI tests plus all suites/check/lint/build pass; exact screenshots inspected. Main native reaches stage51 then GPU shutdown fails, so later workflows/hardware qualification are unverified. Failure is visible, full production/parity acceptance remains open. Owner UI-021; verified2026-10-20. See ADR0021.
 
