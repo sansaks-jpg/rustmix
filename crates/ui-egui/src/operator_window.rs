@@ -68,6 +68,7 @@ pub(super) struct OperatorWindow<'a> {
     size: Vec2,
     bounds: Rect,
     maximum: Vec2,
+    minimum: Vec2,
     resizable: bool,
 }
 
@@ -87,11 +88,19 @@ pub(super) fn operator_window<'a>(
         size: preferred.min(maximum),
         bounds,
         maximum,
+        minimum: egui::vec2(560.0, 300.0).min(maximum),
         resizable: true,
     }
 }
 
 impl OperatorWindow<'_> {
+    pub(super) fn min_size(mut self, minimum: Vec2) -> Self {
+        if minimum.is_finite() && minimum.x > 0.0 && minimum.y > 0.0 {
+            self.minimum = minimum.min(self.maximum);
+        }
+        self
+    }
+
     pub(super) fn resizable(mut self, resizable: bool) -> Self {
         self.resizable = resizable;
         self
@@ -131,7 +140,7 @@ impl OperatorWindow<'_> {
             .frame(frame)
             .default_size(self.size)
             .current_pos(position)
-            .min_size(egui::vec2(560.0, 300.0).min(self.maximum))
+            .min_size(self.minimum)
             .max_size(self.maximum)
             .constrain_to(self.bounds)
             .show(ctx, |ui| {

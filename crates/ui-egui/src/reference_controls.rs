@@ -202,7 +202,7 @@ impl RustMixApp {
                     }).inner;
                     self.automation.insert("dialog.settings.previewColor".into(), preview.rect);
                     ui.add_space((viewport.x * 76.0 / 1912.0 - 4.0).clamp(16.0, 72.0));
-                    let label = display_label(ui, "Output Colour:", 72.0);
+                    let label = display_label(ui, "Output Colour:", 92.0);
                     self.automation.insert("dialog.settings.label.programColor".into(), label);
                     ui.add_space(8.0);
                     let program = ui.scope(|ui| {
