@@ -2905,14 +2905,14 @@ mod operator_dialog_tests {
                         "large workspaces should expose more source content"
                     );
                     if prefix == "dialog.properties" {
-                        let preview = app.automation["dialog.properties.preview"];
+                        let preview = *app.automation.get("dialog.properties.preview").unwrap();
                         assert!(
                             body.contains_rect(preview),
                             "Default source preview is clipped"
                         );
                     } else {
-                        let number = app.automation["dialog.add.number"];
-                        let confirm = app.automation["dialog.add.confirm"];
+                        let number = *app.automation.get("dialog.add.number").unwrap();
+                        let confirm = *app.automation.get("dialog.add.confirm").unwrap();
                         assert!(confirm.left() - number.right() < 24.0);
                     }
                 }
