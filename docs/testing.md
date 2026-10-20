@@ -1,5 +1,7 @@
 # Verification
 
+UI-021 verification candidate: new overlay draft/raster/cache/geometry and Playlist interaction/geometry regressions await hosted execution. Native main adds dirty-channel screenshot with Preview/Program/revision invariance; opt-in runs require bounded stage trace plus adapter/CPU/DPI metadata. Shutdown Wait success receives a separate nonblocking QueueEmpty check; timeouts remain failures. Local fmt/diff/repository/reference guards and script syntax checks pass; no local compile/test/native execution.
+
 ## UI-020 verification candidate (2026-10-20)
 
 Local verification is restricted to formatting, diff inspection and repository/reference inventory

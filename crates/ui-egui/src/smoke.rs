@@ -13,6 +13,26 @@ const DIALOG_SHOTS: [(&str, [f32; 2], u8); 9] = [
     ("playlist-1600", [1600.0, 900.0], 7),
     ("shortcuts-1600", [1600.0, 900.0], 8),
 ];
+/// Bounded diagnostics for opt-in CI runs, with no media paths or project text.
+#[derive(Default, Serialize)]
+struct SmokeStageSample {
+    stage: u32,
+    frames: u32,
+    elapsed_ms: u64,
+    captured: bool,
+    failed: bool,
+    program_generation: u64,
+    presented_generation: Option<u64>,
+    gpu_poll_status: &'static str,
+    viewport: [f32; 2],
+    pixels_per_point: f32,
+    previous_ui_cpu_seconds: Option<f32>,
+    ui_fps: f32,
+    program_rendered: u64,
+    program_skipped: u64,
+    program_render_ms: f64,
+}
+
 #[derive(Default)]
 pub(crate) struct Smoke {
     pub events: Vec<egui::Event>,
@@ -28,12 +48,71 @@ pub(crate) struct Smoke {
     paused_program: Option<(u64, Vec<u8>, Rect)>,
     transport_target: Option<Rect>,
     basic_state: Option<(InputId, InputId, u64)>,
+    stage_trace: VecDeque<SmokeStageSample>,
 }
 impl Smoke {
+    fn push_stage_sample(&mut self, sample: SmokeStageSample) {
+        if self.stage_trace.len() >= 128 {
+            self.stage_trace.pop_front();
+        }
+        self.stage_trace.push_back(sample);
+    }
+
     pub(crate) fn is_dialog_stage(&self) -> bool {
         self.stage >= 20
     }
 }
+fn native_mode_name() -> String {
+    const MODES: [&str; 13] = [
+        "--ui-smoke",
+        "--ui-smoke-reopen",
+        "--ui-input-smoke",
+        "--ui-input-smoke-reopen",
+        "--ui-reference-smoke",
+        "--ui-reference-smoke-reopen",
+        "--ui-output-smoke",
+        "--ui-output-smoke-reopen",
+        "--ui-audio-smoke",
+        "--ui-audio-smoke-reopen",
+        "--ui-video-smoke",
+        "--ui-video-smoke-reopen",
+        "--ui-perf",
+    ];
+    std::env::args()
+        .find(|arg| MODES.contains(&arg.as_str()))
+        .map_or_else(
+            || "ui-smoke".into(),
+            |mode| mode.trim_start_matches("--").into(),
+        )
+}
+
+/// Test-only hardware provenance; never records media paths or project contents.
+pub(crate) fn record_native_environment(cc: &eframe::CreationContext<'_>) -> Result<()> {
+    let adapter = cc
+        .wgpu_render_state
+        .as_ref()
+        .map(|state| state.adapter.get_info());
+    let value = serde_json::json!({
+        "adapter": adapter.map(|info| serde_json::json!({
+            "name": info.name,
+            "backend": format!("{:?}", info.backend),
+            "device_type": format!("{:?}", info.device_type),
+            "vendor": info.vendor,
+            "device": info.device,
+            "driver": info.driver,
+            "driver_info": info.driver_info,
+        })),
+        "logical_processors": std::thread::available_parallelism().ok().map(|count| count.get()),
+        "pixels_per_point": cc.egui_ctx.pixels_per_point(),
+    });
+    std::fs::create_dir_all("artifacts")?;
+    std::fs::write(
+        format!("artifacts/{}-environment.json", native_mode_name()),
+        serde_json::to_vec_pretty(&value)?,
+    )?;
+    Ok(())
+}
+
 fn key(key: egui::Key) -> Vec<egui::Event> {
     [true, false]
         .into_iter()
@@ -47,7 +126,7 @@ fn key(key: egui::Key) -> Vec<egui::Event> {
         .collect()
 }
 impl RustMixApp {
-    pub(crate) fn smoke_step(&mut self, ctx: &egui::Context) {
+    pub(crate) fn smoke_step(&mut self, ctx: &egui::Context, previous_ui_cpu_seconds: Option<f32>) {
         let Some(mut s) = self.smoke.take() else {
             return;
         };
@@ -58,7 +137,9 @@ impl RustMixApp {
         }
         s.wait = s.wait.saturating_add(1);
         let result = self.smoke_run(ctx, &mut s);
-        if let Err(e) = result {
+        let trace_result =
+            self.record_smoke_stage(ctx, &mut s, result.is_err(), previous_ui_cpu_seconds);
+        if let Err(e) = result.and(trace_result) {
             let _ = std::fs::create_dir_all("artifacts");
             let _ = std::fs::write("artifacts/smoke-error.txt", e.to_string());
             self.saved_revision = self.engine.project().revision;
@@ -66,6 +147,60 @@ impl RustMixApp {
         }
         self.smoke = Some(s);
     }
+    fn record_smoke_stage(
+        &self,
+        ctx: &egui::Context,
+        smoke: &mut Smoke,
+        failed: bool,
+        previous_ui_cpu_seconds: Option<f32>,
+    ) -> Result<()> {
+        let elapsed_ms = u64::try_from(self.start.elapsed().as_millis()).unwrap_or(u64::MAX);
+        if !failed
+            && smoke.stage_trace.back().is_some_and(|sample| {
+                sample.stage == smoke.stage && elapsed_ms.saturating_sub(sample.elapsed_ms) < 10_000
+            })
+        {
+            return Ok(());
+        }
+        // Poll is explicitly nonblocking; no Wait, timeout relaxation or
+        // acceptance bypass. Samples distinguish a pending readback from a
+        // stage that stopped receiving UI frames on a hosted software adapter.
+        let gpu_poll_status = match self
+            .gpu_device
+            .as_ref()
+            .map(|device| device.poll(eframe::wgpu::PollType::Poll))
+        {
+            Some(Ok(eframe::wgpu::PollStatus::QueueEmpty)) => "QueueEmpty",
+            Some(Ok(eframe::wgpu::PollStatus::WaitSucceeded)) => "WaitSucceeded",
+            Some(Ok(eframe::wgpu::PollStatus::Poll)) => "Poll",
+            Some(Err(_)) => "poll-error",
+            None => "unavailable",
+        };
+        smoke.push_stage_sample(SmokeStageSample {
+            stage: smoke.stage,
+            frames: smoke.frames,
+            elapsed_ms,
+            captured: smoke.captured,
+            failed,
+            program_generation: self.program_generation,
+            presented_generation: self.program_presented_generation,
+            gpu_poll_status,
+            viewport: [ctx.viewport_rect().width(), ctx.viewport_rect().height()],
+            pixels_per_point: ctx.pixels_per_point(),
+            previous_ui_cpu_seconds: previous_ui_cpu_seconds.filter(|value| value.is_finite()),
+            ui_fps: self.fps,
+            program_rendered: self.video_stats.rendered,
+            program_skipped: self.video_stats.skipped,
+            program_render_ms: self.video_stats.render_ms,
+        });
+        std::fs::create_dir_all("artifacts")?;
+        std::fs::write(
+            format!("artifacts/{}-stages.json", native_mode_name()),
+            serde_json::to_vec_pretty(&smoke.stage_trace)?,
+        )?;
+        Ok(())
+    }
+
     fn smoke_run(&mut self, ctx: &egui::Context, s: &mut Smoke) -> Result<()> {
         if std::env::args().any(|arg| arg == "--ui-video-smoke" || arg == "--ui-video-smoke-reopen")
         {
@@ -109,6 +244,8 @@ impl RustMixApp {
                     "artifacts/paused-program.png".into()
                 } else if s.stage == 18 {
                     "artifacts/workspace-1100.png".into()
+                } else if s.stage == 50 {
+                    "artifacts/overlay-unsaved-1600.png".into()
                 } else if let Some((name, _, _)) = s
                     .stage
                     .checked_sub(20)
@@ -485,6 +622,51 @@ impl RustMixApp {
                 }
             }
             47 => {
+                self.reset_editors();
+                let project = self.engine.project();
+                s.basic_state = Some((project.program, project.preview, project.revision));
+                self.dispatch(Action::OverlaySettings(0), ctx);
+                if let Some((_, draft)) = &mut self.overlay_settings {
+                    draft.title = "Unsaved channel title".into();
+                }
+                s.stage = 48;
+            }
+            48 => {
+                self.native_click(s, "dialog.overlay.slot.2")?;
+                s.stage = 49;
+            }
+            49 => {
+                self.validate_basic_state(s)?;
+                if self.overlay_switch_pending != Some(1) {
+                    return Err(Error::Invalid(
+                        "Dirty channel switch did not preserve its draft".into(),
+                    ));
+                }
+                self.validate_dialog_geometry(ctx, "dialog.overlay")?;
+                std::fs::write(
+                    "artifacts/overlay-unsaved-1600-elements.json",
+                    serde_json::to_vec_pretty(
+                        &self
+                            .automation
+                            .iter()
+                            .filter(|(id, _)| id.starts_with("dialog.overlay."))
+                            .map(|(id, rect)| (id, format!("{rect:?}")))
+                            .collect::<HashMap<_, _>>(),
+                    )?,
+                )?;
+                ctx.send_viewport_cmd(egui::ViewportCommand::Screenshot(egui::UserData::default()));
+                s.captured = false;
+                s.stage = 50;
+            }
+            50 if s.captured => {
+                self.native_click(s, "dialog.overlay.cancel")?;
+                s.stage = 51;
+            }
+            51 => {
+                if self.overlay_settings.is_some() {
+                    return Err(Error::Invalid("Cancel left the overlay editor open".into()));
+                }
+                self.validate_basic_state(s)?;
                 self.assert_smoke_state()?;
                 self.saved_revision = self.engine.project().revision;
                 ctx.send_viewport_cmd(egui::ViewportCommand::Close);
@@ -1075,6 +1257,29 @@ impl RustMixApp {
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used, clippy::indexing_slicing)]
+    #[test]
+    fn native_stage_diagnostics_bound_history_and_keep_the_latest_failure() {
+        let mut smoke = super::Smoke::default();
+        for stage in 0..200 {
+            smoke.push_stage_sample(super::SmokeStageSample {
+                stage,
+                frames: stage,
+                elapsed_ms: u64::from(stage) * 1000,
+                captured: false,
+                failed: stage == 199,
+                program_generation: 0,
+                presented_generation: None,
+                gpu_poll_status: "Poll",
+                ..Default::default()
+            });
+        }
+        assert_eq!(smoke.stage_trace.len(), 128);
+        assert_eq!(smoke.stage_trace.front().unwrap().stage, 72);
+        let latest = smoke.stage_trace.back().unwrap();
+        assert_eq!(latest.stage, 199);
+        assert!(latest.failed);
+    }
+
     use super::*;
 
     #[test]
@@ -2241,8 +2446,14 @@ mod tests {
         );
         assert_eq!(app.engine.project().revision, before);
 
-        // Switching the number reloads that slot's committed state.
+        // A dirty draft requires explicit discard before switching channels.
         click(&mut app, &ctx, "dialog.overlay.slot.2", size);
+        assert_eq!(
+            app.overlay_settings.as_ref().map(|(slot, _)| *slot),
+            Some(0)
+        );
+        assert_eq!(app.engine.project().revision, before);
+        click(&mut app, &ctx, "dialog.overlay.switch.discard", size);
         assert_eq!(
             app.overlay_settings.as_ref().map(|(slot, _)| *slot),
             Some(1)

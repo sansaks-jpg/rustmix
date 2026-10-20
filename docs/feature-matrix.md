@@ -1,5 +1,7 @@
 # Feature matrix
 
+UI-021 experimental candidate: staged overlay Apply/Discard/Keep decisions, cached engine caption preview and Playlist geometry refinements. Scope: title panels and existing modeled Playlist; Windows CI/test/native evidence pending; no hardware qualification or production/parity claim. Owner: UI-021, last source review2026-10-20. See ADR0021.
+
 ## UI-020 operator layout candidate (2026-10-20)
 
 | Feature | Status | Scope | Test evidence | Platform | Hardware tested | Known limitations | Last verified date | Owner/task ID |

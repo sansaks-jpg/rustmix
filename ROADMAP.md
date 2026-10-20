@@ -1,5 +1,7 @@
 # Roadmap
 
+- UI-021 candidate: implement explicit overlay draft decisions and truthful preview; refine Playlist list/transfer/footer geometry. Exact-revision hosted acceptance and screenshot comparison pending; GPU/cadence and remaining UI-020 gaps stay open. See ADR0021.
+
 - UI-020 (2026-10-20): responsive operator proportions and dialog corrections are implemented
   with exact-code screenshot comparison. bec97a8 passed hosted check/Clippy/tests/build but failed
   native GPU shutdown drain. Next: qualify GPU reliability, preserve Overlay Settings drafts and

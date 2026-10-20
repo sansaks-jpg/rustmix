@@ -1,5 +1,7 @@
 # RustMix
 
+UI-021 candidate (2026-10-20): explicit unsaved overlay channel choices, engine-rendered draft preview, and a taller two-list Playlist layout are integrated. Hosted build/tests/native visual acceptance are pending. GPU reliability remains open. See [ADR0021](docs/adr/0021-staged-overlay-and-playlist-workflow.md).
+
 UI-020 (2026-10-20): operator proportions, mixer strips and bounded dialogs were refined and
 visually compared against the supplied references. Code bec97a8 passed hosted check, Clippy,
 106 UI tests plus all other suites, and release build. Native screenshots were reviewed, but

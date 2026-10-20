@@ -1,5 +1,7 @@
 # UI milestone progress
 
+UI-021 source candidate: overlay/Playlist changes and GPU provenance diagnostics integrated after independent source review. Hosted acceptance and exact screenshot comparison pending. Previous bec97a8 native GPU shutdown failure remains unresolved. See ADR0021 and ui021-visual-review.md.
+
 ## 2026-10-20 — UI-020 operator layout refinement (candidate)
 
 Inspected local observed UI evidence: rustmix-reference/vmix/UI-UX.md and main-window screenshot,

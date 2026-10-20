@@ -321,6 +321,45 @@ const GENERATOR_SAMPLES: [(&str, InputKind); 7] = [
     ("Countdown 60 seconds", InputKind::Countdown),
 ];
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum OverlaySwitchDecision {
+    Apply,
+    Discard,
+    Keep,
+}
+
+fn overlay_field_label(ui: &mut egui::Ui, label: &str, width: f32) {
+    ui.allocate_ui_with_layout(
+        Vec2::new(width, 26.0),
+        egui::Layout::right_to_left(Align::Center),
+        |ui| {
+            ui.label(label);
+        },
+    );
+}
+
+/// A selected staged panel rendered by the Program compositor, with no live mutation.
+fn overlay_draft_pixels(
+    project: &ProjectState,
+    slot: usize,
+    draft: &OverlayState,
+) -> Result<Vec<[u8; 4]>> {
+    let mut preview = project.clone();
+    let selected = preview
+        .overlays
+        .standard_mut(slot)
+        .ok_or_else(|| Error::Invalid("Overlay channel is unavailable".into()))?;
+    *selected = draft.clone();
+    preview.overlays.validate(&preview.inputs)?;
+    for (index, overlay) in preview.overlays.standard.iter_mut().enumerate() {
+        if index != slot {
+            overlay.enabled = false;
+        }
+    }
+    let background = vec![[18, 23, 30, 255]; 640 * 360];
+    render::program_from_sources(&preview, None, 0.0, 640, 360, &background, None)
+}
+
 impl RustMixApp {
     fn dialog_columns(
         &mut self,
@@ -1616,102 +1655,207 @@ impl RustMixApp {
         }
     }
 
+    fn overlay_preview_texture(
+        &mut self,
+        ctx: &egui::Context,
+        slot: usize,
+        draft: &OverlayState,
+    ) -> Result<egui::TextureHandle> {
+        if let Some((cached_slot, cached_draft, texture)) = &self.overlay_preview
+            && *cached_slot == slot
+            && cached_draft == draft
+        {
+            return Ok(texture.clone());
+        }
+        let pixels = overlay_draft_pixels(self.engine.project(), slot, draft)?;
+        let image = egui::ColorImage::from_rgba_unmultiplied(
+            [640, 360],
+            &pixels.iter().flatten().copied().collect::<Vec<_>>(),
+        );
+        let texture = if let Some((_, _, texture)) = &mut self.overlay_preview {
+            update_texture_image(texture, image);
+            texture.clone()
+        } else {
+            ctx.load_texture("overlay.draft", image, egui::TextureOptions::LINEAR)
+        };
+        self.overlay_preview = Some((slot, draft.clone(), texture.clone()));
+        Ok(texture)
+    }
+
     pub(crate) fn overlay_settings_dialog(&mut self, ctx: &egui::Context) {
         let Some((mut slot, mut draft)) = self.overlay_settings.clone() else {
             return;
         };
+        let mut pending = self.overlay_switch_pending;
+        let mut requested_slot = None;
+        let mut switch_decision = None;
         let mut open = true;
         let mut apply_clicked = false;
         let mut cancel_clicked = false;
-        let height = (ctx.viewport_rect().height() - 180.0).clamp(200.0, 520.0);
-        operator_window(
-            ctx,
-            "Overlay Settings",
-            "dialog.overlay_settings",
-            &mut open,
-            Vec2::new(760.0, 560.0),
-        )
+        let mut valid_draft = false;
+        let height = (ctx.viewport_rect().height() * 0.68 - 90.0)
+            .clamp(200.0, 640.0)
+            .min(ctx.viewport_rect().height() - 180.0);
+        operator_window(ctx, "Overlay Settings", "dialog.overlay_settings", &mut open,
+            Vec2::new((ctx.viewport_rect().width() * 0.62).max(620.0), height + 60.0))
         .show(ctx, |ui| {
-            let width = ui
-                .available_width()
-                .min((ui.ctx().viewport_rect().width() - 48.0).max(250.0));
+            let width = ui.available_width().min((ui.ctx().viewport_rect().width() - 48.0).max(250.0));
             let (body, _) = ui.allocate_exact_size(Vec2::new(width, height), Sense::hover());
-            let mut body_ui = ui.new_child(
-                egui::UiBuilder::new()
-                    .id_salt("dialog.overlay.single_body")
-                    .max_rect(body)
-                    .layout(egui::Layout::top_down(Align::Min)),
-            );
+            let mut body_ui = ui.new_child(egui::UiBuilder::new().id_salt("dialog.overlay.single_body")
+                .max_rect(body).layout(egui::Layout::top_down(Align::Min)));
             body_ui.set_clip_rect(body.intersect(ui.clip_rect()));
-            egui::ScrollArea::vertical()
-                .id_salt("dialog.overlay.scroll")
-                .max_width(body.width())
-                .max_height(height)
-                .auto_shrink([false, false])
+            egui::ScrollArea::vertical().id_salt("dialog.overlay.scroll")
+                .max_width(body.width()).max_height(height).auto_shrink([false, false])
                 .show(&mut body_ui, |ui| {
-                    ui.horizontal(|ui| {
-                        ui.label("Title panel");
-                        for i in 0..8 {
-                            let row=ui.selectable_label(slot==i,format!("{}",i+1));
-                            self.automation.insert(format!("dialog.overlay.slot.{}",i+1),row.rect);
-                            if row.clicked() && let Some(committed)=self.engine.project().overlays.standard(i).cloned(){slot=i;draft=committed;}
-                        }
+                    light_form_frame(ui, 8, |ui| {
+                        let label_width = (ui.available_width() * 0.16).clamp(96.0, 156.0);
+                        let field_width = (ui.available_width() - label_width - 12.0).max(240.0);
+                        egui::Grid::new("overlay.fields").num_columns(2).spacing([12.0, 6.0]).show(ui, |ui| {
+                            overlay_field_label(ui, "Number", label_width);
+                            ui.horizontal(|ui| {
+                                ui.spacing_mut().item_spacing.x = 3.0;
+                                for i in 0..8 {
+                                    let row = ui.add_sized([29.0, 26.0], egui::Button::new(format!("{}", i+1)).selected(slot == i));
+                                    self.automation.insert(format!("dialog.overlay.slot.{}", i+1), row.rect);
+                                    if row.clicked() { requested_slot = Some(i); }
+                                }
+                            });
+                            ui.end_row();
+                            overlay_field_label(ui, "Title", label_width);
+                            let title = ui.add_sized([field_width, 28.0], egui::TextEdit::singleline(&mut draft.title).char_limit(96));
+                            self.automation.insert("dialog.overlay.title".into(), title.rect);
+                            ui.end_row();
+                            overlay_field_label(ui, "Subtitle", label_width);
+                            let subtitle = ui.add_sized([field_width, 28.0], egui::TextEdit::singleline(&mut draft.subtitle).char_limit(160));
+                            self.automation.insert("dialog.overlay.subtitle".into(), subtitle.rect);
+                            ui.end_row();
+                            overlay_field_label(ui, "Position", label_width);
+                            ui.horizontal(|ui| {
+                                for (position, label) in [(Position::LowerLeft, "Lower left"), (Position::LowerRight, "Lower right"), (Position::TopLeft, "Top left")] {
+                                    let response = ui.selectable_value(&mut draft.position, position, label);
+                                    self.automation.insert(format!("dialog.overlay.position.{position:?}"), response.rect);
+                                }
+                            });
+                            ui.end_row();
+                            overlay_field_label(ui, "Visibility", label_width);
+                            let enabled = ui.checkbox(&mut draft.enabled, "Show on Program when applied");
+                            self.automation.insert("dialog.overlay.enabled".into(), enabled.rect);
+                            ui.end_row();
+                        });
                     });
-                    let enabled=ui.checkbox(&mut draft.enabled,"Show on Program");
-                    self.automation.insert("dialog.overlay.enabled".into(),enabled.rect);
-                    ui.horizontal(|ui|{
-                        for position in [Position::LowerLeft,Position::LowerRight,Position::TopLeft]{
-                            let r=ui.selectable_value(&mut draft.position,position,format!("{position:?}"));
-                            self.automation.insert(format!("dialog.overlay.position.{position:?}"),r.rect);
-                        }
+                    let preview = self.overlay_preview_texture(ctx, slot, &draft);
+                    valid_draft = preview.is_ok();
+                    if let Some(target) = pending {
+                        ui.label(RichText::new(format!("Channel {} has unsaved changes. Switch to channel {}?", slot+1, target+1)).color(PREVIEW));
+                        ui.horizontal_wrapped(|ui| {
+                            let apply = ui.add_enabled(valid_draft, egui::Button::new("Apply and switch"));
+                            self.automation.insert("dialog.overlay.switch.apply".into(), apply.rect);
+                            if apply.clicked() { switch_decision = Some(OverlaySwitchDecision::Apply); }
+                            let discard = ui.button("Discard and switch");
+                            self.automation.insert("dialog.overlay.switch.discard".into(), discard.rect);
+                            if discard.clicked() { switch_decision = Some(OverlaySwitchDecision::Discard); }
+                            let keep = ui.button("Keep editing");
+                            self.automation.insert("dialog.overlay.switch.keep".into(), keep.rect);
+                            if keep.clicked() { switch_decision = Some(OverlaySwitchDecision::Keep); }
+                        });
+                    }
+                    ui.add_space(8.0);
+                    let remaining = (body.bottom() - ui.cursor().top() - 26.0).max(90.0);
+                    let pane_width = (ui.available_width() - 12.0) * 0.5;
+                    ui.horizontal_top(|ui| {
+                        ui.spacing_mut().item_spacing.x = 12.0;
+                        ui.allocate_ui_with_layout(Vec2::new(pane_width, remaining), egui::Layout::top_down(Align::Min), |ui| {
+                            ui.set_width(pane_width);
+                            ui.strong("Channel capabilities");
+                            light_form_frame(ui, 6, |ui| {
+                                egui::Grid::new("overlay.capabilities").num_columns(2).spacing([8.0, 3.0]).show(ui, |ui| {
+                                    for (id, label, value, reason) in [
+                                        ("type", "Type", "Title panel only", "Only title-panel composition is implemented."),
+                                        ("source", "Source overlay", "Unavailable", "Input-as-overlay composition is not implemented."),
+                                        ("effect", "Effect / timing", "Unavailable", "Overlay transitions and duration controls are not implemented."),
+                                        ("alpha", "Alpha", "Unavailable", "Independent channel alpha is not implemented."),
+                                        ("transform", "Transform / border", "Unavailable", "Free transforms and borders are not implemented."),
+                                    ] {
+                                        ui.label(label);
+                                        let response = ui.label(RichText::new(value).color(Color32::from_gray(90))).on_hover_text(reason);
+                                        self.automation.insert(format!("dialog.overlay.capability.{id}"), response.rect);
+                                        ui.end_row();
+                                    }
+                                });
+                            });
+                            ui.label(RichText::new("Isolated preview · ASCII captions, 96 chars/line.").small().color(DIM));
+                        });
+                        ui.allocate_ui_with_layout(Vec2::new(pane_width, remaining), egui::Layout::top_down(Align::Min), |ui| {
+                            ui.set_width(pane_width);
+                            ui.strong(if draft.enabled { "Preview · visible when applied" } else { "Preview · hidden" });
+                            let picture_width = pane_width.min(remaining * 16.0 / 9.0);
+                            let size = Vec2::new(picture_width, picture_width * 9.0 / 16.0);
+                            match preview {
+                                Ok(texture) => {
+                                    let response = ui.add(egui::Image::new((texture.id(), size)));
+                                    self.automation.insert("dialog.overlay.preview".into(), response.rect);
+                                }
+                                Err(error) => { ui.colored_label(RED, error.to_string()); }
+                            }
+                        });
                     });
-                    ui.label("Title");let title=ui.add(egui::TextEdit::singleline(&mut draft.title).char_limit(96));
-                    self.automation.insert("dialog.overlay.title".into(),title.rect);
-                    ui.label("Subtitle");let subtitle=ui.add(egui::TextEdit::singleline(&mut draft.subtitle).char_limit(160));
-                    self.automation.insert("dialog.overlay.subtitle".into(),subtitle.rect);
-                    ui.label("Source overlays, channel effects/timing, alpha, free transforms and borders are unavailable. Only the title-panel fields above apply; stinger channels 9–16 are configured on the engine and do not composite a clip yet.");
-                    let w=ui.available_width().min(420.0);
-                    let (frame,_)=ui.allocate_exact_size(Vec2::new(w,w*9.0/16.0),Sense::hover());
-                    ui.painter().rect_filled(frame,0.0,Color32::from_rgb(18,23,30));
-                    let panel=overlay_panel_rect(frame,draft.position,slot);
-                    ui.painter().rect_filled(panel,2.0,Color32::from_black_alpha(180));
-                    ui.painter().text(panel.center(),egui::Align2::CENTER_CENTER,&draft.title,egui::FontId::proportional(11.0),Color32::WHITE);
-                    self.automation.insert("dialog.overlay.preview".into(),frame);
                 });
             self.automation.insert("dialog.overlay.body".into(), body);
             ui.separator();
             ui.horizontal(|ui| {
                 ui.with_layout(egui::Layout::right_to_left(Align::Center), |ui| {
-                    let cancel = ui.add(
-                        egui::Button::new("Cancel")
-                            .fill(CHIP_BG)
-                            .min_size(Vec2::new(92.0, 29.0)),
-                    );
-                    self.automation
-                        .insert("dialog.overlay.cancel".into(), cancel.rect);
-                    if cancel.clicked() {
-                        cancel_clicked = true;
-                    }
-                    let apply = ui.add(
-                        egui::Button::new(RichText::new("OK").color(Color32::WHITE).strong())
-                            .fill(CHIP_BG)
-                            .min_size(Vec2::new(92.0, 29.0)),
-                    );
-                    self.automation
-                        .insert("dialog.overlay.apply".into(), apply.rect);
-                    if apply.clicked() {
-                        apply_clicked = true;
-                    }
+                    let cancel = ui.add_sized([92.0, 29.0], egui::Button::new("Cancel").fill(CHIP_BG));
+                    self.automation.insert("dialog.overlay.cancel".into(), cancel.rect);
+                    cancel_clicked = cancel.clicked();
+                    let apply = ui.add_enabled(valid_draft && pending.is_none(), egui::Button::new(RichText::new("OK").color(Color32::WHITE).strong()).fill(CHIP_BG).min_size(Vec2::new(92.0, 29.0)));
+                    self.automation.insert("dialog.overlay.apply".into(), apply.rect);
+                    apply_clicked = apply.clicked();
                 });
             });
         });
-        if apply_clicked {
+        if cancel_clicked || !open {
+            self.overlay_settings = None;
+            self.overlay_switch_pending = None;
+            self.overlay_preview = None;
+        } else if apply_clicked {
             self.actions
                 .push(Action::Engine(Command::SetOverlay(slot, draft)));
             self.overlay_settings = None;
-        } else if cancel_clicked || !open {
-            self.overlay_settings = None;
+            self.overlay_switch_pending = None;
+            self.overlay_preview = None;
         } else {
+            if let Some(target) = requested_slot.filter(|target| *target != slot)
+                && self.engine.project().overlays.standard(target).is_some()
+            {
+                if self.engine.project().overlays.standard(slot) == Some(&draft) {
+                    if let Some(committed) =
+                        self.engine.project().overlays.standard(target).cloned()
+                    {
+                        slot = target;
+                        draft = committed;
+                        pending = None;
+                    }
+                } else {
+                    pending = Some(target);
+                }
+            }
+            if let Some(decision) = switch_decision {
+                if decision == OverlaySwitchDecision::Keep {
+                    pending = None;
+                } else if let Some(target) = pending
+                    && let Some(committed) =
+                        self.engine.project().overlays.standard(target).cloned()
+                {
+                    if decision == OverlaySwitchDecision::Apply {
+                        self.actions
+                            .push(Action::Engine(Command::SetOverlay(slot, draft.clone())));
+                    }
+                    slot = target;
+                    draft = committed;
+                    pending = None;
+                }
+            }
+            self.overlay_switch_pending = pending;
             self.overlay_settings = Some((slot, draft));
         }
     }
@@ -2891,6 +3035,238 @@ mod operator_dialog_tests {
                 ],
             );
         }
+    }
+
+    #[test]
+    fn dirty_overlay_channel_switch_requires_an_explicit_choice() {
+        let mut app = RustMixApp::headless();
+        let ctx = egui::Context::default();
+        app.theme(&ctx);
+        let before = app.engine.project().clone();
+        app.dispatch(Action::OverlaySettings(0), &ctx);
+        click(&mut app, &ctx, "dialog.overlay.position.TopLeft");
+        click(&mut app, &ctx, "dialog.overlay.slot.2");
+        assert_eq!(
+            app.overlay_settings
+                .as_ref()
+                .map(|(slot, draft)| (*slot, draft.position)),
+            Some((0, Position::TopLeft))
+        );
+        assert_eq!(app.overlay_switch_pending, Some(1));
+        assert_eq!(*app.engine.project(), before);
+        click(&mut app, &ctx, "dialog.overlay.switch.keep");
+        assert_eq!(app.overlay_switch_pending, None);
+        assert_eq!(
+            app.overlay_settings
+                .as_ref()
+                .map(|(_, draft)| draft.position),
+            Some(Position::TopLeft)
+        );
+        click(&mut app, &ctx, "dialog.overlay.slot.2");
+        click(&mut app, &ctx, "dialog.overlay.switch.discard");
+        assert_eq!(
+            app.overlay_settings.as_ref().map(|(slot, _)| *slot),
+            Some(1)
+        );
+        assert_eq!(*app.engine.project(), before);
+        click(&mut app, &ctx, "dialog.overlay.position.LowerRight");
+        click(&mut app, &ctx, "dialog.overlay.slot.3");
+        click(&mut app, &ctx, "dialog.overlay.switch.apply");
+        assert_eq!(
+            app.overlay_settings.as_ref().map(|(slot, _)| *slot),
+            Some(2)
+        );
+        assert_eq!(
+            app.engine.project().overlays.standard(1).unwrap().position,
+            Position::LowerRight
+        );
+        assert_eq!(
+            app.engine.project().overlays.standard(0),
+            before.overlays.standard(0)
+        );
+        assert_eq!(app.engine.project().program, before.program);
+        assert_eq!(app.engine.project().preview, before.preview);
+        let applied = app.engine.project().clone();
+        click(&mut app, &ctx, "dialog.overlay.enabled");
+        click(&mut app, &ctx, "dialog.overlay.slot.4");
+        click(&mut app, &ctx, "dialog.overlay.cancel");
+        assert_eq!(*app.engine.project(), applied);
+        assert!(
+            app.overlay_settings.is_none()
+                && app.overlay_switch_pending.is_none()
+                && app.overlay_preview.is_none()
+        );
+    }
+
+    #[test]
+    fn overlay_draft_preview_uses_both_caption_lines_and_hidden_state_without_live_mutation() {
+        let app = RustMixApp::headless();
+        let before = app.engine.project().clone();
+        let mut draft = before.overlays.standard(0).unwrap().clone();
+        draft.enabled = true;
+        draft.title = "TITLE".into();
+        draft.subtitle = "SUBTITLE".into();
+        let both = overlay_draft_pixels(&before, 0, &draft).unwrap();
+        let mut other_on_air = before.clone();
+        let other = other_on_air.overlays.standard_mut(1).unwrap();
+        other.enabled = true;
+        other.title = "OTHER CHANNEL".into();
+        assert_eq!(
+            overlay_draft_pixels(&other_on_air, 0, &draft).unwrap(),
+            both,
+            "the selected draft preview must not include another on-air channel"
+        );
+        assert!(
+            both.chunks_exact(640)
+                .skip(282)
+                .take(17)
+                .flatten()
+                .any(|pixel| *pixel == [255, 255, 255, 255]),
+            "the title has visible raster glyphs"
+        );
+        assert!(
+            both.chunks_exact(640)
+                .skip(299)
+                .take(12)
+                .flatten()
+                .any(|pixel| *pixel == [190, 190, 190, 255]),
+            "the subtitle has visible raster glyphs"
+        );
+        draft.subtitle.clear();
+        let title_only = overlay_draft_pixels(&before, 0, &draft).unwrap();
+        assert_ne!(both, title_only);
+        assert_eq!(
+            both.chunks_exact(640)
+                .skip(282)
+                .take(17)
+                .collect::<Vec<_>>(),
+            title_only
+                .chunks_exact(640)
+                .skip(282)
+                .take(17)
+                .collect::<Vec<_>>()
+        );
+        draft.enabled = false;
+        let hidden = overlay_draft_pixels(&before, 0, &draft).unwrap();
+        assert!(hidden.iter().all(|pixel| *pixel == [18, 23, 30, 255]));
+        assert_eq!(*app.engine.project(), before);
+        draft.title = "TOO LONG".repeat(20);
+        assert!(overlay_draft_pixels(&before, 0, &draft).is_err());
+        assert!(overlay_draft_pixels(&before, 8, &draft).is_err());
+    }
+
+    #[test]
+    fn overlay_editor_keeps_preview_fields_and_footer_bounded_on_operator_displays() {
+        for size in [
+            Vec2::new(1100.0, 700.0),
+            Vec2::new(1600.0, 900.0),
+            Vec2::new(1920.0, 1080.0),
+        ] {
+            let mut app = RustMixApp::headless();
+            let ctx = egui::Context::default();
+            app.theme(&ctx);
+            let before = app.engine.project().clone();
+            app.dispatch(Action::OverlaySettings(0), &ctx);
+            if let Some((_, draft)) = &mut app.overlay_settings {
+                draft.enabled = true;
+                draft.title = "A".repeat(96);
+                draft.subtitle = "B".repeat(160);
+            }
+            for _ in 0..5 {
+                frame_at_size(&mut app, &ctx, vec![], size);
+            }
+            let body = app.automation.get("dialog.overlay.body").unwrap();
+            assert!(body.width() >= size.x * 0.60 && body.width() <= size.x * 0.64);
+            let preview = app.automation.get("dialog.overlay.preview").unwrap();
+            assert!(
+                body.contains_rect(*preview),
+                "bounded draft preview at {size:?}: {preview:?}, {body:?}"
+            );
+            assert!((preview.width() / preview.height() - 16.0 / 9.0).abs() < 0.01);
+            for id in [
+                "dialog.overlay.title",
+                "dialog.overlay.subtitle",
+                "dialog.overlay.enabled",
+                "dialog.overlay.apply",
+                "dialog.overlay.cancel",
+            ] {
+                let rect = app.automation.get(id).unwrap();
+                assert!(
+                    ctx.viewport_rect().contains_rect(*rect),
+                    "visible {id} at {size:?}"
+                );
+            }
+            let title = app.automation.get("dialog.overlay.title").unwrap();
+            let subtitle = app.automation.get("dialog.overlay.subtitle").unwrap();
+            assert!((title.left() - subtitle.left()).abs() < 0.5);
+            assert!(title.width() >= body.width() * 0.70);
+            assert_eq!(*app.engine.project(), before);
+        }
+    }
+
+    #[test]
+    fn invalid_overlay_draft_stays_open_and_cancel_keeps_live_state() {
+        let mut app = RustMixApp::headless();
+        let ctx = egui::Context::default();
+        app.theme(&ctx);
+        let before = app.engine.project().clone();
+        app.dispatch(Action::OverlaySettings(0), &ctx);
+        if let Some((_, draft)) = &mut app.overlay_settings {
+            // The widget limit is in characters; the engine validates bytes.
+            draft.title = "é".repeat(96);
+        }
+        click(&mut app, &ctx, "dialog.overlay.apply");
+        assert!(app.overlay_settings.is_some());
+        assert_eq!(*app.engine.project(), before);
+        click(&mut app, &ctx, "dialog.overlay.cancel");
+        assert!(app.overlay_settings.is_none());
+        assert_eq!(*app.engine.project(), before);
+    }
+
+    #[test]
+    fn overlay_preview_uploads_only_for_changed_drafts() {
+        let mut app = RustMixApp::headless();
+        let ctx = egui::Context::default();
+        let mut draft = app.engine.project().overlays.standard(0).unwrap().clone();
+        let mut handle = None;
+        let first = ctx.run_ui(egui::RawInput::default(), |_| {
+            handle = Some(app.overlay_preview_texture(&ctx, 0, &draft).unwrap());
+        });
+        let id = handle.unwrap().id();
+        assert!(
+            first
+                .textures_delta
+                .set
+                .iter()
+                .any(|(key, delta)| *key == id && delta.pos.is_none())
+        );
+        let unchanged = ctx.run_ui(egui::RawInput::default(), |_| {
+            assert_eq!(
+                app.overlay_preview_texture(&ctx, 0, &draft).unwrap().id(),
+                id
+            );
+        });
+        assert!(
+            unchanged
+                .textures_delta
+                .set
+                .iter()
+                .all(|(key, _)| *key != id)
+        );
+        draft.enabled = !draft.enabled;
+        let changed = ctx.run_ui(egui::RawInput::default(), |_| {
+            assert_eq!(
+                app.overlay_preview_texture(&ctx, 0, &draft).unwrap().id(),
+                id
+            );
+        });
+        assert!(
+            changed
+                .textures_delta
+                .set
+                .iter()
+                .any(|(key, delta)| *key == id && delta.pos == Some([0, 0]))
+        );
     }
 
     #[test]

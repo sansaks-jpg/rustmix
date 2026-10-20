@@ -36,6 +36,19 @@ function Invoke-NativeSmoke([string[]]$SmokeArguments) {
         samples = $samples
     } | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $measurementPath
     if ($process.ExitCode -ne 0) { throw "Native app exit code $($process.ExitCode)" }
+    $modeName = $SmokeArguments[0].TrimStart('-')
+    $environmentPath = Join-Path artifacts ($modeName + '-environment.json')
+    if (-not (Test-Path -LiteralPath $environmentPath)) { throw "Missing native adapter evidence: $environmentPath" }
+    $nativeEnvironment = Get-Content -LiteralPath $environmentPath -Raw | ConvertFrom-Json
+    if ($null -eq $nativeEnvironment.adapter -or [string]::IsNullOrWhiteSpace($nativeEnvironment.adapter.name) -or
+        [string]::IsNullOrWhiteSpace($nativeEnvironment.adapter.backend) -or $nativeEnvironment.logical_processors -lt 1 -or
+        $nativeEnvironment.pixels_per_point -le 0) { throw 'Incomplete native adapter/CPU/DPI evidence' }
+    if ($modeName -ne 'ui-perf') {
+        $tracePath = Join-Path artifacts ($modeName + '-stages.json')
+        if (-not (Test-Path -LiteralPath $tracePath)) { throw "Missing native stage trace: $tracePath" }
+        $stageTrace = @(Get-Content -LiteralPath $tracePath -Raw | ConvertFrom-Json)
+        if ($stageTrace.Count -lt 1 -or $stageTrace.Count -gt 128) { throw 'Native stage trace is empty or exceeds its bound' }
+    }
     if (-not (Test-Path -LiteralPath artifacts/gpu-shutdown.txt) -or
         (Get-Content -LiteralPath artifacts/gpu-shutdown.txt -Raw) -ne 'GPU submissions drained before native teardown') {
         throw 'Native GPU shutdown did not confirm drained submissions'
@@ -48,7 +61,7 @@ Invoke-NativeSmoke @('--ui-smoke')
 foreach ($file in @('smoke-ok.json','workspace-1100.png','workspace-1600.png','workspace-1920.png','smoke.rustmix.json','ui-elements.json','layout-stability.json','pause-transport.json','paused-program.png')) {
     if (-not (Test-Path (Join-Path artifacts $file))) { throw "Missing native evidence: $file" }
 }
-foreach ($dialog in @('add-input-1600','input-properties-1600','settings-1600','overlay-settings-1600','recording-setup-1600','streaming-setup-1600','multicorder-1600','playlist-1600','shortcuts-1600')) {
+foreach ($dialog in @('overlay-unsaved-1600','add-input-1600','input-properties-1600','settings-1600','overlay-settings-1600','recording-setup-1600','streaming-setup-1600','multicorder-1600','playlist-1600','shortcuts-1600')) {
     foreach ($suffix in @('.png','-elements.json')) {
         $evidence = Join-Path artifacts ($dialog + $suffix)
         if (-not (Test-Path -LiteralPath $evidence)) { throw "Missing dialog evidence: $evidence" }

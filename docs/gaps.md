@@ -1,5 +1,7 @@
 # Known gaps
 
+UI-021 candidate: overlay draft safety/engine preview and Playlist geometry revised but not yet accepted by hosted native evidence. GPU shutdown reliability remains unresolved; new bounded adapter/stage diagnostics preserve existing failure gates. See ADR0021 and ui021-visual-review.md.
+
 2026-10-20 UI-020: code bec97a8 passed hosted check/Clippy/all tests (106 UI) and build, with
 all main native workspace/dialog captures inspected against supplied references. Main native
 shutdown failed its GPU drain proof; later workflow stages did not run. Same-size texture reuse

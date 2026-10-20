@@ -577,6 +577,8 @@ pub struct RustMixApp {
     pub(crate) settings_layout: Option<bool>,
     /// Staged Overlay Settings draft: selected slot plus its uncommitted copy.
     pub(crate) overlay_settings: Option<(usize, OverlayState)>,
+    pub(crate) overlay_switch_pending: Option<usize>,
+    pub(crate) overlay_preview: Option<(usize, OverlayState, egui::TextureHandle)>,
     /// Independent staged copies; selecting another slot never discards edits.
     pub(crate) external_settings: Option<ExternalSettingsDraft>,
     /// Reference dialogs and live production output engines.
@@ -752,6 +754,12 @@ impl RustMixApp {
         if std::env::args().any(|s| s == "--ui-perf") {
             app.profile = Some(profile::Profile::default());
         }
+        if (app.smoke.is_some() || app.profile.is_some())
+            && let Err(error) = smoke::record_native_environment(cc)
+        {
+            app.warning = true;
+            app.notice = format!("Native environment evidence failed: {error}");
+        }
         app
     }
 
@@ -831,6 +839,8 @@ impl RustMixApp {
             settings_name: String::new(),
             settings_layout: None,
             overlay_settings: None,
+            overlay_switch_pending: None,
+            overlay_preview: None,
             external_settings: None,
             recording_setup: false,
             rec_slot: 1,
@@ -976,6 +986,8 @@ impl RustMixApp {
         self.settings_name.clear();
         self.settings_layout = None;
         self.overlay_settings = None;
+        self.overlay_switch_pending = None;
+        self.overlay_preview = None;
         self.external_settings = None;
         self.recording_setup = false;
         self.streaming_setup = false;
@@ -1425,6 +1437,8 @@ impl RustMixApp {
             Action::OverlaySettings(slot) => {
                 if let Some(overlay) = self.engine.project().overlays.standard(slot).cloned() {
                     self.overlay_settings = Some((slot, overlay));
+                    self.overlay_switch_pending = None;
+                    self.overlay_preview = None;
                 }
             }
             Action::ExternalSettings(slot) => {
@@ -2439,10 +2453,16 @@ impl eframe::App for RustMixApp {
         self.stop_audio_for_project_change();
         self.program_worker = None;
         if let Some(device) = self.gpu_device.take() {
-            let result = device.poll(eframe::wgpu::PollType::Wait {
-                submission_index: None,
-                timeout: Some(Duration::from_secs(10)),
-            });
+            let result = device
+                .poll(eframe::wgpu::PollType::Wait {
+                    submission_index: None,
+                    timeout: Some(Duration::from_secs(10)),
+                })
+                .and_then(|_| {
+                    // WaitSucceeded confirms the wait, not queue emptiness. Sample
+                    // the queue separately without extending the shutdown deadline.
+                    device.poll(eframe::wgpu::PollType::Poll)
+                });
             if self.smoke.is_some() || std::env::args().any(|arg| arg == "--ui-perf") {
                 let evidence = match result {
                     Ok(status) if status.is_queue_empty() => {
@@ -2462,7 +2482,7 @@ impl eframe::App for RustMixApp {
             raw.events.append(&mut smoke.events);
         }
     }
-    fn ui(&mut self, ui: &mut egui::Ui, _: &mut eframe::Frame) {
+    fn ui(&mut self, ui: &mut egui::Ui, frame: &mut eframe::Frame) {
         if ui.ctx().input(|i| i.viewport().close_requested())
             && self.saved_revision != self.engine.project().revision
             && !self.allow_close
@@ -2473,7 +2493,7 @@ impl eframe::App for RustMixApp {
         }
         self.frame_ui(ui);
         if self.smoke.is_some() {
-            self.smoke_step(ui.ctx());
+            self.smoke_step(ui.ctx(), frame.info().cpu_usage);
         }
     }
     fn save(&mut self, storage: &mut dyn eframe::Storage) {
