@@ -886,11 +886,16 @@ impl RustMixApp {
 
                     // 4x2 Overlay number buttons (1..4, 5..8); all eight are live.
                     let cell_w = ((center - 6.0) / 4.0).floor();
+                    let overlay_height = (transition_height * 0.66).clamp(20.0, 29.0);
+                    ui.add_space(12.0);
+                    // Horizontal allocates its minimum row height from its
+                    // parent before entering the closure. Reset it here so
+                    // take-button sizing cannot leave a blank overlay row.
+                    ui.spacing_mut().interact_size.y = overlay_height;
                     for row in 0..2 {
                         ui.horizontal(|ui| {
                             ui.spacing_mut().item_spacing.x = 2.0;
                             ui.spacing_mut().button_padding = egui::vec2(2.0, 1.0);
-                            ui.spacing_mut().interact_size.y = 20.0;
                             for slot in (row * 4)..(row * 4 + 4) {
                                 let active = self
                                     .engine
@@ -903,7 +908,7 @@ impl RustMixApp {
                                         RichText::new(format!("{}", slot + 1)).size(10.5).strong(),
                                     )
                                     .selected(active)
-                                    .min_size(egui::vec2(cell_w, 20.0)),
+                                    .min_size(egui::vec2(cell_w, overlay_height)),
                                 );
                                 self.automation
                                     .insert(format!("switcher.overlay.{}", slot + 1), btn.rect);
@@ -1095,23 +1100,18 @@ impl RustMixApp {
                                                     .show(ui, |ui| {
                                                         ui.set_width((inner_w - 12.0).max(40.0));
                                                         ui.horizontal(|ui| {
-                                                            ui.add_sized(
-                                                                [
-                                                                    (inner_w - 38.0).max(30.0),
-                                                                    16.0,
-                                                                ],
-                                                                egui::Label::new(
+                                                            let name = ui.allocate_ui_with_layout(
+                                                                egui::vec2((inner_w - 38.0).max(30.0), 16.0),
+                                                                egui::Layout::left_to_right(egui::Align::Center),
+                                                                |ui| ui.add(egui::Label::new(
                                                                     RichText::new(format!(
                                                                         "{}   {}",
                                                                         self.engine.project().input_number(input.id), input.name
                                                                     ))
-                                                                    .size(11.0)
-                                                                    .strong()
-                                                                    .color(Color32::WHITE),
-                                                                )
-                                                                .halign(egui::Align::Min)
-                                                                .truncate(),
-                                                            );
+                                                                    .size(11.0).strong().color(Color32::WHITE)
+                                                                ).truncate()),
+                                                            ).inner;
+                                                            self.automation.insert(format!("input.{}.name", input.id.0), name.rect);
                                                             ui.with_layout(
                                                                 egui::Layout::right_to_left(
                                                                     egui::Align::Center,

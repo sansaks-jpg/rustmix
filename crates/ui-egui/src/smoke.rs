@@ -1326,6 +1326,19 @@ mod tests {
                 assert!(app.automation["switcher.fade"].height() >= 32.0);
             }
             let bank = app.automation["monitor.bank.bounds"];
+            let source_name = app.automation["input.1.name"];
+            let source_first_control = app.automation["input.1.overlay.1"];
+            assert!(
+                source_name.left() - source_first_control.left() <= 12.0,
+                "Source names must start beside the left tile inset"
+            );
+            let first_overlay = app.automation["switcher.overlay.1"];
+            let second_overlay = app.automation["switcher.overlay.5"];
+            assert!(second_overlay.top() >= first_overlay.bottom());
+            assert!(
+                second_overlay.top() - first_overlay.top() <= 33.0,
+                "Overlay rows must not inherit the tall transition-row minimum"
+            );
             for id in [
                 "switcher.cut",
                 "switcher.fade",

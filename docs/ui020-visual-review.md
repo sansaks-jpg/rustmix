@@ -71,3 +71,15 @@ the later caption framebuffer assertion342/692. Independent pixel-center reprodu
 with rounded coordinate indexing and692/692 with floor indexing. Acceptance brightness thresholds
 remain unchanged. Missing live failure image motivated retaining unverified captures in the next
 harness revision. This is a failed overall native run, not full acceptance.
+
+
+## Intermediate native inspection: db29d67
+
+Inspected workspace-1920.png and matching ui-elements.json from run39363210970 directly. CUT
+now measures110x44, FADE88x44. Overlay rows were375..395 and422..442:47px pitch despite20px
+buttons, because the horizontal row inherited the44px parent minimum before its closure reset it.
+The next candidate resets the parent minimum before allocating either row and uses20–29px overlay
+targets; resize regression caps row pitch at33. Source names also remained visually centered:
+Ui::add_sized centered the Label despite its halign. An explicit left-to-right child now positions
+the name and records its own bounds; regression checks the left tile inset. These corrections still
+need exact-patch captures. The overall db29d67 run failed the same caption sampling342/692 assertion.
