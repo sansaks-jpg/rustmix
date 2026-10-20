@@ -695,6 +695,8 @@ impl RustMixApp {
                                     _ => "dialog.overlay",
                                 },
                             )?;
+                        } else if *kind == 4 {
+                            self.validate_recording_geometry(ctx)?;
                         } else if *kind == 7 {
                             self.validate_playlist_geometry(ctx)?;
                         }
@@ -1316,6 +1318,44 @@ impl RustMixApp {
             return Err(Error::Invalid(
                 "Native Playlist panes, hit areas or controls differ from reference geometry"
                     .into(),
+            ));
+        }
+        Ok(())
+    }
+    pub(crate) fn validate_recording_geometry(&self, ctx: &egui::Context) -> Result<()> {
+        let read = |name: &str| {
+            self.automation
+                .get(&format!("dialog.recording.{name}"))
+                .copied()
+                .filter(|rect| rect.is_finite())
+                .ok_or_else(|| Error::Invalid(format!("Missing recording geometry: {name}")))
+        };
+        let body = read("body")?;
+        let rail = read("rail")?;
+        let page = read("page")?;
+        let filename = read("filename")?;
+        let browse = read("browse")?;
+        let start = read("start")?;
+        let ok = read("ok")?;
+        let cancel = read("cancel")?;
+        if !body.contains_rect(rail)
+            || !body.contains_rect(page)
+            || (rail.width() / body.width().max(1.0) - 0.26).abs() > 0.015
+            || rail.right() + 5.0 > page.left()
+            || !page.contains_rect(filename)
+            || !page.contains_rect(browse)
+            || filename.bottom() > browse.top()
+            || body.bottom() > start.top()
+            || body.bottom() > ok.top()
+            || body.bottom() > cancel.top()
+            || start.right() > ok.left()
+            || ok.right() > cancel.left()
+            || [body, start, ok, cancel]
+                .iter()
+                .any(|rect| !ctx.viewport_rect().contains_rect(*rect))
+        {
+            return Err(Error::Invalid(
+                "Recording page, navigation or footer is clipped or overlaps".into(),
             ));
         }
         Ok(())

@@ -429,31 +429,34 @@ impl RustMixApp {
         } else {
             self.preview_color()
         };
-        egui::Frame::new()
+        let header = egui::Frame::new()
             .fill(color)
-            .corner_radius(egui::CornerRadius {
-                nw: 4,
-                ne: 4,
-                sw: 0,
-                se: 0,
-            })
+            .corner_radius(0)
             .inner_margin(egui::Margin::symmetric(8, 3))
             .show(ui, |ui| {
                 ui.set_min_width((ui.available_width() - 1.0).max(20.0));
                 ui.horizontal(|ui| {
                     let badge = if program { "PGM" } else { "PVW" };
-                    ui.add_sized(
+                    let title = ui.add_sized(
                         [(ui.available_width() - 96.0).max(40.0), 18.0],
                         egui::Label::new(
                             RichText::new(format!(
-                                "{badge}  {} · {}",
+                                "{}  {} · {badge}",
                                 p.input_number(id),
                                 input.name
                             ))
                             .strong()
                             .color(Color32::WHITE),
                         )
-                        .truncate(),
+                        .truncate()
+                        .halign(egui::Align::Min),
+                    );
+                    self.automation.insert(
+                        format!(
+                            "monitor.{}.title",
+                            if program { "program" } else { "preview" }
+                        ),
+                        title.rect,
                     );
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         ui.spacing_mut().item_spacing.x = 4.0;
@@ -531,6 +534,13 @@ impl RustMixApp {
                     });
                 });
             });
+        self.automation.insert(
+            format!(
+                "monitor.{}.header",
+                if program { "program" } else { "preview" }
+            ),
+            header.response.rect,
+        );
         let available = ui.available_size();
         let transport_h = 28.0;
         let canvas_avail_h = (available.y - transport_h - 4.0).max(40.0);
@@ -841,9 +851,13 @@ impl RustMixApp {
                             let button = ui
                                 .add_enabled(
                                     enabled.is_ok(),
-                                    egui::Button::new(
-                                        RichText::new(slot.kind.label()).strong().size(10.5),
-                                    )
+                                    egui::Button::new((
+                                        egui::Atom::grow(),
+                                        RichText::new(slot.kind.label()).strong().size(12.0),
+                                        egui::Atom::grow(),
+                                    ))
+                                    .gap(0.0)
+                                    .truncate()
                                     .min_size(egui::vec2(center - 22.0, transition_height)),
                                 )
                                 .on_hover_text(format!(

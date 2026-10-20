@@ -91,6 +91,34 @@ pub(super) fn light_form_frame<R>(
     response
 }
 
+// Presentation-only recording navigation never changes engine/output configuration.
+fn recording_rate_description(rate: Rate) -> String {
+    format!(
+        "{}p ({}/{})",
+        rate.label(),
+        rate.numerator,
+        rate.denominator
+    )
+}
+
+fn recording_form_row<R>(
+    ui: &mut egui::Ui,
+    label: &str,
+    contents: impl FnOnce(&mut egui::Ui) -> R,
+) -> egui::InnerResponse<R> {
+    ui.horizontal(|ui| {
+        let label_width = (ui.available_width() * 0.28).clamp(86.0, 125.0);
+        ui.allocate_ui_with_layout(
+            Vec2::new(label_width, 22.0),
+            egui::Layout::right_to_left(Align::Center),
+            |ui| {
+                ui.label(label);
+            },
+        );
+        contents(ui)
+    })
+}
+
 fn sidebar_row(
     ui: &mut egui::Ui,
     active: bool,
@@ -2196,228 +2224,221 @@ impl RustMixApp {
         }
         let mut open = self.recording_setup;
         let mut close_clicked = false;
+        let viewport = ctx.viewport_rect().size();
+        let body_height = (viewport.y * 0.53 - 80.0).clamp(200.0, 460.0);
+        let program_rate = self.engine.project().preferences.rate;
         operator_window(
             ctx,
             "Recording Setup",
             "dialog.recording_setup",
             &mut open,
-            Vec2::new(680.0, 500.0),
+            Vec2::new(
+                (viewport.x * 0.405).clamp(560.0, 800.0),
+                body_height + 125.0,
+            ),
         )
         .show(ctx, |ui| {
-            ui.label("Unavailable: no encoder/output backend. Settings below are read-only and are not saved.");
-            egui::ScrollArea::vertical().max_height((ctx.viewport_rect().height()-300.0).clamp(180.0,450.0)).show(ui,|ui| {
-            ui.add_enabled_ui(false,|ui| {
+            ui.label("No recording backend. Configuration is unavailable and is not saved.");
             ui.horizontal(|ui| {
                 for slot in [1_u8, 2_u8] {
-                    let active = self.rec_slot == slot;
-                    if ui
-                        .add_sized(
-                            [34.0, 22.0],
-                            egui::Button::new(
-                                RichText::new(slot.to_string()).color(Color32::WHITE),
-                            )
-                            .fill(if active {
-                                PROGRAM
-                            } else {
-                                CHIP_BG
-                            }),
-                        )
-                        .clicked()
-                    {
+                    let response = ui.add_sized(
+                        [42.0, 28.0],
+                        egui::Button::new(slot.to_string()).selected(self.rec_slot == slot),
+                    );
+                    self.automation
+                        .insert(format!("dialog.recording.slot.{slot}"), response.rect);
+                    if response.clicked() {
                         self.rec_slot = slot;
                     }
                 }
+                ui.add_space(8.0);
+                let output =
+                    ui.add_enabled(false, egui::Button::new("Program output · unavailable"));
+                self.automation
+                    .insert("dialog.recording.output".into(), output.rect);
             });
-            light_form_frame(ui, 12, |ui| {
-                ui.horizontal(|ui| {
-                    ui.label(RichText::new("Format").strong().color(FORM_TEXT));
-                    egui::ComboBox::from_id_salt("rec.format")
-                        .width(96.0)
-                        .selected_text(
-                            ["MP4", "AVI", "MKV", "MPEG-2", "vMix AVI"]
-                                .get(self.rec_format)
-                                .copied()
-                                .unwrap_or("MP4"),
-                        )
-                        .show_ui(ui, |ui| {
-                            for (idx, lbl) in ["MP4", "AVI", "MKV", "MPEG-2", "vMix AVI"]
-                                .into_iter()
-                                .enumerate()
-                            {
-                                ui.selectable_value(&mut self.rec_format, idx, lbl);
-                            }
-                        });
-                    ui.label(RichText::new("Filename").strong().color(FORM_TEXT));
-                    ui.add_sized(
-                        [280.0, 22.0],
-                        egui::TextEdit::singleline(&mut self.rec_filename),
-                    );
-                    let _ = ui.add_sized([74.0, 22.0], egui::Button::new("Browse"));
-                });
-                ui.add_space(6.0);
-                ui.columns(2, |cols| {
-                    if let [left_col, right_col, ..] = cols {
-                        left_col.label(RichText::new("MP4").size(14.0).strong().color(FORM_TEXT));
-                        egui::Grid::new("rec_mp4_grid")
-                            .num_columns(2)
-                            .spacing([12.0, 6.0])
-                            .show(left_col, |ui| {
-                                ui.label("Resolution");
-                                ui.label("Same as Output");
-                                ui.end_row();
-                                ui.label("Frame Rate");
-                                ui.label("NTSC 29.97p");
-                                ui.end_row();
-                                ui.label("Profile");
-                                egui::ComboBox::from_id_salt("rec.profile")
-                                    .width(130.0)
-                                    .selected_text("H264Baseline")
-                                    .show_ui(ui, |ui| {
-                                        let _ = ui.selectable_label(true, "H264Baseline");
-                                        let _ = ui.selectable_label(false, "H264High");
-                                        let _ = ui.selectable_label(false, "HEVC");
-                                    });
-                                ui.end_row();
-                                ui.label("Bit Rate (Mbps)");
+            let width = ui.available_width();
+            let (body, _) = ui.allocate_exact_size(Vec2::new(width, body_height), Sense::hover());
+            self.automation.insert("dialog.recording.body".into(), body);
+            let rail_width = (width * 0.26).clamp(130.0, 210.0);
+            let rail = Rect::from_min_size(body.min, Vec2::new(rail_width, body.height()));
+            let page = Rect::from_min_max(egui::pos2(rail.right() + 6.0, body.top()), body.max);
+            self.automation.insert("dialog.recording.rail".into(), rail);
+            self.automation.insert("dialog.recording.page".into(), page);
+            let mut rail_ui = ui.new_child(
+                egui::UiBuilder::new()
+                    .id_salt("recording.rail")
+                    .max_rect(rail)
+                    .layout(egui::Layout::top_down(Align::Min)),
+            );
+            rail_ui.set_clip_rect(rail.intersect(ui.clip_rect()));
+            rail_ui.painter().rect_filled(rail, 0.0, SIDEBAR);
+            for (index, label) in [
+                (1, "AVI"),
+                (4, "WMV"),
+                (0, "MP4"),
+                (2, "MKV"),
+                (3, "MPEG-2"),
+            ] {
+                let response =
+                    sidebar_row(&mut rail_ui, self.rec_format == index, label, 30.0, None);
+                self.automation
+                    .insert(format!("dialog.recording.format.{index}"), response.rect);
+                if response.clicked() {
+                    self.rec_format = index;
+                }
+            }
+            let format = ["MP4", "AVI", "MKV", "MPEG-2", "WMV"]
+                .get(self.rec_format)
+                .copied()
+                .unwrap_or("MKV");
+            let mut page_ui = ui.new_child(
+                egui::UiBuilder::new()
+                    .id_salt("recording.page")
+                    .max_rect(page)
+                    .layout(egui::Layout::top_down(Align::Min)),
+            );
+            page_ui.set_clip_rect(page.intersect(ui.clip_rect()));
+            page_ui.painter().rect_filled(page, 0.0, FORM_LIGHT);
+            *page_ui.visuals_mut() = form_visuals();
+            egui::ScrollArea::vertical()
+                .id_salt("recording.page.scroll")
+                .max_height(page.height())
+                .auto_shrink([false, false])
+                .show(&mut page_ui, |ui| {
+                    ui.add_enabled_ui(false, |ui| {
+                        light_form_frame(ui, 8, |ui| {
+                            ui.strong(format!("{format} encoder settings · unavailable"));
+                            let filename = recording_form_row(ui, "Filename", |ui| {
                                 ui.add_sized(
-                                    [70.0, 20.0],
-                                    egui::TextEdit::singleline(&mut self.rec_bitrate),
-                                );
-                                ui.end_row();
+                                    [ui.available_width(), 22.0],
+                                    egui::TextEdit::singleline(&mut self.rec_filename),
+                                )
+                            })
+                            .inner;
+                            self.automation
+                                .insert("dialog.recording.filename".into(), filename.rect);
+                            recording_form_row(ui, "", |ui| {
+                                ui.with_layout(egui::Layout::right_to_left(Align::Center), |ui| {
+                                    let browse =
+                                        ui.add_sized([96.0, 26.0], egui::Button::new("Browse"));
+                                    self.automation
+                                        .insert("dialog.recording.browse".into(), browse.rect);
+                                });
                             });
-                        left_col.checkbox(&mut self.rec_hw_encoder, "Use Hardware Encoder");
-
-                        right_col.label(
-                            RichText::new("AVI / MKV")
-                                .size(14.0)
-                                .strong()
-                                .color(FORM_TEXT),
-                        );
-                        egui::Grid::new("rec_avi_grid")
-                            .num_columns(2)
-                            .spacing([12.0, 6.0])
-                            .show(right_col, |ui| {
-                                ui.label("Codec");
-                                egui::ComboBox::from_id_salt("rec.codec")
-                                    .width(130.0)
-                                    .selected_text("MPEG-2")
-                                    .show_ui(ui, |ui| {
-                                        let _ = ui.selectable_label(true, "MPEG-2");
-                                        let _ = ui.selectable_label(false, "H264");
+                            ui.add_space(6.0);
+                            let video = ui.vertical(|ui| {
+                                let raster = recording_form_row(ui, "Program raster", |ui| {
+                                    ui.label("640×360 CPU reference")
+                                })
+                                .inner;
+                                self.automation
+                                    .insert("dialog.recording.programRaster".into(), raster.rect);
+                                let rate = recording_form_row(ui, "Program rate", |ui| {
+                                    ui.label(recording_rate_description(program_rate))
+                                })
+                                .inner;
+                                self.automation
+                                    .insert("dialog.recording.programRate".into(), rate.rect);
+                                let codec = if self.rec_format == 0 {
+                                    "H.264 profile · unavailable"
+                                } else if self.rec_format == 2 {
+                                    "Container codec · unavailable"
+                                } else {
+                                    "Codec · unavailable"
+                                };
+                                recording_form_row(ui, "Codec", |ui| ui.label(codec));
+                                recording_form_row(ui, "Video bit rate", |ui| {
+                                    ui.add_sized(
+                                        [70.0, 22.0],
+                                        egui::TextEdit::singleline(&mut self.rec_bitrate),
+                                    );
+                                    ui.label("Mbps");
+                                });
+                                if self.rec_format == 0 || self.rec_format == 2 {
+                                    recording_form_row(ui, "Hardware", |ui| {
+                                        ui.checkbox(
+                                            &mut self.rec_hw_encoder,
+                                            "Use hardware encoder",
+                                        );
                                     });
-                                ui.end_row();
-                                ui.label("Quality");
-                                egui::ComboBox::from_id_salt("rec.quality")
-                                    .width(130.0)
-                                    .selected_text("25Mbit")
-                                    .show_ui(ui, |ui| {
-                                        let _ = ui.selectable_label(true, "25Mbit");
-                                        let _ = ui.selectable_label(false, "50Mbit");
+                                }
+                                if self.rec_format == 2 {
+                                    recording_form_row(ui, "Recovery", |ui| {
+                                        ui.checkbox(&mut self.rec_fault_tolerant, "Fault tolerant");
                                     });
-                                ui.end_row();
+                                }
                             });
-                        right_col.checkbox(
-                            &mut self.rec_fault_tolerant,
-                            "Use Fault Tolerant Recording Type (mkv)",
-                        );
+                            self.automation
+                                .insert("dialog.recording.video".into(), video.response.rect);
+                            ui.add_space(10.0);
+                            ui.separator();
+                            let audio = ui.vertical(|ui| {
+                                recording_form_row(ui, "Audio bus", |ui| {
+                                    ui.checkbox(&mut self.rec_audio_master, "Master · unavailable");
+                                });
+                                recording_form_row(ui, "Audio delay", |ui| {
+                                    ui.add_sized(
+                                        [70.0, 22.0],
+                                        egui::TextEdit::singleline(&mut self.rec_audio_delay),
+                                    );
+                                    ui.label("ms");
+                                });
+                                recording_form_row(ui, "Audio bit rate", |ui| {
+                                    ui.add_sized(
+                                        [70.0, 22.0],
+                                        egui::TextEdit::singleline(&mut self.rec_audio_kbps),
+                                    );
+                                    ui.label("Kbps");
+                                });
+                            });
+                            self.automation
+                                .insert("dialog.recording.audio".into(), audio.response.rect);
+                            ui.add_space(8.0);
+                            recording_form_row(ui, "New file every", |ui| {
+                                ui.label(format!("{} · unavailable", self.rec_split_mins))
+                            });
+                        });
+                    });
+                });
+            ui.separator();
+            if self.rec_active {
+                ui.label(format!(
+                    "Recording state: {} frames · {} bytes",
+                    self.rec_frames, self.rec_bytes
+                ));
+            }
+            ui.horizontal(|ui| {
+                let start = ui
+                    .add_enabled(
+                        false,
+                        egui::Button::new("Start Recording").min_size(Vec2::new(124.0, 29.0)),
+                    )
+                    .on_disabled_hover_text("No encoder/output backend; recording cannot start");
+                self.automation
+                    .insert("dialog.recording.start".into(), start.rect);
+                ui.with_layout(egui::Layout::right_to_left(Align::Center), |ui| {
+                    let cancel =
+                        ui.add_sized([92.0, 29.0], egui::Button::new("Cancel").fill(CHIP_BG));
+                    self.automation
+                        .insert("dialog.recording.cancel".into(), cancel.rect);
+                    if cancel.clicked() {
+                        close_clicked = true;
+                    }
+                    let ok = ui.add_sized(
+                        [92.0, 29.0],
+                        egui::Button::new(RichText::new("OK").color(Color32::WHITE).strong())
+                            .fill(PROGRAM),
+                    );
+                    self.automation
+                        .insert("dialog.recording.ok".into(), ok.rect);
+                    if ok.clicked() {
+                        self.notice =
+                            "Recording backend unavailable; no settings were saved".into();
+                        self.warning = false;
+                        close_clicked = true;
                     }
                 });
-                ui.separator();
-                ui.label(RichText::new("Audio").size(13.0).strong().color(FORM_TEXT));
-                ui.horizontal(|ui| {
-                    ui.label("Audio");
-                    egui::ComboBox::from_id_salt("rec.audio_bus")
-                        .width(110.0)
-                        .selected_text("Master")
-                        .show_ui(ui, |ui| {
-                            let _ = ui.selectable_label(true, "Master");
-                            let _ = ui.selectable_label(false, "Bus A");
-                            let _ = ui.selectable_label(false, "None");
-                        });
-                    ui.label("Audio Delay");
-                    ui.add_sized(
-                        [60.0, 20.0],
-                        egui::TextEdit::singleline(&mut self.rec_audio_delay),
-                    );
-                    ui.label("Audio Bit Rate");
-                    ui.add_sized(
-                        [90.0, 20.0],
-                        egui::TextEdit::singleline(&mut self.rec_audio_kbps),
-                    );
-                });
-                ui.separator();
-                ui.horizontal(|ui| {
-                    ui.label("New File Every");
-                    egui::ComboBox::from_id_salt("rec.split")
-                        .width(90.0)
-                        .selected_text(&self.rec_split_mins)
-                        .show_ui(ui, |ui| {
-                            for opt in ["None", "5", "15", "30", "60"] {
-                                ui.selectable_value(&mut self.rec_split_mins, opt.into(), opt);
-                            }
-                        });
-                    ui.label("Minutes");
-                    ui.add_space(16.0);
-                    ui.checkbox(&mut self.rec_audio_master, "Record System Audio");
-                });
-            });
-            ui.separator();
-            ui.horizontal(|ui| {
-                let rec_btn = ui.add_enabled(
-                    false,
-                    egui::Button::new(
-                        RichText::new(if self.rec_active {
-                            "Stop Recording"
-                        } else {
-                            "Start Recording"
-                        })
-                        .color(Color32::WHITE)
-                        .strong(),
-                    )
-                    .fill(if self.rec_active { RED } else { PROGRAM })
-                    .min_size(Vec2::new(124.0, 29.0)),
-                );
-                if rec_btn.clicked() {
-                    self.actions.push(Action::ToggleRecordSim);
-                }
-                if self.rec_active {
-                    ui.colored_label(
-                        RED,
-                        format!(
-                            "REC ACTIVE · {} frames · {:.2} MB",
-                            self.rec_frames,
-                            self.rec_bytes as f64 / 1_048_576.0
-                        ),
-                    );
-                }
-            });
-            });
-            });
-            // The footer stays interactive and outside the read-only,
-            // scrollable form region (ADR 0003: dialogs stay operator closable).
-            ui.with_layout(egui::Layout::right_to_left(Align::Center), |ui| {
-                let cancel = ui.add(
-                    egui::Button::new("Cancel")
-                        .fill(CHIP_BG)
-                        .min_size(Vec2::new(92.0, 29.0)),
-                );
-                self.automation
-                    .insert("dialog.recording.cancel".into(), cancel.rect);
-                if cancel.clicked() {
-                    close_clicked = true;
-                }
-                let ok = ui.add(
-                    egui::Button::new(RichText::new("OK").color(Color32::WHITE).strong())
-                        .fill(PROGRAM)
-                        .min_size(Vec2::new(92.0, 29.0)),
-                );
-                self.automation
-                    .insert("dialog.recording.ok".into(), ok.rect);
-                if ok.clicked() {
-                    self.notice = "Recording backend unavailable; no settings were saved".into();
-                    self.warning = false;
-                    close_clicked = true;
-                }
             });
         });
         if close_clicked || !open {
@@ -3672,5 +3693,181 @@ mod operator_dialog_tests {
         click(&mut app, &ctx, "dialog.add.confirm");
         assert!(!app.add_open);
         assert_eq!(app.engine.project().inputs.len(), original_count + 1);
+    }
+}
+
+#[cfg(test)]
+mod recording_layout_tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
+    use super::*;
+
+    fn frame(
+        app: &mut RustMixApp,
+        ctx: &egui::Context,
+        size: Vec2,
+        events: Vec<egui::Event>,
+    ) -> egui::FullOutput {
+        ctx.run_ui(
+            egui::RawInput {
+                screen_rect: Some(Rect::from_min_size(egui::Pos2::ZERO, size)),
+                events,
+                ..Default::default()
+            },
+            |_| app.recording_setup_dialog(ctx),
+        )
+    }
+
+    fn click(app: &mut RustMixApp, ctx: &egui::Context, size: Vec2, id: &str) {
+        for _ in 0..4 {
+            let _ = frame(app, ctx, size, vec![]);
+        }
+        let rect = *app.automation.get(id).expect("recording widget bounds");
+        assert!(ctx.viewport_rect().contains_rect(rect));
+        for pressed in [true, false] {
+            let _ = frame(
+                app,
+                ctx,
+                size,
+                vec![
+                    egui::Event::PointerMoved(rect.center()),
+                    egui::Event::PointerButton {
+                        pos: rect.center(),
+                        button: egui::PointerButton::Primary,
+                        pressed,
+                        modifiers: egui::Modifiers::NONE,
+                    },
+                ],
+            );
+        }
+    }
+
+    fn text(output: &egui::FullOutput) -> String {
+        output
+            .shapes
+            .iter()
+            .filter_map(|shape| match &shape.shape {
+                egui::Shape::Text(text) => Some(text.galley.job.text.as_str()),
+                _ => None,
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+
+    #[test]
+    fn recording_navigation_changes_only_local_presentation_and_cannot_arm_output() {
+        let mut app = RustMixApp::headless();
+        let ctx = egui::Context::default();
+        app.theme(&ctx);
+        app.recording_setup = true;
+        let before = app.engine.project().clone();
+        let filename = app.rec_filename.clone();
+        let size = Vec2::new(1600.0, 900.0);
+        for (index, label) in [
+            (0, "MP4"),
+            (1, "AVI"),
+            (2, "MKV"),
+            (3, "MPEG-2"),
+            (4, "WMV"),
+        ] {
+            click(
+                &mut app,
+                &ctx,
+                size,
+                &format!("dialog.recording.format.{index}"),
+            );
+            assert_eq!(app.rec_format, index);
+            let output = frame(&mut app, &ctx, size, vec![]);
+            let painted = text(&output);
+            assert!(painted.contains(&format!("{label} encoder settings · unavailable")));
+            assert_eq!(painted.matches("encoder settings · unavailable").count(), 1);
+        }
+        click(&mut app, &ctx, size, "dialog.recording.slot.2");
+        assert_eq!(app.rec_slot, 2);
+        click(&mut app, &ctx, size, "dialog.recording.filename");
+        let _ = frame(
+            &mut app,
+            &ctx,
+            size,
+            vec![egui::Event::Text("must not edit".into())],
+        );
+        click(&mut app, &ctx, size, "dialog.recording.browse");
+        click(&mut app, &ctx, size, "dialog.recording.start");
+        assert_eq!(app.rec_filename, filename);
+        assert!(!app.rec_active);
+        assert_eq!(app.rec_frames, 0);
+        assert_eq!(app.rec_bytes, 0);
+        assert_eq!(*app.engine.project(), before);
+        assert!(app.actions.is_empty());
+        click(&mut app, &ctx, size, "dialog.recording.ok");
+        assert!(!app.recording_setup);
+        assert_eq!(*app.engine.project(), before);
+        assert!(app.actions.is_empty());
+    }
+
+    #[test]
+    fn recording_truthful_rate_raster_and_unavailable_encoder_are_painted() {
+        for (numerator, denominator) in [(30, 1), (30000, 1001), (50, 1)] {
+            let mut app = RustMixApp::headless();
+            let rate = Rate::new(numerator, denominator).unwrap();
+            let mut preferences = app.engine.project().preferences.clone();
+            preferences.rate = rate;
+            app.engine
+                .execute(Command::SetPreferences(preferences), 0)
+                .unwrap();
+            let ctx = egui::Context::default();
+            app.theme(&ctx);
+            app.recording_setup = true;
+            let size = Vec2::new(1600.0, 900.0);
+            for _ in 0..4 {
+                let _ = frame(&mut app, &ctx, size, vec![]);
+            }
+            let output = frame(&mut app, &ctx, size, vec![]);
+            let painted = text(&output);
+            assert!(painted.contains("640×360 CPU reference"));
+            assert!(painted.contains(&format!("{}p ({numerator}/{denominator})", rate.label())));
+            assert!(painted.contains("No recording backend"));
+            assert!(!painted.contains("NTSC 29.97p"));
+        }
+    }
+
+    #[test]
+    fn recording_rail_page_and_footer_stay_contained_with_vertical_browse() {
+        for size in [
+            Vec2::new(734.0, 466.0),
+            Vec2::new(1100.0, 700.0),
+            Vec2::new(1600.0, 900.0),
+            Vec2::new(1920.0, 1200.0),
+        ] {
+            let mut app = RustMixApp::headless();
+            let ctx = egui::Context::default();
+            app.theme(&ctx);
+            app.recording_setup = true;
+            for _ in 0..4 {
+                let _ = frame(&mut app, &ctx, size, vec![]);
+            }
+            let bounds = |id: &str| *app.automation.get(id).expect("recording geometry");
+            let body = bounds("dialog.recording.body");
+            let rail = bounds("dialog.recording.rail");
+            let page = bounds("dialog.recording.page");
+            assert!((rail.width() / body.width() - 0.26).abs() < 0.015);
+            assert!(body.contains_rect(rail) && body.contains_rect(page));
+            assert!(rail.right() + 5.0 <= page.left());
+            let filename = bounds("dialog.recording.filename");
+            let browse = bounds("dialog.recording.browse");
+            assert!(page.contains_rect(filename));
+            assert!(page.contains_rect(browse));
+            assert!(filename.bottom() <= browse.top());
+            let ok = bounds("dialog.recording.ok");
+            let cancel = bounds("dialog.recording.cancel");
+            let start = bounds("dialog.recording.start");
+            for rect in [body, ok, cancel, start] {
+                assert!(ctx.viewport_rect().contains_rect(rect));
+            }
+            assert!(body.bottom() <= ok.top() && body.bottom() <= start.top());
+            assert!(start.right() <= ok.left() && ok.right() <= cancel.left());
+            click(&mut app, &ctx, size, "dialog.recording.format.0");
+            click(&mut app, &ctx, size, "dialog.recording.cancel");
+            assert!(!app.recording_setup);
+        }
     }
 }

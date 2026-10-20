@@ -7,6 +7,8 @@ mod dialogs;
 mod extended_output;
 mod inputs;
 mod media;
+#[cfg(test)]
+mod operator_layout_tests;
 mod output_smoke;
 mod panels;
 mod profile;
@@ -41,13 +43,13 @@ pub(crate) const PREVIEW: Color32 = Color32::from_rgb(234, 128, 24);
 pub(crate) const PROGRAM: Color32 = Color32::from_rgb(22, 163, 74);
 pub(crate) const RED: Color32 = Color32::from_rgb(239, 68, 68);
 pub(crate) const DIM: Color32 = Color32::from_rgb(156, 168, 182);
-pub(crate) const BG: Color32 = Color32::from_rgb(17, 21, 28);
+pub(crate) const BG: Color32 = Color32::from_rgb(30, 35, 40);
 /// Idle source-tile header; Program and Preview override it with their own color.
-pub(crate) const IDLE_TILE: Color32 = Color32::from_rgb(38, 46, 58);
+pub(crate) const IDLE_TILE: Color32 = Color32::from_rgb(38, 45, 53);
 /// Mixer side rails (`OUTPUTS` / `INPUTS`).
 pub(crate) const MIXER_RAIL: Color32 = Color32::from_rgb(14, 116, 204);
 /// Button and chip surface used across tiles, strips, and switcher stacks.
-pub(crate) const CHIP_BG: Color32 = Color32::from_rgb(32, 39, 49);
+pub(crate) const CHIP_BG: Color32 = Color32::from_rgb(38, 45, 53);
 /// Light native-style forms remain distinct from the dark production workspace.
 pub(crate) const FORM_LIGHT: Color32 = Color32::from_rgb(244, 245, 247);
 pub(crate) const FORM_TEXT: Color32 = Color32::from_rgb(28, 35, 42);
@@ -1025,9 +1027,9 @@ impl RustMixApp {
         style.spacing.button_padding = egui::vec2(7.0, 3.0);
         if !light {
             style.visuals.panel_fill = BG;
-            style.visuals.window_fill = Color32::from_rgb(20, 25, 33);
+            style.visuals.window_fill = BG;
             style.visuals.window_stroke = Stroke::new(1.0, Color32::from_rgb(56, 68, 84));
-            style.visuals.window_corner_radius = egui::CornerRadius::same(6);
+            style.visuals.window_corner_radius = egui::CornerRadius::same(2);
             style.visuals.extreme_bg_color = Color32::from_rgb(12, 15, 20);
             style.visuals.faint_bg_color = Color32::from_rgb(26, 32, 42);
             style.visuals.widgets.inactive.bg_fill = CHIP_BG;
@@ -1055,7 +1057,7 @@ impl RustMixApp {
             &mut style.visuals.widgets.hovered,
             &mut style.visuals.widgets.active,
         ] {
-            v.corner_radius = egui::CornerRadius::same(4);
+            v.corner_radius = egui::CornerRadius::same(1);
         }
         style
             .text_styles
@@ -1089,7 +1091,14 @@ impl RustMixApp {
     ) -> egui::Response {
         let enabled = self.engine.enabled(&c);
         let definition = c.definition();
-        let mut button = egui::Button::new(RichText::new(label).strong().size(11.5));
+        // Egui's atom alignment otherwise follows the vertical take-stack's
+        // left edge. Equal spacers center the real, accessible button text.
+        let mut button = egui::Button::new((
+            egui::Atom::grow(),
+            RichText::new(label).strong().size(12.0),
+            egui::Atom::grow(),
+        ))
+        .gap(0.0);
         if let Some(color) = color {
             button = button.fill(color).stroke(egui::Stroke::NONE);
         }
@@ -1863,9 +1872,9 @@ impl RustMixApp {
             if self.rec_active {
                 rec_btn_w = rec_btn_w.fill(Color32::from_rgb(200, 30, 30));
             }
-            let rec_btn = ui
-                .add_enabled(false, rec_btn_w)
-                .on_hover_text("Unavailable: no recording encoder backend");
+            let rec_btn = ui.add_enabled(false, rec_btn_w).on_disabled_hover_text(
+                "Unavailable: no recording encoder backend; use the gear to inspect setup",
+            );
             self.automation.insert("output.record".into(), rec_btn.rect);
             if rec_btn.clicked() {
                 self.actions.push(Action::ToggleRecordSim);
@@ -1900,9 +1909,9 @@ impl RustMixApp {
             if self.external_active {
                 ext_btn_w = ext_btn_w.fill(Color32::from_rgb(200, 30, 30));
             }
-            let ext_btn = ui
-                .add_enabled(false, ext_btn_w)
-                .on_hover_text("Unavailable: no external video backend");
+            let ext_btn = ui.add_enabled(false, ext_btn_w).on_disabled_hover_text(
+                "Unavailable: no external video backend; use the gear to configure routing",
+            );
             self.automation
                 .insert("output.external".into(), ext_btn.rect);
             if ext_btn.clicked() {
@@ -1939,9 +1948,9 @@ impl RustMixApp {
             if self.stream_active {
                 stm_btn_w = stm_btn_w.fill(Color32::from_rgb(200, 30, 30));
             }
-            let stm_btn = ui
-                .add_enabled(false, stm_btn_w)
-                .on_hover_text("Unavailable: no streaming sender backend");
+            let stm_btn = ui.add_enabled(false, stm_btn_w).on_disabled_hover_text(
+                "Unavailable: no streaming sender backend; use the gear to inspect setup",
+            );
             self.automation.insert("output.stream".into(), stm_btn.rect);
             if stm_btn.clicked() {
                 self.actions.push(Action::ToggleStreamSim);
@@ -2314,12 +2323,21 @@ impl RustMixApp {
             || self.confirm_new
             || self.confirm_close
             || self.confirm_open;
-        egui::Panel::top("toolbar").show(ui, |ui| {
-            if dialog_busy {
-                ui.disable();
-            }
-            self.toolbar(ui);
-        });
+        let toolbar_frame = egui::Frame::new()
+            .fill(if ctx.style().visuals.dark_mode {
+                Color32::from_rgb(10, 15, 20)
+            } else {
+                ctx.style().visuals.panel_fill
+            })
+            .inner_margin(egui::Margin::symmetric(8, 2));
+        egui::Panel::top("toolbar")
+            .frame(toolbar_frame)
+            .show(ui, |ui| {
+                if dialog_busy {
+                    ui.disable();
+                }
+                self.toolbar(ui);
+            });
         egui::Panel::bottom("status").show(ui, |ui| self.status(ui));
         egui::Panel::bottom("production.controls").show(ui, |ui| {
             if dialog_busy {
