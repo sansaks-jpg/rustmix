@@ -766,6 +766,9 @@ impl RustMixApp {
     fn switcher_content(&mut self, ui: &mut egui::Ui) {
         let available = ui.available_size();
         ui.set_min_height(available.y);
+        // Expand the take targets with the monitor bank, leaving room for the
+        // eight overlays and manual T-Bar at the minimum supported height.
+        let transition_height = ((available.y - 130.0) / 9.0).clamp(26.0, 44.0);
         let center = 110.0;
         let side = ((available.x - center - 64.0) / 2.0).max(200.0);
         ui.horizontal_top(|ui| {
@@ -782,6 +785,7 @@ impl RustMixApp {
                 |ui| {
                     ui.set_width(center);
                     ui.spacing_mut().item_spacing.y = 3.0;
+                    ui.spacing_mut().interact_size.y = transition_height;
                     self.command_button(ui, "switcher.quickPlay", "Quick Play", Command::Cut, None);
                     if self.basic_mode {
                         return;
@@ -805,7 +809,7 @@ impl RustMixApp {
                                     egui::Button::new(
                                         RichText::new(slot.kind.label()).strong().size(10.5),
                                     )
-                                    .min_size(egui::vec2(center - 22.0, 25.0)),
+                                    .min_size(egui::vec2(center - 22.0, transition_height)),
                                 )
                                 .on_hover_text(format!(
                                     "Slot {} · {} ms",
@@ -827,7 +831,7 @@ impl RustMixApp {
                                 self.actions.push(Action::Engine(command));
                             }
                             let original = slot;
-                            let menu = caret_menu_button(ui, 25.0, |ui| {
+                            let menu = caret_menu_button(ui, transition_height, |ui| {
                                 for candidate in TransitionKind::ALL {
                                     let choice = ui.selectable_label(
                                         slot.kind == candidate,
@@ -876,6 +880,7 @@ impl RustMixApp {
                         ui.horizontal(|ui| {
                             ui.spacing_mut().item_spacing.x = 2.0;
                             ui.spacing_mut().button_padding = egui::vec2(2.0, 1.0);
+                            ui.spacing_mut().interact_size.y = 20.0;
                             for slot in (row * 4)..(row * 4 + 4) {
                                 let active = self
                                     .engine

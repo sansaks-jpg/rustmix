@@ -1322,6 +1322,20 @@ mod tests {
             if size[0] >= 1600.0 {
                 assert!(height >= 27.0, "Production display needs larger targets");
                 assert!(app.automation["production.add"].height() >= 29.0);
+                assert!(app.automation["switcher.cut"].height() >= 32.0);
+                assert!(app.automation["switcher.fade"].height() >= 32.0);
+            }
+            let bank = app.automation["monitor.bank.bounds"];
+            for id in [
+                "switcher.cut",
+                "switcher.fade",
+                "switcher.ftb",
+                "switcher.tbar",
+            ] {
+                assert!(
+                    bank.contains_rect(app.automation[id]),
+                    "Target clipped by bank: {id}"
+                );
             }
             let program = app.engine.project().program;
             let preview = app.engine.project().preview;

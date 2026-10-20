@@ -35,3 +35,10 @@ raster. Track the presented Program generation and wait for current acknowledgme
 reopen state/pixel acceptance. The existing timeout still bounds the wait. A regression covers stale,
 missing and current acknowledgments and verifies current invalid state still fails. This is harness
 readiness, not relaxation of pixels or a new media capability. Revised hosted verification pending.
+
+
+Hosted run 39362838055 (7e0d0b7) passed check, Clippy, all workspace tests and release build;
+native acceptance was still running when the next geometry refinement was prepared. Transition
+targets now grow with the monitor bank (26–44 logical points); compact overlay rows stay 20 high
+so the manual T-Bar remains inside the bank. Resize coverage asserts take/fade target minimums
+and bank containment. New geometry still needs exact-patch native evidence and precise comparison.

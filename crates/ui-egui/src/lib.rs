@@ -1061,7 +1061,10 @@ impl RustMixApp {
         if let Some(color) = color {
             button = button.fill(color).stroke(egui::Stroke::NONE);
         }
-        button = button.min_size(egui::vec2(ui.available_width().clamp(72.0, 140.0), 26.0));
+        button = button.min_size(egui::vec2(
+            ui.available_width().clamp(72.0, 140.0),
+            ui.spacing().interact_size.y.max(26.0),
+        ));
         let response = ui
             .push_id(id, |ui| ui.add_enabled(enabled.is_ok(), button))
             .inner
