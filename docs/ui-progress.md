@@ -1,6 +1,6 @@
 # UI milestone progress
 
-UI-021 source candidate: overlay/Playlist changes and GPU provenance diagnostics integrated after independent source review. Hosted acceptance and exact screenshot comparison pending. Previous bec97a8 native GPU shutdown failure remains unresolved. See ADR0021 and ui021-visual-review.md.
+UI-021: overlay/Playlist corrections implemented through parallel work and exact screenshots. be79b2e passes hosted check/lint/tests/build; visual overlap and row hit-area defects corrected. Main native GPU teardown fails after finalstage51; full native/runtime/parity acceptance remains open. See ADR0021 and ui021-visual-review.md for measured gaps and next Settings targets.
 
 ## 2026-10-20 — UI-020 operator layout refinement (candidate)
 

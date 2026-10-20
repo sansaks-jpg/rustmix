@@ -1,6 +1,6 @@
 # rustmix-ui
 
-UI-021 candidate: explicit overlay dirty-channel choices, cached isolated engine preview, responsive paired panes, and Playlist transfer/reorder/footer layout. Native harness now records bounded stage and adapter provenance and captures the dirty-channel prompt. Formatting/source guards passed; hosted compile/tests/native visual acceptance pending.
+UI-021: explicit dirty-channel choices, cached isolated engine preview, reserved form labels and full-width Playlist rows implemented. Exact be79b2e screenshots verify selected visual corrections; hosted check/Clippy/all tests including115 UI tests/build pass. Main native reaches stage51 then fails GPU shutdown; later workflows not run. No local compile/test/native execution. Full parity/runtime acceptance remains open; see ADR0021 and ui021-visual-review.md.
 
 UI-020 (2026-10-20): toolbar/monitor/source/mixer proportions, bounded light forms and the
 responsive Shortcuts bank were compared using exact-code native PNGs and bounds. Code bec97a8

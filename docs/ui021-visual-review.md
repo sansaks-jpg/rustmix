@@ -1,6 +1,35 @@
 # UI-021 visual acceptance ledger
 
-Candidate: staged overlay and Playlist workflow. Follow-up visual acceptance pending.
+Current source: be79b2e. Selected visual corrections verified; full native acceptance FAILED.
+
+## Exact final-source result
+
+Windows2022 run39422425429/be79b2e passed locked workspace check, warnings-as-errors Clippy,
+all workspace tests and release build. Main native generated every workspace/dialog capture and
+reached stage51 with current/presented generation11, captured=true and no stage assertion error.
+The process then failed during GPU teardown: gpu-shutdown.txt records a10s Wait timeout, stderr
+records Queue::drop timeout panic, and the harness rejects exit-1073741819. Main453.156s,
+peak working set307879936bytes. Later reopen/media/reference/output/audio/video/perf workflows
+did not run. This revision is NOT a passing native build; no gates or deadlines were relaxed.
+
+Actual same-revision PNGs and matching JSON were inspected against the supplied local reference:
+
+| Correction | Final native measurement | Assessment |
+|---|---|---|
+| Overlay label separation | title label x320..473.6, field485.6..1280;12px gap; Position same columns | overlap corrected; labels remain centered rather than reference right-aligned |
+| Overlay body/preview | body311,203..1289,725; preview806,409..1289,680.7 | preview contained,16:9; capability light frame fills left half |
+| Dirty overlay channel | prompt with3 choices; preview806,453..1277.1,718; bodybottom725 | visible; OK disabled while pending; Cancel outside body |
+| Overlay footer | OK1101,737..1193,766; Cancel1197,737..1289,766 | both92x29, contained, right aligned |
+| Playlist row | pane327,298..685,605; row332,303..680,325 |348px full-width hit area with5px inset and left caption |
+| Playlist panes |358x307 and462.6x307, aligned aty298 | ratio1.292; shorter than normalized reference targets |
+| Playlist transfer/reorder | Add691,414.5..766.7,444.5; Up1241.3,414.5..1273.3,444.5 |6px gutters, rows aligned, contained |
+| Playlist Close |1181.3,663..1273.3,692 | rightmost,92x29; reference target remains122x34 |
+
+The exact defects identified after f6db67c are visually corrected. This does not establish full
+reference equivalence: Overlay supports title panels only; original reference advanced controls,
+layout depth and preview typography differ. Playlist heights/flag spacing/footer sizes remain
+open. GPU teardown and cadence stay reliability blockers. Last fully green workflow source is
+f6db67c/run39420668981, whose Overlay label defect was explicitly rejected visually below.
 
 Hosted run39420668981/f6db67c passed check, Clippy, all suites including114 UI tests, release
 build and the complete native/reopen/media/output/audio/video/package workflow. Adapter evidence:
@@ -54,3 +83,14 @@ Compare same-build PNG edges and element JSON: pane tops within1px; ordered/avai
 1.294 within.03; transfers entirely between panes; reorder controls outside the ordered pane;
 Add/Up and Remove/Down aligned within1px. Footer order is Start, Previous, Next, Close with Close
 rightmost; flags below ordered pane; no clipped controls or unintended overlaps above.5px.
+
+## Next Settings comparison (read-only)
+
+Independent review of the supplied Settings reference and f6db67c capture found reference
+1148x720 at1912-wide versus current760x612 at1600. A width-normalized target is about961x603;
+sidebar reference250/1148=.218, current164/746=.220. Widening alone is insufficient because
+dialog_columns changes non-Add sidebars to.142 above900px: Settings needs an explicit ratio.
+Navigation pitch18.5 versus approximately32 normalized reference and fields210 versus301 remain
+open. A future focused change can target.60 viewport width,.218 sidebar,27px rows and300px fields
+at1600, with pinned footer/navigation actions and unchanged Cancel semantics. These are proposed
+targets only; no Settings change or new acceptance claim belongs to UI-021.

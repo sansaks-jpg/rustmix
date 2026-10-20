@@ -1,6 +1,6 @@
 # Known gaps
 
-UI-021 candidate: overlay draft safety/engine preview and Playlist geometry revised but not yet accepted by hosted native evidence. GPU shutdown reliability remains unresolved; new bounded adapter/stage diagnostics preserve existing failure gates. See ADR0021 and ui021-visual-review.md.
+UI-021 outcome: be79b2e passes hosted check/Clippy/all tests (115 UI) and build, with corrected Overlay labels/contained preview/full-width Playlist rows verified in exact screenshots. Main native GPU shutdown fails (Wait timeout, Queue::drop panic, exit-1073741819); later workflows do not run. Full parity, Settings proportions, Playlist dimensions, advanced overlays and cadence remain open. See ADR0021 and ui021-visual-review.md.
 
 2026-10-20 UI-020: code bec97a8 passed hosted check/Clippy/all tests (106 UI) and build, with
 all main native workspace/dialog captures inspected against supplied references. Main native

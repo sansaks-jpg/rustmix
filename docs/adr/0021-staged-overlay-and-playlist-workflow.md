@@ -1,6 +1,6 @@
 # UI-021: staged overlay and playlist workflow
 
-Status: experimental candidate; exact-revision hosted acceptance pending (2026-10-20).
+Status: experimental; selected visual corrections verified, full native acceptance failed (2026-10-20).
 
 ## Problem and decision
 
@@ -41,3 +41,14 @@ Windows compilation, tests and native visual comparison are pending. See ui021-v
 This is title-panel and modeled Playlist workflow work, not full vMix parity. Advanced overlay
 composition, recording/streaming integrations, GPU reliability, cadence and hardware qualification
 remain open. Existing source and reference gaps in ui020-visual-review.md remain applicable.
+
+## Hosted outcome
+
+f6db67c/run39420668981 passed all hosted checks and13 native processes, but visual review found
+an unacceptable Grid label overlap. Follow-up be79b2e/run39422425429 passes check/Clippy/tests/build;
+its exact screenshots verify reserved labels, contained preview, filled capability frame and
+full-width Playlist selection. Main reaches finalstage51, then fails GPU drain and Queue::drop
+panic with exit-1073741819. Later workflows do not run. a21d358 failed strict2px preview containment
+before the frame-stroke correction; that regression stayed enabled. The final correction is
+visually verified, not fully runtime accepted. Exact measurements and remaining gaps are in
+ui021-visual-review.md. Local builds/tests/native runs remain unperformed by project policy.
