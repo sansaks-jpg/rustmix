@@ -243,8 +243,9 @@ impl RustMixApp {
                     ui.columns(2, |columns| {
                         if let [left, right] = columns {
                             left.strong("Available inputs");
+                            let available = dialogs::light_form_frame(left, 4, |ui| {
                             egui::ScrollArea::vertical().id_salt("playlist.available").max_height(140.0)
-                                .min_scrolled_height(90.0).show(left, |ui| {
+                                .auto_shrink([false, false]).min_scrolled_height(90.0).show(ui, |ui| {
                                 for (index, input) in inputs.iter().enumerate() {
                                     let row = ui.selectable_label(index == self.playlist_selected_avail,
                                         format!("{} · {}{}", index + 1, input.name, if input.online { "" } else { " [OFFLINE]" }));
@@ -252,6 +253,8 @@ impl RustMixApp {
                                     if row.clicked() { self.playlist_selected_avail = index; }
                                 }
                             });
+                            });
+                            self.automation.insert("dialog.playlist.available.body".into(), available.response.rect);
                             let add = left.add_enabled(draft.items.len() < 128 && !inputs.is_empty(), egui::Button::new("Add →"));
                             self.automation.insert("dialog.playlist.add".into(), add.rect);
                             if add.clicked() && let Some(input) = inputs.get(self.playlist_selected_avail) {
@@ -260,8 +263,9 @@ impl RustMixApp {
                                 self.playlist_selected_item = draft.items.len().saturating_sub(1);
                             }
                             right.strong("Playlist order");
+                            let ordered = dialogs::light_form_frame(right, 4, |ui| {
                             egui::ScrollArea::vertical().id_salt("playlist.items").max_height(140.0)
-                                .min_scrolled_height(90.0).show(right, |ui| {
+                                .auto_shrink([false, false]).min_scrolled_height(90.0).show(ui, |ui| {
                                 for (index, item) in draft.items.iter().enumerate() {
                                     let name = inputs.iter().find(|p| p.id == item.input).map_or("Missing input", |p| p.name.as_str());
                                     let row = ui.selectable_label(index == self.playlist_selected_item,
@@ -270,6 +274,8 @@ impl RustMixApp {
                                     if row.clicked() { self.playlist_selected_item = index; }
                                 }
                             });
+                            });
+                            self.automation.insert("dialog.playlist.items.body".into(), ordered.response.rect);
                             right.horizontal(|ui| {
                                 let index = self.playlist_selected_item;
                                 let valid = index < draft.items.len();
@@ -319,7 +325,7 @@ impl RustMixApp {
                     self.command_button(ui, "dialog.playlist.previous", "Previous", Command::PlaylistPrevious, None);
                     self.command_button(ui, "dialog.playlist.next", "Next", Command::PlaylistNext, None);
                 });
-                let button = ui.button("Close");
+                let button = ui.add_sized([92.0, 29.0], egui::Button::new("Close"));
                 self.automation.insert("dialog.playlist.close".into(), button.rect);
                 if button.clicked() { close = true; }
             });

@@ -107,3 +107,24 @@ Shortcuts is a3x4 bank rather than the observed wide bank. Mixer header is16 hig
 source pictures232x131 versus260x146, controls20 versus25; take groups110 wide versus122. These
 are not accepted as equivalent, even if the functional native workflow passes. These screens need
 further focused increments and matching visual evidence.
+
+## Accepted baseline inspection: 61f4286
+
+Windows run 39365300339 completed all steps. Inspected its workspace-1920, Properties and recording
+captures plus matching bounds; all nine changed dialog captures received direct visual review.
+Properties preview now ends at734 inside page bottom744; Add Number selector ends1154.2 with OK
+starting1170.2. Mixer rail labels are visible and centered, faders occupy their intended height,
+source names begin at the left inset, and overlays use compact row pitch. These are accepted fixes
+for that exact baseline, not proof of complete visual or feature equivalence.
+
+The subsequent e231217 run failed the native PNG workflow at stage10 and GPU shutdown, despite
+passing unit suites. Its captures do not establish successful workflow acceptance.
+
+## Next candidate and required inspection
+
+Review new captures for: monitor/video widths and symmetric gutters, take122-wide targets on large
+displays, source260x146 picture and25-high controls at1920, mixer21-high headers, bounded toolbar
+presets and split menus, Settings light page extent, disabled form background contrast, Playlist
+list separation/Close target, Shortcuts nine-wide large-display bank and compact wrapping, and
+MultiCorder folder/duration separation. Inspect all changed screens at their exact CI revision.
+The simplified Overlay Settings and missing production backends remain outstanding.

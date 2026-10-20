@@ -953,12 +953,23 @@ impl RustMixApp {
     fn validate_toolbar_geometry(&self, right: f32) -> Result<()> {
         let mut top = vec![
             "toolbar.brand",
+            "toolbar.open",
+            "toolbar.open.menu",
+            "toolbar.save",
+            "toolbar.saveAs",
+            "toolbar.save.menu",
             "toolbar.settings",
             "toolbar.settings.menu",
             "toolbar.basic",
         ];
         if !self.basic_mode {
-            top.extend(["toolbar.fullscreen", "output.program.menu", "toolbar.pause"]);
+            top.extend([
+                "toolbar.new",
+                "toolbar.last",
+                "toolbar.fullscreen",
+                "output.program.menu",
+                "toolbar.pause",
+            ]);
         }
         let production = if self.basic_mode {
             vec!["production.add", "output.lock"]

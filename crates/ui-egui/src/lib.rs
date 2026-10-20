@@ -824,7 +824,7 @@ impl RustMixApp {
             recording_setup: false,
             rec_slot: 1,
             rec_format: 2,
-            rec_filename: r"C:\Users\WORKPLUS\Documents\kopi\RB Rehearsel.mp4".into(),
+            rec_filename: "Program.mkv".into(),
             rec_bitrate: "12".into(),
             rec_hw_encoder: true,
             rec_fault_tolerant: false,
@@ -1509,12 +1509,28 @@ impl RustMixApp {
         }
     }
 
+    fn preset_button(
+        &mut self,
+        ui: &mut egui::Ui,
+        id: &str,
+        label: &str,
+        enabled: bool,
+        size: Vec2,
+    ) -> egui::Response {
+        let response = ui.add_enabled(
+            enabled,
+            egui::Button::new(RichText::new(label).strong()).min_size(size),
+        );
+        self.automation.insert(id.into(), response.rect);
+        response
+    }
+
     fn toolbar(&mut self, ui: &mut egui::Ui) {
         // Keep compact controls at the minimum viewport, with larger operator
         // targets on production displays. Coordinates remain UI-local.
-        let expansion = ((ui.available_width() - 1080.0) / 500.0).clamp(0.0, 1.0);
-        let height = 22.0 + 6.0 * expansion;
-        let preset_width = 56.0 + 24.0 * expansion;
+        let expansion = ((ui.available_width() - 1080.0) / 800.0).clamp(0.0, 1.0);
+        let height = 22.0 + 8.0 * expansion;
+        let preset_width = 56.0 + 38.0 * expansion;
         ui.horizontal(|ui| {
             ui.spacing_mut().item_spacing.x = 3.0;
             let brand = ui
@@ -1526,7 +1542,7 @@ impl RustMixApp {
                     )
                     .fill(Color32::TRANSPARENT)
                     .stroke(Stroke::NONE)
-                    .min_size(egui::vec2(52.0, height)),
+                    .min_size(egui::vec2(52.0 + 30.0 * expansion, height)),
                 )
                 .on_hover_text(format!(
                     "{}\nClick for About RustMix",
@@ -1538,23 +1554,13 @@ impl RustMixApp {
             }
             ui.add_space(4.0);
             if !self.basic_mode
-                && ui
-                    .add_enabled(
-                        self.job.is_none(),
-                        egui::Button::new(RichText::new("New").strong())
-                            .min_size(egui::vec2(preset_width, height)),
-                    )
+                && self.preset_button(ui, "toolbar.new", "New", self.job.is_none(), egui::vec2(preset_width, height))
                     .on_hover_text("New preset / project")
                     .clicked()
             {
                 self.actions.push(Action::New);
             }
-            if ui
-                .add_enabled(
-                    self.job.is_none(),
-                    egui::Button::new(RichText::new("Open").strong())
-                        .min_size(egui::vec2(preset_width, height)),
-                )
+            if self.preset_button(ui, "toolbar.open", "Open", self.job.is_none(), egui::vec2((preset_width - 18.0).max(44.0), height))
                 .on_hover_text("Open preset · Ctrl+O")
                 .clicked()
             {
@@ -1581,27 +1587,18 @@ impl RustMixApp {
                         ui.close();
                     }
                 });
+                self.automation.insert("toolbar.open.menu".into(), open_menu.response.rect);
                 open_menu
                     .response
                     .on_hover_text("Open, reload or recover a preset file");
             });
-            if ui
-                .add_enabled(
-                    self.job.is_none(),
-                    egui::Button::new(RichText::new("Save").strong())
-                        .min_size(egui::vec2(preset_width, height)),
-                )
+            if self.preset_button(ui, "toolbar.save", "Save", self.job.is_none(), egui::vec2(preset_width, height))
                 .on_hover_text("Save · Ctrl+S")
                 .clicked()
             {
                 self.actions.push(Action::Save(false));
             }
-            if ui
-                .add_enabled(
-                    self.job.is_none(),
-                    egui::Button::new(RichText::new("Save As").strong())
-                        .min_size(egui::vec2(preset_width, height)),
-                )
+            if self.preset_button(ui, "toolbar.saveAs", "Save As", self.job.is_none(), egui::vec2((preset_width - 18.0).max(54.0), height))
                 .on_hover_text("Save a copy · Ctrl+Shift+S")
                 .clicked()
             {
@@ -1622,24 +1619,20 @@ impl RustMixApp {
                         ui.close();
                     }
                 });
+                self.automation.insert("toolbar.save.menu".into(), save_menu.response.rect);
                 save_menu
                     .response
                     .on_hover_text("Save preset or write an immediate recovery checkpoint");
             });
             if !self.basic_mode
-                && ui
-                    .add_enabled(
-                        self.path.is_some() && self.job.is_none(),
-                        egui::Button::new(RichText::new("Last").strong())
-                            .min_size(egui::vec2(52.0, height)),
-                    )
+                && self.preset_button(ui, "toolbar.last", "Last", self.path.is_some() && self.job.is_none(), egui::vec2(preset_width, height))
                     .on_disabled_hover_text("Save or open a preset first")
                     .on_hover_text("Reload the most recently saved preset")
                     .clicked()
             {
                 self.actions.push(Action::Last);
             }
-            let fullscreen_anchor = ui.max_rect().left() + ui.max_rect().width() * 0.45;
+            let fullscreen_anchor = ui.max_rect().left() + ui.max_rect().width() * 0.46;
             ui.add_space((fullscreen_anchor - ui.cursor().left()).max(4.0));
             if !self.basic_mode {
                 let fullscreen = ui
@@ -1654,7 +1647,7 @@ impl RustMixApp {
                             })
                             .strong(),
                         )
-                        .min_size(egui::vec2(78.0 + 28.0 * expansion, height)),
+                        .min_size(egui::vec2(78.0 + 55.0 * expansion, height)),
                     )
                     .on_hover_text(
                         "Send Program fullscreen to the extended display; the operator window stays here",
@@ -1721,7 +1714,7 @@ impl RustMixApp {
                 let settings = ui
                     .add(
                         egui::Button::new(RichText::new("Settings").strong())
-                            .min_size(egui::vec2(64.0 + 18.0 * expansion, height)),
+                            .min_size(egui::vec2(64.0 + 34.0 * expansion, height)),
                     )
                     .on_hover_text("Open Settings");
                 self.automation
@@ -1736,7 +1729,7 @@ impl RustMixApp {
                                 .strong(),
                         )
                         .selected(self.basic_mode)
-                        .min_size(egui::vec2(54.0 + 20.0 * expansion, height)),
+                        .min_size(egui::vec2(54.0 + 54.0 * expansion, height)),
                     )
                     .on_hover_text("Show Basic or Advanced operator controls");
                 self.automation.insert("toolbar.basic".into(), mode.rect);
@@ -1747,7 +1740,7 @@ impl RustMixApp {
                     let pause = ui.add(
                             egui::Button::new(RichText::new("Pause Inputs").strong())
                                 .selected(self.engine.inputs_paused())
-                                .min_size(egui::vec2(84.0 + 16.0 * expansion, height)),
+                                .min_size(egui::vec2(84.0 + 36.0 * expansion, height)),
                         )
                         .on_hover_text("Freeze input motion while keeping switching active");
                     self.automation.insert("toolbar.pause".into(), pause.rect);

@@ -792,22 +792,34 @@ impl RustMixApp {
         // Expand the take targets with the monitor bank, leaving room for the
         // eight overlays and manual T-Bar at the minimum supported height.
         let transition_height = ((available.y - 130.0) / 9.0).clamp(26.0, 44.0);
-        let center = 110.0;
-        let side = ((available.x - center - 64.0) / 2.0).max(200.0);
+        let viewport_width = ui.ctx().viewport_rect().width();
+        let center = (viewport_width * (122.0 / 1920.0)).clamp(92.0, 122.0);
+        let margin = (available.x * 0.013).clamp(10.0, 25.0);
+        let side = (available.x * 0.425)
+            .min((available.x - center - margin * 2.0 - 28.0) * 0.5)
+            .max(200.0);
+        let gap = ((available.x - center - side * 2.0 - margin * 2.0) * 0.5).max(14.0);
+        // Wider gutters keep both monitors visually separate from the take stack.
+        // Keep the fixed bank allocation; child minima never change its height.
+        let row_gap = 3.0 + 5.0 * ((available.y - 340.0) / 200.0).clamp(0.0, 1.0);
         ui.horizontal_top(|ui| {
-            ui.add_space(10.0);
+            ui.spacing_mut().item_spacing.x = 0.0;
+            ui.add_space(margin);
             ui.allocate_ui_with_layout(
                 egui::vec2(side, available.y),
                 egui::Layout::top_down(egui::Align::Min),
-                |ui| self.monitor(ui, false),
+                |ui| {
+                    ui.spacing_mut().item_spacing.x = 3.0;
+                    self.monitor(ui, false);
+                },
             );
-            ui.add_space(14.0);
+            ui.add_space(gap);
             ui.allocate_ui_with_layout(
                 egui::vec2(center, available.y),
                 egui::Layout::top_down(egui::Align::Min),
                 |ui| {
                     ui.set_width(center);
-                    ui.spacing_mut().item_spacing.y = 3.0;
+                    ui.spacing_mut().item_spacing.y = row_gap;
                     ui.spacing_mut().interact_size.y = transition_height;
                     self.command_button(ui, "switcher.quickPlay", "Quick Play", Command::Cut, None);
                     if self.basic_mode {
@@ -905,6 +917,9 @@ impl RustMixApp {
                     // parent before entering the closure. Reset it here so
                     // take-button sizing cannot leave a blank overlay row.
                     ui.spacing_mut().interact_size.y = overlay_height;
+                    // Overlay rows retain their compact pitch independently
+                    // of the increased take-button separation above.
+                    ui.spacing_mut().item_spacing.y = 3.0;
                     for row in 0..2 {
                         ui.horizontal(|ui| {
                             ui.spacing_mut().item_spacing.x = 2.0;
@@ -1006,11 +1021,14 @@ impl RustMixApp {
                     }
                 },
             );
-            ui.add_space(14.0);
+            ui.add_space(gap);
             ui.allocate_ui_with_layout(
                 egui::vec2(side, available.y),
                 egui::Layout::top_down(egui::Align::Min),
-                |ui| self.monitor(ui, true),
+                |ui| {
+                    ui.spacing_mut().item_spacing.x = 3.0;
+                    self.monitor(ui, true);
+                },
             );
         });
     }
@@ -1054,14 +1072,25 @@ impl RustMixApp {
             })
             .show(ui, |ui| {
                 let width = ui.available_width().max(260.0);
+                let viewport_width = ui.ctx().viewport_rect().width();
+                let preferred_picture = (viewport_width * (260.0 / 1920.0)).clamp(208.0, 260.0);
                 let columns = if multiview_grid {
                     ((width / 230.0).floor() as usize).clamp(2, 6)
                 } else {
-                    ((width / 225.0).floor() as usize).clamp(1, 6)
+                    (((width + 6.0) / (preferred_picture + 10.0)).floor() as usize).clamp(1, 6)
                 };
-                let tile_w =
+                let available_tile =
                     ((width - (columns.saturating_sub(1) as f32) * 6.0) / columns as f32).max(175.0);
+                // Source cards retain their size instead of growing to consume
+                // every empty part of a partially populated row.
+                let tile_w = if multiview_grid {
+                    available_tile
+                } else {
+                    available_tile.min(preferred_picture + 4.0)
+                };
                 let inner_w = (tile_w - 4.0).max(165.0);
+                let controls_h = (viewport_width * (25.0 / 1920.0)).clamp(20.0, 25.0);
+                let source_header_h = (viewport_width * (30.0 / 1920.0)).clamp(24.0, 30.0);
                 if filtered.is_empty() {
                     ui.add_space(8.0);
                     ui.label(RichText::new("No inputs match this category or search.").color(DIM));
@@ -1113,6 +1142,7 @@ impl RustMixApp {
                                                     .show(ui, |ui| {
                                                         ui.set_width((inner_w - 12.0).max(40.0));
                                                         ui.horizontal(|ui| {
+                                                            ui.set_min_height(source_header_h - 4.0);
                                                             let name = ui.allocate_ui_with_layout(
                                                                 egui::vec2((inner_w - 38.0).max(30.0), 16.0),
                                                                 egui::Layout::left_to_right(egui::Align::Center),
@@ -1270,6 +1300,7 @@ impl RustMixApp {
                                                 // Modern 2-row control strip:
                                                 // Row 1: [1][2][3][4][GO][Cut][Loop]
                                                 // Row 2: [5][6][7][8][Audio][Display][Gear]
+                                                ui.spacing_mut().interact_size.y = controls_h;
                                                 let columns = if self.basic_mode { 6.0 } else { 7.0 };
                                                 let cell_w = (inner_w / columns).floor().max(20.0);
                                                 let rem_w = (inner_w - cell_w * 6.0).max(cell_w);
@@ -1295,7 +1326,7 @@ impl RustMixApp {
                                                                     .size(10.5),
                                                                 )
                                                                 .selected(selected)
-                                                                .min_size(egui::vec2(cell_w, 20.0)),
+                                                                .min_size(egui::vec2(cell_w, controls_h)),
                                                             );
                                                             self.automation.insert(
                                                                 format!(
@@ -1325,7 +1356,7 @@ impl RustMixApp {
                                                                     .size(10.5)
                                                                     .strong(),
                                                             )
-                                                            .min_size(egui::vec2(cell_w, 20.0)),
+                                                            .min_size(egui::vec2(cell_w, controls_h)),
                                                         )
                                                         .on_hover_text(
                                                             "Select Preview / QuickPlay",
@@ -1348,7 +1379,7 @@ impl RustMixApp {
                                                                 .size(10.5)
                                                                 .strong(),
                                                         )
-                                                        .min_size(egui::vec2(cell_w, 20.0)),
+                                                        .min_size(egui::vec2(cell_w, controls_h)),
                                                     );
                                                     self.automation.insert(
                                                         format!("input.{}.cut", input.id.0),
@@ -1367,7 +1398,7 @@ impl RustMixApp {
                                                     let loop_btn = vector_icon_button(
                                                         ui,
                                                         VectorIcon::Loop,
-                                                        egui::vec2(rem_w, 20.0),
+                                                        egui::vec2(rem_w, controls_h),
                                                         looped,
                                                         None,
                                                     )
@@ -1402,7 +1433,7 @@ impl RustMixApp {
                                                                     .size(10.5),
                                                                 )
                                                                 .selected(selected)
-                                                                .min_size(egui::vec2(cell_w, 20.0)),
+                                                                .min_size(egui::vec2(cell_w, controls_h)),
                                                             );
                                                             self.automation.insert(
                                                                 format!(
@@ -1444,7 +1475,7 @@ impl RustMixApp {
                                                             },
                                                         ),
                                                     )
-                                                    .min_size(egui::vec2(audio_w, 20.0));
+                                                    .min_size(egui::vec2(audio_w, controls_h));
                                                     if !input.audio.muted {
                                                         audio_btn = audio_btn.fill(self.program_color());
                                                     }
@@ -1465,7 +1496,7 @@ impl RustMixApp {
                                                     let disp_resp = vector_icon_button(
                                                         ui,
                                                         VectorIcon::Display,
-                                                        egui::vec2(icon_w, 20.0),
+                                                        egui::vec2(icon_w, controls_h),
                                                         false,
                                                         None,
                                                     )
@@ -1478,7 +1509,7 @@ impl RustMixApp {
                                                     let edit = vector_icon_button(
                                                         ui,
                                                         VectorIcon::Gear,
-                                                        egui::vec2(gear_w, 20.0),
+                                                        egui::vec2(gear_w, controls_h),
                                                         false,
                                                         None,
                                                     )
@@ -1587,7 +1618,9 @@ impl RustMixApp {
         let before = a.clone();
         let is_master = input_id.is_none();
         let header_fill = if !a.muted { PROGRAM } else { CHIP_BG };
-        let (strip_width, _) = mixer_widths(ui.ctx().viewport_rect().width());
+        let viewport_width = ui.ctx().viewport_rect().width();
+        let (strip_width, _) = mixer_widths(viewport_width);
+        let header_height = (viewport_width * (21.0 / 1920.0)).clamp(18.0, 21.0);
         ui.push_id(&id, |ui| {
             let strip = egui::Frame::new()
                 .fill(Color32::from_rgb(20, 25, 32))
@@ -1612,7 +1645,8 @@ impl RustMixApp {
                             .show(ui, |ui| {
                                 ui.set_width(strip_width - 8.0);
                                 ui.vertical_centered(|ui| {
-                                    ui.add(
+                                    ui.add_sized(
+                                        [strip_width - 8.0, header_height - 4.0],
                                         egui::Label::new(
                                             RichText::new(name)
                                                 .small()
@@ -1626,7 +1660,7 @@ impl RustMixApp {
                         self.automation
                             .insert(format!("audio.{id}.header"), header.response.rect);
                         ui.add_space(4.0);
-                        let fader_h = (height - 58.0).max(68.0);
+                        let fader_h = (height - header_height - 42.0).max(68.0);
                         ui.horizontal_top(|ui| {
                             // Separate the settings column and fader/meter as the header widens.
                             let gap = ((strip_width - 66.0) * 0.5).clamp(3.0, 26.0);
@@ -2044,6 +2078,98 @@ mod processing_tests {
             .unwrap();
         assert!(rail.expand(1.0).contains_rect(text.visual_bounding_rect()));
     }
+    fn workspace_frame(app: &mut RustMixApp, ctx: &egui::Context, size: [f32; 2]) {
+        let _ = ctx.run_ui(
+            egui::RawInput {
+                screen_rect: Some(Rect::from_min_size(
+                    egui::Pos2::ZERO,
+                    egui::vec2(size[0], size[1]),
+                )),
+                ..Default::default()
+            },
+            |ui| app.frame_ui(ui),
+        );
+    }
+
+    #[test]
+    fn responsive_monitor_bank_preserves_video_isolation_tbar_and_stable_resize_bounds() {
+        let mut app = RustMixApp::headless();
+        let ctx = egui::Context::default();
+        app.theme(&ctx);
+        app.engine
+            .execute(Command::SetInputsPaused(true), 0)
+            .unwrap();
+        let program = app.engine.project().program;
+        let preview = app.engine.project().preview;
+        let mut previous_width = None;
+        for size in [[1100.0, 700.0], [1600.0, 900.0], [1920.0, 1080.0]] {
+            for _ in 0..4 {
+                workspace_frame(&mut app, &ctx, size);
+            }
+            let bank = *app.automation.get("monitor.bank.bounds").unwrap();
+            let pvw = *app.automation.get("monitor.preview").unwrap();
+            let pgm = *app.automation.get("monitor.program").unwrap();
+            let take = *app.automation.get("switcher.cut").unwrap();
+            let tbar = *app.automation.get("switcher.tbar").unwrap();
+            for video in [pvw, pgm] {
+                assert!(video.width() >= 300.0 && video.height() >= 168.0);
+                assert!((video.width() / video.height() - 16.0 / 9.0).abs() < 0.01);
+                assert!(bank.contains_rect(video));
+                assert!(video.width() <= size[0] * 0.44);
+            }
+            assert!((pvw.width() - pgm.width()).abs() <= 1.0);
+            assert!(pvw.right() < take.left() && take.right() < pgm.left());
+            assert!(
+                bank.contains_rect(tbar),
+                "Manual T-Bar must remain visible at {size:?}"
+            );
+            assert!(take.width() >= 90.0 && take.width() <= 124.0);
+            let first_overlay = app.automation.get("switcher.overlay.1").unwrap();
+            let second_row = app.automation.get("switcher.overlay.5").unwrap();
+            assert!((second_row.top() - first_overlay.bottom()).abs() <= 6.0);
+            if let Some(width) = previous_width {
+                assert!(pvw.width() > width);
+            }
+            previous_width = Some(pvw.width());
+            for _ in 0..12 {
+                workspace_frame(&mut app, &ctx, size);
+                let current = app.automation.get("monitor.bank.bounds").unwrap();
+                assert!((current.size() - bank.size()).length() < 0.5);
+            }
+            assert_eq!(app.engine.project().program, program);
+            assert_eq!(app.engine.project().preview, preview);
+        }
+    }
+
+    #[test]
+    fn responsive_source_cards_keep_picture_aspect_and_two_reachable_control_rows() {
+        for size in [[1100.0, 700.0], [1600.0, 900.0], [1920.0, 1080.0]] {
+            let mut app = RustMixApp::headless();
+            let ctx = egui::Context::default();
+            app.theme(&ctx);
+            for _ in 0..4 {
+                workspace_frame(&mut app, &ctx, size);
+            }
+            let picture = app.automation.get("preview.input.1").unwrap();
+            let expected = (size[0] * (260.0 / 1920.0)).clamp(208.0, 260.0);
+            assert!((picture.width() - expected).abs() <= 2.0);
+            assert!((picture.width() / picture.height() - 16.0 / 9.0).abs() < 0.01);
+            let upper = app.automation.get("input.1.overlay.1").unwrap();
+            let lower = app.automation.get("input.1.overlay.5").unwrap();
+            let controls_h = (size[0] * (25.0 / 1920.0)).clamp(20.0, 25.0);
+            for control in [
+                upper,
+                lower,
+                app.automation.get("input.1.properties").unwrap(),
+            ] {
+                assert!(control.height() >= controls_h - 0.5);
+                assert!(ctx.viewport_rect().contains_rect(*control));
+            }
+            assert!(upper.top() >= picture.bottom());
+            assert!(lower.top() >= upper.bottom());
+        }
+    }
+
     fn thumbnail_frame(app: &mut RustMixApp, ctx: &egui::Context) -> egui::FullOutput {
         ctx.run_ui(egui::RawInput::default(), |ui| {
             app.refresh_textures(ui.ctx());
@@ -2235,6 +2361,8 @@ mod processing_tests {
             let header = bounds("header");
             let (expected_width, _) = mixer_widths(width);
             assert!((header.width() - expected_width).abs() <= 1.0);
+            let expected_header_h = (width * (21.0 / 1920.0)).clamp(18.0, 21.0);
+            assert!((header.height() - expected_header_h).abs() <= 1.0);
             assert!(strip.width() <= expected_width + 8.0);
             let fader = bounds("gain");
             let meter = bounds("meter");

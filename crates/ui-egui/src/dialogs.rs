@@ -61,12 +61,19 @@ pub(super) fn operator_window<'a>(
 /// Applies the compact, flat form surface used inside operator dialogs (`Add Input`,
 /// `Input Settings`, `Settings`, `Recording Setup`, `Streaming Settings`, `Overlay Settings`,
 /// `PlayList`, `MultiCorder`).
-fn light_form_frame<R>(
+pub(super) fn light_form_frame<R>(
     ui: &mut egui::Ui,
     margin: i8,
     add_contents: impl FnOnce(&mut egui::Ui) -> R,
 ) -> egui::InnerResponse<R> {
-    egui::Frame::new()
+    // Frame paints through its parent painter after laying out its child.
+    // Restore opacity before construction so both the background and controls
+    // stay readable; this never changes the parent's disabled interaction state.
+    let parent_opacity = ui.opacity();
+    if !ui.is_enabled() {
+        ui.set_opacity(1.0);
+    }
+    let response = egui::Frame::new()
         .fill(FORM_LIGHT)
         .corner_radius(1.0)
         .stroke(Stroke::new(1.0, FORM_BORDER))
@@ -79,7 +86,9 @@ fn light_form_frame<R>(
                 ui.set_opacity(1.0);
             }
             add_contents(ui)
-        })
+        });
+    ui.set_opacity(parent_opacity);
+    response
 }
 
 fn sidebar_row(
@@ -364,7 +373,7 @@ impl RustMixApp {
                 .layout(egui::Layout::top_down(Align::Min)),
         );
         page_ui.set_clip_rect(page_rect.intersect(ui.clip_rect()));
-        if matches!(id, "dialog.add" | "dialog.properties") {
+        if matches!(id, "dialog.add" | "dialog.properties" | "dialog.settings") {
             page_ui.painter().rect_filled(page_rect, 0.0, FORM_LIGHT);
             *page_ui.visuals_mut() = form_visuals();
         }
@@ -2585,13 +2594,16 @@ impl RustMixApp {
                 0
             };
             light_form_frame(ui, 6, |ui| {
+                let content_width = (ui.available_width() - 48.0).max(280.0);
+                let widths = [0.26, 0.34, 0.16, 0.11, 0.13].map(|share| content_width * share);
                 egui::Grid::new("mc_inputs_table")
                     .striped(true)
                     .num_columns(5)
-                    .min_col_width(80.0)
+                    .min_col_width(0.0)
+                    .spacing([12.0, 3.0])
                     .show(ui, |ui| {
-                        for col in ["Input", "Folder", "Duration", "Frames", "Dropped"] {
-                            ui.label(RichText::new(col).strong().color(FORM_TEXT));
+                        for (col, width) in ["Input", "Folder", "Duration", "Frames", "Dropped"].into_iter().zip(widths) {
+                            ui.add_sized([width, 20.0], egui::Label::new(RichText::new(col).strong().color(FORM_TEXT)).truncate());
                         }
                         ui.end_row();
                         let mut rows = vec![
@@ -2609,21 +2621,27 @@ impl RustMixApp {
                         }
                         for (idx, label) in rows.into_iter().take(10).enumerate() {
                             let is_checked = self.mc_checked.get(idx).copied().unwrap_or(false);
-                            if let Some(checked) = self.mc_checked.get_mut(idx) {
-                                ui.checkbox(checked, label);
-                            }
-                            ui.label(&self.mc_folder);
-                            ui.label(if self.mc_running && is_checked {
+                            ui.allocate_ui_with_layout(Vec2::new(widths[0], 22.0), egui::Layout::left_to_right(Align::Center), |ui| {
+                                if let Some(checked) = self.mc_checked.get_mut(idx) {
+                                    ui.checkbox(checked, "");
+                                }
+                                let label = ui.add_sized([ui.available_width(), 20.0], egui::Label::new(&label).truncate()).on_hover_text(&label);
+                                self.automation.insert(format!("dialog.multicorder.input.{idx}"), label.rect);
+                            });
+                            let folder = ui.add_sized([widths[1], 22.0], egui::Label::new(&self.mc_folder).truncate()).on_hover_text(&self.mc_folder);
+                            self.automation.insert(format!("dialog.multicorder.folder.{idx}"), folder.rect);
+                            let duration = ui.add_sized([widths[2], 22.0], egui::Label::new(if self.mc_running && is_checked {
                                 format!("00:{:02}:{:02}", mc_elapsed_s / 60, mc_elapsed_s % 60)
                             } else {
                                 "00:00:00".into()
-                            });
-                            ui.label(if self.mc_running && is_checked {
+                            }).truncate());
+                            self.automation.insert(format!("dialog.multicorder.duration.{idx}"), duration.rect);
+                            ui.add_sized([widths[3], 22.0], egui::Label::new(if self.mc_running && is_checked {
                                 mc_frames.to_string()
                             } else {
                                 "0".into()
-                            });
-                            ui.label("0");
+                            }).truncate());
+                            ui.add_sized([widths[4], 22.0], egui::Label::new("0").truncate());
                             ui.end_row();
                         }
                     });
@@ -2670,8 +2688,9 @@ impl RustMixApp {
             "Shortcuts",
             "dialog.shortcuts",
             &mut open,
-            Vec2::new(620.0, 440.0),
+            Vec2::new((ctx.viewport_rect().width() * 0.616).max(620.0), 260.0),
         )
+        .min_size(Vec2::new(560.0, 220.0))
         .show(ctx, |ui| {
             let hint = |action| self.engine.project().preferences.key_bindings.iter()
                 .find(|binding| binding.action == action).map_or_else(|| "Unbound".into(), ShortcutBinding::label);
@@ -2693,9 +2712,15 @@ impl RustMixApp {
                 ("Record\n[Unavailable]".into(), Action::ToggleRecordSim),
                 ("Stream\n[Unavailable]".into(), Action::ToggleStreamSim),
             ];
+            let columns = ((ui.available_width() + 6.0) / 104.0).floor().clamp(3.0, 9.0) as usize;
+            let tile_width = (ui.available_width() - (columns.saturating_sub(1) as f32 * 6.0)) / columns as f32;
+            egui::ScrollArea::vertical()
+                .id_salt("shortcuts.bank.scroll")
+                .max_height((ctx.viewport_rect().height() - 190.0).clamp(120.0, 250.0))
+                .show(ui, |ui| {
             egui::Grid::new("shortcuts_button_grid")
-                .num_columns(3)
-                .spacing([12.0, 12.0])
+                .num_columns(columns)
+                .spacing([6.0, 6.0])
                 .show(ui, |ui| {
                     for (idx, (label, action)) in tiles.into_iter().enumerate() {
                         let enabled = match &action {
@@ -2703,25 +2728,22 @@ impl RustMixApp {
                             Action::Engine(command) => self.engine.enabled(command).is_ok(),
                             _ => true,
                         };
-                        let button = ui
-                            .add_enabled(
-                                enabled,
-                                egui::Button::new(
-                                    RichText::new(label).size(13.0).color(Color32::WHITE),
-                                )
-                                .fill(CHIP_BG).min_size(Vec2::new(182.0, 74.0)),
-                            )
-                            .on_disabled_hover_text("Unavailable: finish the active transition or choose an implemented action");
+                        let button = ui.add_enabled_ui(enabled, |ui| {
+                            ui.add_sized([tile_width, 74.0], egui::Button::new(
+                                RichText::new(label).size(13.0).color(Color32::WHITE),
+                            ).fill(CHIP_BG).wrap())
+                        }).inner.on_disabled_hover_text("Unavailable: finish the active transition or choose an implemented action");
                         self.automation.insert(format!("dialog.shortcuts.action.{idx}"), button.rect);
                         if button.clicked()
                         {
                             self.actions.push(action);
                         }
-                        if idx % 3 == 2 {
+                        if (idx + 1) % columns == 0 {
                             ui.end_row();
                         }
                     }
                 });
+            });
             ui.add_space(8.0);
             ui.separator();
             ui.horizontal(|ui| {
@@ -2868,6 +2890,105 @@ mod operator_dialog_tests {
                     },
                 ],
             );
+        }
+    }
+
+    #[test]
+    fn unavailable_form_paints_an_opaque_background_without_enabling_controls() {
+        let ctx = egui::Context::default();
+        let mut form_rect = None;
+        let output = ctx.run_ui(egui::RawInput::default(), |ui| {
+            ui.add_enabled_ui(false, |ui| {
+                ui.set_opacity(0.35);
+                let form = light_form_frame(ui, 6, |ui| {
+                    assert!(!ui.is_enabled());
+                    assert!(!ui.button("Unavailable action").enabled());
+                });
+                form_rect = Some(form.response.rect);
+                assert!(
+                    (ui.opacity() - 0.35).abs() < f32::EPSILON,
+                    "restore the caller's opacity"
+                );
+                assert!(!ui.is_enabled());
+            });
+        });
+        let form_rect = form_rect.unwrap();
+        assert!(output.shapes.iter().any(|shape| matches!(&shape.shape,
+            egui::Shape::Rect(rect) if rect.fill == FORM_LIGHT && rect.rect.contains_rect(form_rect)
+        )), "the form background must not inherit the disabled parent's fade");
+    }
+
+    #[test]
+    fn production_dialog_banks_and_table_fields_stay_bounded_across_viewports() {
+        for size in [
+            Vec2::new(734.0, 466.0),
+            Vec2::new(1100.0, 700.0),
+            Vec2::new(1600.0, 900.0),
+            Vec2::new(1920.0, 1080.0),
+        ] {
+            let mut app = RustMixApp::headless();
+            let ctx = egui::Context::default();
+            app.theme(&ctx);
+            app.dispatch(Action::ShortcutsWindow, &ctx);
+            for _ in 0..4 {
+                frame_at_size(&mut app, &ctx, vec![], size);
+            }
+            let close = app.automation.get("dialog.shortcuts.close").unwrap();
+            assert!(ctx.viewport_rect().contains_rect(*close));
+            for index in 0..12 {
+                let rect = app
+                    .automation
+                    .get(&format!("dialog.shortcuts.action.{index}"))
+                    .unwrap();
+                assert!(ctx.viewport_rect().contains_rect(*rect));
+                assert!(rect.bottom() <= close.top());
+            }
+            if size.x >= 1600.0 {
+                let first = app.automation.get("dialog.shortcuts.action.0").unwrap();
+                let ninth = app.automation.get("dialog.shortcuts.action.8").unwrap();
+                let tenth = app.automation.get("dialog.shortcuts.action.9").unwrap();
+                assert!(
+                    (first.top() - ninth.top()).abs() < 1.0,
+                    "wide bank exposes nine actions per row"
+                );
+                assert!(tenth.top() > ninth.bottom());
+            }
+            app.shortcuts_open = false;
+            app.dispatch(Action::MultiCorder, &ctx);
+            for _ in 0..4 {
+                frame_at_size(&mut app, &ctx, vec![], size);
+            }
+            let name = app.automation.get("dialog.multicorder.input.0").unwrap();
+            let folder = app.automation.get("dialog.multicorder.folder.0").unwrap();
+            let duration = app.automation.get("dialog.multicorder.duration.0").unwrap();
+            assert!(name.right() + 8.0 <= folder.left());
+            assert!(folder.right() + 8.0 <= duration.left());
+            assert!(ctx.viewport_rect().contains_rect(*duration));
+            assert_eq!(app.engine.project().program, InputId(1));
+        }
+    }
+
+    #[test]
+    fn playlist_lists_have_separate_bodies_and_a_full_size_exit() {
+        for size in [Vec2::new(734.0, 466.0), Vec2::new(1600.0, 900.0)] {
+            let mut app = RustMixApp::headless();
+            let ctx = egui::Context::default();
+            app.theme(&ctx);
+            app.playlist_open = true;
+            for _ in 0..4 {
+                frame_at_size(&mut app, &ctx, vec![], size);
+            }
+            let available = app
+                .automation
+                .get("dialog.playlist.available.body")
+                .unwrap();
+            let ordered = app.automation.get("dialog.playlist.items.body").unwrap();
+            let close = app.automation.get("dialog.playlist.close").unwrap();
+            assert!(available.right() <= ordered.left());
+            assert!(available.height() >= 90.0 && ordered.height() >= 90.0);
+            assert!(close.width() >= 92.0 && close.height() >= 29.0);
+            assert!(ctx.viewport_rect().contains_rect(*close));
+            assert_eq!(app.engine.project().program, InputId(1));
         }
     }
 

@@ -74,3 +74,23 @@ overhead). Program composition is unchanged; no lossy hash or newdependency. Act
 texture-delta regressions cover unchanged audio-only revisions and moving generators. Drain timeout
 and fatal failure checks stay intact. New exact-patch acceptance remains required, and a passing
 short smoke is not GPU hang/endurance qualification.
+
+## Follow-up candidate after e231217 (2026-10-20)
+
+Run 39366079519 passed workspace check, warnings-as-errors Clippy and all unit suites,
+but failed native input workflow stage 10 timeout and then WARP queue-drain/destructor timeout
+(exit 101). Exact thumbnail deduplication has NOT resolved the GPU reliability blocker.
+Evidence is retained under artifacts/ui020-e231217; no checks or thresholds were disabled.
+
+The next UI candidate adjusts monitor gutters/take width, fixed responsive source-card geometry,
+source control/header heights and mixer headers from the observed layout measurements. Toolbar
+preset targets now have stable automation bounds. Settings fills its content page, unavailable forms
+paint an opaque readable surface while staying disabled, Playlist lists use separate light bodies,
+Shortcuts uses a responsive bank up to nine columns, and MultiCorder columns reserve bounded widths.
+The recording filename default is neutral Program.mkv rather than a personal machine path.
+
+A separate read-only agent reviewed the combined source. Local formatting, diff and repository
+layer/asset/reference guards pass. New geometry, disabled-state paint and workspace tests are
+prepared for hosted Windows execution; no local compile, tests or application launch occurred.
+These changes do not implement missing record/stream/capture/network backends. Fresh native captures
+must be inspected before accepting their visual result. GPU reliability and cadence remain open.
