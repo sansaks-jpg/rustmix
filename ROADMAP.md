@@ -1,5 +1,7 @@
 # Roadmap
 
+- UI-022 candidate: Settings/sidebar/fields and Playlist pane/footer dimensions approach measured references; Overlay label glyphs align right. Bounded completion callbacks instrument the pre-dialog GPU slowdown. Hosted/visual acceptance pending; reliability/cadence/full parity stay open. See ADR0022.
+
 - UI-021: overlay draft safety/preview and Playlist workflow corrections visually verified on be79b2e. Hosted check/lint/tests/build pass; main native reaches finalstage51 then GPU drain/Queue::drop failure. Next: resolve measured GPU reliability and refine Settings proportions; full parity/cadence/hardware qualification stay open. See ADR0021 and ui021-visual-review.md.
 
 - UI-020 (2026-10-20): responsive operator proportions and dialog corrections are implemented

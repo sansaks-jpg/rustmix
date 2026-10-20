@@ -1,6 +1,81 @@
 //! Opt-in hosted-runner harness. Real native frames, egui keyboard/pointer input,
 //! state assertions, project reopen, and GPU readback screenshots; no external output.
 use super::*;
+use std::sync::atomic::{AtomicU64, Ordering};
+
+/// Observation of an opt-in callback for work submitted before the current paint.
+/// Bounds describe callback delivery through poll/submit, not GPU execution time.
+#[derive(Default, Serialize)]
+struct QueueCompletionSample {
+    requested_token: u64,
+    observed_token: u64,
+    request_elapsed_ms: Option<u64>,
+    pending_age_lower_bound_ms: Option<u64>,
+    callback_delivery_age_bounds_ms: Option<[u64; 2]>,
+}
+
+#[derive(Default)]
+struct QueueCompletionProbe {
+    requested_token: u64,
+    observed_token: u64,
+    requested_at_ms: Option<u64>,
+    last_pending_observation_ms: Option<u64>,
+    callback_delivery_age_bounds_ms: Option<[u64; 2]>,
+    completed: Arc<AtomicU64>,
+}
+
+impl QueueCompletionProbe {
+    /// Never register another callback while one is pending or before its
+    /// completion has been recorded. A stalled queue retains at most one.
+    fn begin_if_idle(&mut self, elapsed_ms: u64) -> Option<(u64, Arc<AtomicU64>)> {
+        if self.completed.load(Ordering::Acquire) < self.requested_token
+            || self.observed_token < self.requested_token
+        {
+            return None;
+        }
+        let token = self.requested_token.checked_add(1)?;
+        self.requested_token = token;
+        self.requested_at_ms = Some(elapsed_ms);
+        self.last_pending_observation_ms = Some(elapsed_ms);
+        self.callback_delivery_age_bounds_ms = None;
+        Some((token, Arc::clone(&self.completed)))
+    }
+
+    fn observe(
+        &mut self,
+        before_observation_ms: u64,
+        after_observation_ms: impl FnOnce() -> u64,
+    ) -> QueueCompletionSample {
+        let completed = self.completed.load(Ordering::Acquire);
+        // Bracket the atomic observation. Using a timestamp only before the
+        // load could understate the upper bound when delivery races this sample.
+        let after_observation_ms = after_observation_ms();
+        let pending = completed < self.requested_token;
+        if pending {
+            self.last_pending_observation_ms = Some(before_observation_ms);
+        } else if self.observed_token < self.requested_token {
+            self.callback_delivery_age_bounds_ms = self.requested_at_ms.map(|requested| {
+                [
+                    self.last_pending_observation_ms
+                        .unwrap_or(requested)
+                        .saturating_sub(requested),
+                    after_observation_ms.saturating_sub(requested),
+                ]
+            });
+        }
+        self.observed_token = completed;
+        QueueCompletionSample {
+            requested_token: self.requested_token,
+            observed_token: completed,
+            request_elapsed_ms: self.requested_at_ms,
+            pending_age_lower_bound_ms: self
+                .requested_at_ms
+                .filter(|_| pending)
+                .map(|requested| before_observation_ms.saturating_sub(requested)),
+            callback_delivery_age_bounds_ms: self.callback_delivery_age_bounds_ms,
+        }
+    }
+}
 // Only consumed by the opt-in hosted native harness, never by normal startup.
 const DIALOG_SHOTS: [(&str, [f32; 2], u8); 9] = [
     ("add-input-1600", [1600.0, 900.0], 0),
@@ -24,6 +99,7 @@ struct SmokeStageSample {
     program_generation: u64,
     presented_generation: Option<u64>,
     gpu_poll_status: &'static str,
+    queue_completion: Option<QueueCompletionSample>,
     viewport: [f32; 2],
     pixels_per_point: f32,
     previous_ui_cpu_seconds: Option<f32>,
@@ -49,6 +125,7 @@ pub(crate) struct Smoke {
     transport_target: Option<Rect>,
     basic_state: Option<(InputId, InputId, u64)>,
     stage_trace: VecDeque<SmokeStageSample>,
+    queue_completion_probe: QueueCompletionProbe,
 }
 impl Smoke {
     fn push_stage_sample(&mut self, sample: SmokeStageSample) {
@@ -162,6 +239,14 @@ impl RustMixApp {
         {
             return Ok(());
         }
+        if let Some(queue) = &self.smoke_gpu_queue
+            && let Some((token, completed)) = smoke.queue_completion_probe.begin_if_idle(elapsed_ms)
+        {
+            // Snapshot only work already submitted; the current frame is painted
+            // after this UI callback. Delivery needs poll/submit and may be later
+            // than physical GPU completion. The callback itself only stores a token.
+            queue.on_submitted_work_done(move || completed.store(token, Ordering::Release));
+        }
         // Poll is explicitly nonblocking; no Wait, timeout relaxation or
         // acceptance bypass. Samples distinguish a pending readback from a
         // stage that stopped receiving UI frames on a hosted software adapter.
@@ -176,6 +261,16 @@ impl RustMixApp {
             Some(Err(_)) => "poll-error",
             None => "unavailable",
         };
+        let before_observation_ms =
+            u64::try_from(self.start.elapsed().as_millis()).unwrap_or(u64::MAX);
+        let queue_completion = self.smoke_gpu_queue.as_ref().map(|_| {
+            smoke
+                .queue_completion_probe
+                .observe(before_observation_ms, || {
+                    u64::try_from(self.start.elapsed().as_millis()).unwrap_or(u64::MAX)
+                })
+        });
+        let elapsed_ms = u64::try_from(self.start.elapsed().as_millis()).unwrap_or(u64::MAX);
         smoke.push_stage_sample(SmokeStageSample {
             stage: smoke.stage,
             frames: smoke.frames,
@@ -185,6 +280,7 @@ impl RustMixApp {
             program_generation: self.program_generation,
             presented_generation: self.program_presented_generation,
             gpu_poll_status,
+            queue_completion,
             viewport: [ctx.viewport_rect().width(), ctx.viewport_rect().height()],
             pixels_per_point: ctx.pixels_per_point(),
             previous_ui_cpu_seconds: previous_ui_cpu_seconds.filter(|value| value.is_finite()),
@@ -599,6 +695,8 @@ impl RustMixApp {
                                     _ => "dialog.overlay",
                                 },
                             )?;
+                        } else if *kind == 7 {
+                            self.validate_playlist_geometry(ctx)?;
                         }
                         std::fs::write(
                             format!("artifacts/{name}-elements.json"),
@@ -1130,6 +1228,96 @@ impl RustMixApp {
                 )));
             }
         }
+        if prefix == "dialog.overlay" {
+            for (label, field) in [
+                ("number", "slot.1"),
+                ("title", "title"),
+                ("subtitle", "subtitle"),
+                ("position", "position.LowerLeft"),
+                ("visibility", "enabled"),
+            ] {
+                let label =
+                    self.native_geometry_rect(ctx, &format!("dialog.overlay.label.{label}"))?;
+                let field = self.native_geometry_rect(ctx, &format!("dialog.overlay.{field}"))?;
+                if label.right() + 6.0 > field.left() || !body.contains_rect(label) {
+                    return Err(Error::Invalid(
+                        "Overlay label overlaps or escapes its field column".into(),
+                    ));
+                }
+            }
+        } else if prefix == "dialog.settings" {
+            let nav = self.native_geometry_rect(ctx, "dialog.settings.navigation")?;
+            let page = self.native_geometry_rect(ctx, "dialog.settings.page")?;
+            if self.settings_page == SettingsPage::Display {
+                for id in ["dialog.settings.frameRate", "dialog.settings.projectName"] {
+                    if !page.contains_rect(self.native_geometry_rect(ctx, id)?) {
+                        return Err(Error::Invalid(format!(
+                            "Settings field escapes its page: {id}"
+                        )));
+                    }
+                }
+            }
+            if ctx.viewport_rect().width() >= 1100.0
+                && !(0.20..=0.24).contains(&(nav.width() / body.width()))
+            {
+                return Err(Error::Invalid(
+                    "Settings navigation proportion differs from its reference target".into(),
+                ));
+            }
+        }
+        Ok(())
+    }
+    fn native_geometry_rect(&self, ctx: &egui::Context, id: &str) -> Result<Rect> {
+        self.automation
+            .get(id)
+            .copied()
+            .filter(|rect| {
+                rect.is_finite() && rect.is_positive() && ctx.viewport_rect().contains_rect(*rect)
+            })
+            .ok_or_else(|| Error::Invalid(format!("Missing or clipped native control: {id}")))
+    }
+
+    fn validate_playlist_geometry(&self, ctx: &egui::Context) -> Result<()> {
+        let available = self.native_geometry_rect(ctx, "dialog.playlist.available.body")?;
+        let ordered = self.native_geometry_rect(ctx, "dialog.playlist.items.body")?;
+        let add = self.native_geometry_rect(ctx, "dialog.playlist.add")?;
+        let remove = self.native_geometry_rect(ctx, "dialog.playlist.remove")?;
+        let up = self.native_geometry_rect(ctx, "dialog.playlist.up")?;
+        let down = self.native_geometry_rect(ctx, "dialog.playlist.down")?;
+        let flags = self.native_geometry_rect(ctx, "dialog.playlist.loop")?;
+        let start = self.native_geometry_rect(ctx, "dialog.playlist.start")?;
+        let previous = self.native_geometry_rect(ctx, "dialog.playlist.previous")?;
+        let next = self.native_geometry_rect(ctx, "dialog.playlist.next")?;
+        let close = self.native_geometry_rect(ctx, "dialog.playlist.close")?;
+        let row = self.native_geometry_rect(ctx, "dialog.playlist.available.1")?;
+        let transfer_in_gutter = [add, remove]
+            .iter()
+            .all(|button| available.right() <= button.left() && button.right() <= ordered.left());
+        let footer = [start, previous, next, close];
+        if !transfer_in_gutter
+            || (available.top() - ordered.top()).abs() > 1.0
+            || (ordered.width() / available.width() - 1.294).abs() > 0.05
+            || ordered.right() > up.left()
+            || (add.top() - up.top()).abs() > 1.0
+            || (remove.top() - down.top()).abs() > 1.0
+            || flags.top() + 0.5 < ordered.bottom() + 8.0
+            || footer.iter().any(|button| {
+                button.top() < ordered.bottom().max(available.bottom()) || button.height() < 27.0
+            })
+            || footer.windows(2).any(|pair| {
+                pair.first()
+                    .zip(pair.get(1))
+                    .is_some_and(|(left, right)| left.right() > right.left())
+            })
+            || close.right() < up.right() - 1.0
+            || !available.contains_rect(row)
+            || row.width() < available.width() - 28.0
+        {
+            return Err(Error::Invalid(
+                "Native Playlist panes, hit areas or controls differ from reference geometry"
+                    .into(),
+            ));
+        }
         Ok(())
     }
     fn validate_toolbar_geometry(&self, right: f32) -> Result<()> {
@@ -1257,6 +1445,83 @@ impl RustMixApp {
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used, clippy::indexing_slicing)]
+    #[test]
+    fn queue_completion_probe_keeps_only_one_pending_registration_and_bounds_delivery() {
+        let mut probe = super::QueueCompletionProbe::default();
+        let (token, completed) = probe.begin_if_idle(10).unwrap();
+        assert_eq!(token, 1);
+        // Simulate a callback that never arrives. Heartbeats retain one atomic
+        // registration; they must not enqueue a callback for every new sample.
+        for elapsed_ms in 11..=1000 {
+            assert!(probe.begin_if_idle(elapsed_ms).is_none());
+            let sample = probe.observe(elapsed_ms, || elapsed_ms + 1);
+            assert_eq!(sample.requested_token, 1);
+            assert_eq!(sample.observed_token, 0);
+            assert_eq!(sample.pending_age_lower_bound_ms, Some(elapsed_ms - 10));
+            assert!(sample.callback_delivery_age_bounds_ms.is_none());
+            assert_eq!(std::sync::Arc::strong_count(&completed), 2);
+        }
+        // The production callback consists solely of this Release store. This
+        // unit test simulates delivery; actual GPU callback delivery needs CI.
+        completed.store(token, super::Ordering::Release);
+        assert!(
+            probe.begin_if_idle(1001).is_none(),
+            "record completion before superseding its token"
+        );
+        let delivered = probe.observe(1001, || 1002);
+        assert_eq!(delivered.requested_token, delivered.observed_token);
+        assert_eq!(delivered.request_elapsed_ms, Some(10));
+        assert_eq!(delivered.pending_age_lower_bound_ms, None);
+        assert_eq!(delivered.callback_delivery_age_bounds_ms, Some([990, 992]));
+        let still_delivered = probe.observe(2000, || 2001);
+        assert_eq!(
+            still_delivered.callback_delivery_age_bounds_ms,
+            Some([990, 992])
+        );
+        let (next, _) = probe.begin_if_idle(2002).unwrap();
+        assert_eq!(next, 2);
+        let pending = probe.observe(2003, || 2004);
+        assert_eq!(pending.requested_token, 2);
+        assert_eq!(pending.observed_token, 1);
+        assert_eq!(pending.pending_age_lower_bound_ms, Some(1));
+        assert_eq!(pending.callback_delivery_age_bounds_ms, None);
+    }
+
+    #[test]
+    fn queue_completion_probe_handles_immediate_delivery_and_token_exhaustion() {
+        let mut probe = super::QueueCompletionProbe::default();
+        let (token, completed) = probe.begin_if_idle(20).unwrap();
+        completed.store(token, super::Ordering::Release);
+        // A callback delivered during a five-ms poll must not be labelled [0,0].
+        let sample = probe.observe(25, || 25);
+        assert_eq!(sample.callback_delivery_age_bounds_ms, Some([0, 5]));
+        assert_eq!(sample.pending_age_lower_bound_ms, None);
+        let (next, completed) = probe.begin_if_idle(26).unwrap();
+        completed.store(next, super::Ordering::Release);
+        let immediate = probe.observe(26, || 26);
+        assert_eq!(immediate.callback_delivery_age_bounds_ms, Some([0, 0]));
+
+        let mut racing = super::QueueCompletionProbe::default();
+        let (token, completed) = racing.begin_if_idle(100).unwrap();
+        let pending = racing.observe(105, || {
+            completed.store(token, super::Ordering::Release);
+            110
+        });
+        assert_eq!(pending.observed_token, 0);
+        assert_eq!(pending.pending_age_lower_bound_ms, Some(5));
+        let delivered = racing.observe(111, || 112);
+        assert_eq!(delivered.callback_delivery_age_bounds_ms, Some([5, 12]));
+
+        let mut exhausted = super::QueueCompletionProbe {
+            requested_token: u64::MAX,
+            observed_token: u64::MAX,
+            completed: std::sync::Arc::new(super::AtomicU64::new(u64::MAX)),
+            ..Default::default()
+        };
+        assert!(exhausted.begin_if_idle(30).is_none());
+        assert_eq!(exhausted.requested_token, u64::MAX);
+    }
+
     #[test]
     fn native_stage_diagnostics_bound_history_and_keep_the_latest_failure() {
         let mut smoke = super::Smoke::default();
@@ -1523,6 +1788,38 @@ mod tests {
             ..Default::default()
         };
         let _ = ctx.run_ui(raw, |ui| app.frame_ui(ui));
+    }
+    #[test]
+    fn native_reference_guards_reject_short_playlist_rows_and_overlapping_overlay_labels() {
+        let mut app = RustMixApp::headless();
+        let ctx = egui::Context::default();
+        app.theme(&ctx);
+        let size = [1600.0, 900.0];
+        app.dispatch(Action::PlayList, &ctx);
+        for _ in 0..4 {
+            frame(&mut app, &ctx, vec![], size);
+        }
+        app.validate_playlist_geometry(&ctx).unwrap();
+        let row = app
+            .automation
+            .get_mut("dialog.playlist.available.1")
+            .unwrap();
+        row.max.x = row.min.x + 40.0;
+        assert!(app.validate_playlist_geometry(&ctx).is_err());
+        app.reset_editors();
+        app.dispatch(Action::OverlaySettings(0), &ctx);
+        for _ in 0..4 {
+            frame(&mut app, &ctx, vec![], size);
+        }
+        app.validate_dialog_geometry(&ctx, "dialog.overlay")
+            .unwrap();
+        let field = app.automation["dialog.overlay.title"];
+        app.automation
+            .insert("dialog.overlay.label.title".into(), field);
+        assert!(
+            app.validate_dialog_geometry(&ctx, "dialog.overlay")
+                .is_err()
+        );
     }
     #[test]
     fn operator_toolbars_resize_without_clipping_or_switching_buses() {

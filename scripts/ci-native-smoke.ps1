@@ -48,6 +48,17 @@ function Invoke-NativeSmoke([string[]]$SmokeArguments) {
         if (-not (Test-Path -LiteralPath $tracePath)) { throw "Missing native stage trace: $tracePath" }
         $stageTrace = @(Get-Content -LiteralPath $tracePath -Raw | ConvertFrom-Json)
         if ($stageTrace.Count -lt 1 -or $stageTrace.Count -gt 128) { throw 'Native stage trace is empty or exceeds its bound' }
+        foreach ($sample in $stageTrace) {
+            $completion = $sample.queue_completion
+            if ($null -eq $completion -or $completion.requested_token -lt 1 -or
+                $completion.observed_token -gt $completion.requested_token -or
+                ([decimal]$completion.requested_token - [decimal]$completion.observed_token) -gt 1) {
+                throw 'Missing or unbounded native queue completion evidence'
+            }
+        }
+        if (@($stageTrace | Where-Object { $_.queue_completion.observed_token -ge 1 }).Count -eq 0) {
+            throw 'Native trace did not observe any queue completion callback'
+        }
     }
     if (-not (Test-Path -LiteralPath artifacts/gpu-shutdown.txt) -or
         (Get-Content -LiteralPath artifacts/gpu-shutdown.txt -Raw) -ne 'GPU submissions drained before native teardown') {

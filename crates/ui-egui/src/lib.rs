@@ -659,6 +659,7 @@ pub struct RustMixApp {
     monitor_view_height: Option<f32>,
     /// Retained only to drain submitted work during explicit application exit.
     gpu_device: Option<eframe::wgpu::Device>,
+    smoke_gpu_queue: Option<eframe::wgpu::Queue>,
     pub(crate) operator_hwnd: Option<usize>,
 }
 
@@ -721,6 +722,10 @@ impl RustMixApp {
             )
         }) {
             app.smoke = Some(smoke::Smoke::default());
+            app.smoke_gpu_queue = cc
+                .wgpu_render_state
+                .as_ref()
+                .map(|state| state.queue.clone());
         }
         app.theme(&cc.egui_ctx);
         #[cfg(target_os = "windows")]
@@ -918,6 +923,7 @@ impl RustMixApp {
             tbar_latched: false,
             monitor_view_height: None,
             gpu_device: None,
+            smoke_gpu_queue: None,
             operator_hwnd: None,
         }
     }
@@ -2452,6 +2458,8 @@ impl eframe::App for RustMixApp {
         self.stop_video_players();
         self.stop_audio_for_project_change();
         self.program_worker = None;
+        // Diagnostics must not retain a queue owner beyond the existing drain.
+        self.smoke_gpu_queue = None;
         if let Some(device) = self.gpu_device.take() {
             let result = device
                 .poll(eframe::wgpu::PollType::Wait {

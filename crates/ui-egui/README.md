@@ -1,5 +1,7 @@
 # rustmix-ui
 
+UI-022 candidate: measured Settings/Playlist dimensions, right-aligned Overlay labels, native geometry gates and one-pending-callback queue completion diagnostics. Local format/source guards and review pass; hosted build/tests/native visual acceptance pending. No new dependency/schema or runtime capability; GPU/cadence/full parity remain open. See ADR0022.
+
 UI-021: explicit dirty-channel choices, cached isolated engine preview, reserved form labels and full-width Playlist rows implemented. Exact be79b2e screenshots verify selected visual corrections; hosted check/Clippy/all tests including115 UI tests/build pass. Main native reaches stage51 then fails GPU shutdown; later workflows not run. No local compile/test/native execution. Full parity/runtime acceptance remains open; see ADR0021 and ui021-visual-review.md.
 
 UI-020 (2026-10-20): toolbar/monitor/source/mixer proportions, bounded light forms and the

@@ -1,5 +1,7 @@
 # Known gaps
 
+UI-022 candidate: measured Settings/Playlist dimensions and right-aligned Overlay labels revised, with strict native geometry and queue completion evidence gates. Await exact hosted screenshots/tests; no GPU cure or full equivalence claim. UI-021 shutdown failure below remains unresolved. See ADR0022 and ui022-visual-review.md.
+
 UI-021 outcome: be79b2e passes hosted check/Clippy/all tests (115 UI) and build, with corrected Overlay labels/contained preview/full-width Playlist rows verified in exact screenshots. Main native GPU shutdown fails (Wait timeout, Queue::drop panic, exit-1073741819); later workflows do not run. Full parity, Settings proportions, Playlist dimensions, advanced overlays and cadence remain open. See ADR0021 and ui021-visual-review.md.
 
 2026-10-20 UI-020: code bec97a8 passed hosted check/Clippy/all tests (106 UI) and build, with

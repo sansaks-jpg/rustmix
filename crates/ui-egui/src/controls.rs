@@ -162,6 +162,26 @@ impl RustMixApp {
         }
     }
 
+    fn playlist_command_target(
+        &mut self,
+        ui: &mut egui::Ui,
+        id: &str,
+        label: &str,
+        command: Command,
+        size: Vec2,
+        color: Option<Color32>,
+    ) {
+        ui.allocate_ui_with_layout(
+            size,
+            egui::Layout::centered_and_justified(egui::Direction::TopDown),
+            |ui| {
+                ui.set_width(size.x);
+                ui.spacing_mut().interact_size.y = size.y;
+                self.command_button(ui, id, label, command, color);
+            },
+        );
+    }
+
     pub(crate) fn playlist_dialog(&mut self, ctx: &egui::Context) {
         if !self.playlist_open {
             return;
@@ -287,37 +307,49 @@ impl RustMixApp {
                 ui.colored_label(RED, error);
             }
             let height = (ctx.viewport_rect().height() - 190.0).clamp(180.0, 620.0);
-            let pane_height = (ctx.viewport_rect().height() * 0.33).clamp(110.0, 400.0);
+            // Reference pane dimensions are normalized independently to the client viewport.
+            // Frame margins/strokes add ten points to each scroll area's requested height.
+            let viewport = ctx.viewport_rect().size();
+            let available_pane_height = (viewport.y * (323.0 / 900.0) - 10.0).clamp(110.0, 410.0);
+            let ordered_pane_height = (viewport.y * (340.0 / 900.0) - 10.0).clamp(110.0, 430.0);
+            let control_height = (viewport.y * (34.0 / 900.0)).clamp(29.0, 44.0);
+            let flag_gap = (viewport.y * (15.0 / 900.0)).clamp(8.0, 20.0);
             egui::ScrollArea::vertical()
                 .id_salt("playlist.body")
                 .max_height(height)
                 .show(ui, |ui| {
-                    ui.add_enabled_ui(!running && !self.playlist_delete_confirm, |ui| {
-                        let inputs = self.engine.project().inputs.clone();
-                        let transfer_width = (ui.available_width() * 0.08).clamp(52.0, 80.0);
-                        let reorder_width = 32.0;
-                        let gap = 6.0;
-                        let panes_width =
-                            (ui.available_width() - transfer_width - reorder_width - gap * 3.0)
-                                .max(300.0);
-                        let available_width = panes_width * 0.436;
-                        let ordered_width = panes_width - available_width;
-                        ui.horizontal_top(|ui| {
-                            ui.spacing_mut().item_spacing.x = gap;
-                            ui.allocate_ui_with_layout(
-                                Vec2::new(available_width, pane_height + 24.0),
-                                egui::Layout::top_down(egui::Align::Min),
-                                |ui| {
-                                    ui.set_width(available_width);
-                                    ui.strong("Available inputs");
-                                    let available = dialogs::light_form_frame(ui, 4, |ui| {
-                                        egui::ScrollArea::vertical()
-                                            .id_salt("playlist.available")
-                                            .max_height(pane_height)
-                                            .min_scrolled_height(pane_height)
-                                            .auto_shrink([false, false])
-                                            .show(ui, |ui| {
-                                                ui.with_layout(
+                    egui::Frame::new()
+                        .inner_margin(egui::Margin::symmetric(8, 0))
+                        .show(ui, |ui| {
+                            ui.add_enabled_ui(!running && !self.playlist_delete_confirm, |ui| {
+                                let inputs = self.engine.project().inputs.clone();
+                                let transfer_width = (viewport.x * 0.05).clamp(52.0, 96.0);
+                                let reorder_width = 32.0;
+                                let gap = 6.0;
+                                let panes_width = (ui.available_width()
+                                    - transfer_width
+                                    - reorder_width
+                                    - gap * 3.0)
+                                    .max(300.0);
+                                let available_width = panes_width * 0.436;
+                                let ordered_width = panes_width - available_width;
+                                ui.horizontal_top(|ui| {
+                                    ui.spacing_mut().item_spacing.x = gap;
+                                    ui.allocate_ui_with_layout(
+                                        Vec2::new(available_width, available_pane_height + 24.0),
+                                        egui::Layout::top_down(egui::Align::Min),
+                                        |ui| {
+                                            ui.set_width(available_width);
+                                            ui.strong("Available inputs");
+                                            let available =
+                                                dialogs::light_form_frame(ui, 4, |ui| {
+                                                    egui::ScrollArea::vertical()
+                                                        .id_salt("playlist.available")
+                                                        .max_height(available_pane_height)
+                                                        .min_scrolled_height(available_pane_height)
+                                                        .auto_shrink([false, false])
+                                                        .show(ui, |ui| {
+                                                            ui.with_layout(
                                                     egui::Layout::top_down_justified(
                                                         egui::Align::Min,
                                                     ),
@@ -353,80 +385,91 @@ impl RustMixApp {
                                                         }
                                                     },
                                                 );
-                                            });
-                                    });
-                                    self.automation.insert(
-                                        "dialog.playlist.available.body".into(),
-                                        available.response.rect,
+                                                        });
+                                                });
+                                            self.automation.insert(
+                                                "dialog.playlist.available.body".into(),
+                                                available.response.rect,
+                                            );
+                                        },
                                     );
-                                },
-                            );
-                            ui.allocate_ui_with_layout(
-                                Vec2::new(transfer_width, pane_height + 24.0),
-                                egui::Layout::top_down(egui::Align::Min),
-                                |ui| {
-                                    ui.set_width(transfer_width);
-                                    ui.add_space(20.0 + (pane_height - 66.0).max(0.0) * 0.5);
-                                    let add = ui
-                                        .add_enabled_ui(
-                                            draft.items.len() < 128 && !inputs.is_empty(),
-                                            |ui| {
-                                                ui.add_sized(
-                                                    [transfer_width, 30.0],
-                                                    egui::Button::new("→"),
+                                    ui.allocate_ui_with_layout(
+                                        Vec2::new(transfer_width, available_pane_height + 24.0),
+                                        egui::Layout::top_down(egui::Align::Min),
+                                        |ui| {
+                                            ui.set_width(transfer_width);
+                                            ui.add_space(
+                                                20.0 + (available_pane_height
+                                                    - control_height * 2.0
+                                                    - ui.spacing().item_spacing.y)
+                                                    .max(0.0)
+                                                    * 0.5,
+                                            );
+                                            let add = ui
+                                                .add_enabled_ui(
+                                                    draft.items.len() < 128 && !inputs.is_empty(),
+                                                    |ui| {
+                                                        ui.add_sized(
+                                                            [transfer_width, control_height],
+                                                            egui::Button::new("→"),
+                                                        )
+                                                    },
                                                 )
-                                            },
-                                        )
-                                        .inner
-                                        .on_hover_text("Add selected input to playlist");
-                                    self.automation
-                                        .insert("dialog.playlist.add".into(), add.rect);
-                                    if add.clicked()
-                                        && let Some(input) =
-                                            inputs.get(self.playlist_selected_avail)
-                                    {
-                                        draft.items.push(PlaylistItem {
-                                            input: input.id,
-                                            hold_ms: 3500,
-                                            transition: draft_default_slot(self.engine.project()),
-                                        });
-                                        self.playlist_selected_item =
-                                            draft.items.len().saturating_sub(1);
-                                    }
-                                    let valid = self.playlist_selected_item < draft.items.len();
-                                    let remove = ui
-                                        .add_enabled_ui(valid, |ui| {
-                                            ui.add_sized(
-                                                [transfer_width, 30.0],
-                                                egui::Button::new("←"),
-                                            )
-                                        })
-                                        .inner
-                                        .on_hover_text("Remove selected playlist item");
-                                    self.automation
-                                        .insert("dialog.playlist.remove".into(), remove.rect);
-                                    if remove.clicked() {
-                                        draft.items.remove(self.playlist_selected_item);
-                                        self.playlist_selected_item = self
-                                            .playlist_selected_item
-                                            .min(draft.items.len().saturating_sub(1));
-                                    }
-                                },
-                            );
-                            ui.allocate_ui_with_layout(
-                                Vec2::new(ordered_width, pane_height + 24.0),
-                                egui::Layout::top_down(egui::Align::Min),
-                                |ui| {
-                                    ui.set_width(ordered_width);
-                                    ui.strong("Playlist order");
-                                    let ordered = dialogs::light_form_frame(ui, 4, |ui| {
-                                        egui::ScrollArea::vertical()
-                                            .id_salt("playlist.items")
-                                            .max_height(pane_height)
-                                            .min_scrolled_height(pane_height)
-                                            .auto_shrink([false, false])
-                                            .show(ui, |ui| {
-                                                ui.with_layout(
+                                                .inner
+                                                .on_hover_text("Add selected input to playlist");
+                                            self.automation
+                                                .insert("dialog.playlist.add".into(), add.rect);
+                                            if add.clicked()
+                                                && let Some(input) =
+                                                    inputs.get(self.playlist_selected_avail)
+                                            {
+                                                draft.items.push(PlaylistItem {
+                                                    input: input.id,
+                                                    hold_ms: 3500,
+                                                    transition: draft_default_slot(
+                                                        self.engine.project(),
+                                                    ),
+                                                });
+                                                self.playlist_selected_item =
+                                                    draft.items.len().saturating_sub(1);
+                                            }
+                                            let valid =
+                                                self.playlist_selected_item < draft.items.len();
+                                            let remove = ui
+                                                .add_enabled_ui(valid, |ui| {
+                                                    ui.add_sized(
+                                                        [transfer_width, control_height],
+                                                        egui::Button::new("←"),
+                                                    )
+                                                })
+                                                .inner
+                                                .on_hover_text("Remove selected playlist item");
+                                            self.automation.insert(
+                                                "dialog.playlist.remove".into(),
+                                                remove.rect,
+                                            );
+                                            if remove.clicked() {
+                                                draft.items.remove(self.playlist_selected_item);
+                                                self.playlist_selected_item = self
+                                                    .playlist_selected_item
+                                                    .min(draft.items.len().saturating_sub(1));
+                                            }
+                                        },
+                                    );
+                                    ui.allocate_ui_with_layout(
+                                        Vec2::new(ordered_width, ordered_pane_height + 24.0),
+                                        egui::Layout::top_down(egui::Align::Min),
+                                        |ui| {
+                                            ui.set_width(ordered_width);
+                                            ui.strong("Playlist order");
+                                            let ordered = dialogs::light_form_frame(ui, 4, |ui| {
+                                                egui::ScrollArea::vertical()
+                                                    .id_salt("playlist.items")
+                                                    .max_height(ordered_pane_height)
+                                                    .min_scrolled_height(ordered_pane_height)
+                                                    .auto_shrink([false, false])
+                                                    .show(ui, |ui| {
+                                                        ui.with_layout(
                                                     egui::Layout::top_down_justified(
                                                         egui::Align::Min,
                                                     ),
@@ -462,155 +505,194 @@ impl RustMixApp {
                                                         }
                                                     },
                                                 );
+                                                    });
                                             });
-                                    });
-                                    self.automation.insert(
-                                        "dialog.playlist.items.body".into(),
-                                        ordered.response.rect,
-                                    );
-                                    ui.horizontal_wrapped(|ui| {
-                                        for (id, value, label) in [
-                                            ("loop", &mut draft.looped, "Loop"),
-                                            (
-                                                "beginSelected",
-                                                &mut draft.begin_selected,
-                                                "Begin from selected item",
-                                            ),
-                                            (
-                                                "clearOverlays",
-                                                &mut draft.clear_overlays,
-                                                "Clear overlays at start",
-                                            ),
-                                            ("manual", &mut draft.manual, "Manual mode"),
-                                        ] {
-                                            let response = ui.checkbox(value, label);
                                             self.automation.insert(
-                                                format!("dialog.playlist.{id}"),
-                                                response.rect,
+                                                "dialog.playlist.items.body".into(),
+                                                ordered.response.rect,
                                             );
-                                        }
-                                    });
-                                },
-                            );
-                            ui.allocate_ui_with_layout(
-                                Vec2::new(reorder_width, pane_height + 24.0),
-                                egui::Layout::top_down(egui::Align::Min),
-                                |ui| {
-                                    ui.set_width(reorder_width);
-                                    ui.add_space(20.0 + (pane_height - 66.0).max(0.0) * 0.5);
-                                    let index = self.playlist_selected_item;
-                                    let valid = index < draft.items.len();
-                                    for (id, label, available) in [
-                                        ("up", "▲", valid && index > 0),
-                                        ("down", "▼", valid && index + 1 < draft.items.len()),
-                                    ] {
-                                        let button = ui
-                                            .add_enabled_ui(available, |ui| {
-                                                ui.add_sized(
-                                                    [reorder_width, 30.0],
-                                                    egui::Button::new(label),
-                                                )
-                                            })
-                                            .inner;
-                                        self.automation
-                                            .insert(format!("dialog.playlist.{id}"), button.rect);
-                                        if button.clicked() {
-                                            if id == "up" {
-                                                draft.items.swap(index, index - 1);
-                                                self.playlist_selected_item -= 1;
-                                            } else {
-                                                draft.items.swap(index, index + 1);
-                                                self.playlist_selected_item += 1;
+                                            ui.add_space(
+                                                (flag_gap - ui.spacing().item_spacing.y).max(0.0),
+                                            );
+                                            ui.horizontal_wrapped(|ui| {
+                                                for (id, value, label) in [
+                                                    ("loop", &mut draft.looped, "Loop"),
+                                                    (
+                                                        "beginSelected",
+                                                        &mut draft.begin_selected,
+                                                        "Begin from selected item",
+                                                    ),
+                                                    (
+                                                        "clearOverlays",
+                                                        &mut draft.clear_overlays,
+                                                        "Clear overlays at start",
+                                                    ),
+                                                    ("manual", &mut draft.manual, "Manual mode"),
+                                                ] {
+                                                    let response = ui.checkbox(value, label);
+                                                    self.automation.insert(
+                                                        format!("dialog.playlist.{id}"),
+                                                        response.rect,
+                                                    );
+                                                }
+                                            });
+                                        },
+                                    );
+                                    ui.allocate_ui_with_layout(
+                                        Vec2::new(reorder_width, ordered_pane_height + 24.0),
+                                        egui::Layout::top_down(egui::Align::Min),
+                                        |ui| {
+                                            ui.set_width(reorder_width);
+                                            ui.add_space(
+                                                20.0 + (available_pane_height
+                                                    - control_height * 2.0
+                                                    - ui.spacing().item_spacing.y)
+                                                    .max(0.0)
+                                                    * 0.5,
+                                            );
+                                            let index = self.playlist_selected_item;
+                                            let valid = index < draft.items.len();
+                                            for (id, label, available) in [
+                                                ("up", "▲", valid && index > 0),
+                                                (
+                                                    "down",
+                                                    "▼",
+                                                    valid && index + 1 < draft.items.len(),
+                                                ),
+                                            ] {
+                                                let button = ui
+                                                    .add_enabled_ui(available, |ui| {
+                                                        ui.add_sized(
+                                                            [reorder_width, control_height],
+                                                            egui::Button::new(label),
+                                                        )
+                                                    })
+                                                    .inner;
+                                                self.automation.insert(
+                                                    format!("dialog.playlist.{id}"),
+                                                    button.rect,
+                                                );
+                                                if button.clicked() {
+                                                    if id == "up" {
+                                                        draft.items.swap(index, index - 1);
+                                                        self.playlist_selected_item -= 1;
+                                                    } else {
+                                                        draft.items.swap(index, index + 1);
+                                                        self.playlist_selected_item += 1;
+                                                    }
+                                                }
                                             }
-                                        }
-                                    }
-                                },
+                                        },
+                                    );
+                                });
+                                let details =
+                                    egui::CollapsingHeader::new("Playlist name and item timing")
+                                        .id_salt("playlist.details")
+                                        .show(ui, |ui| {
+                                            ui.horizontal_wrapped(|ui| {
+                                                ui.label("Name");
+                                                let name = ui.add(
+                                                    egui::TextEdit::singleline(
+                                                        &mut self.playlist_name,
+                                                    )
+                                                    .desired_width(230.0),
+                                                );
+                                                self.automation.insert(
+                                                    "dialog.playlist.name".into(),
+                                                    name.rect,
+                                                );
+                                                let rename = ui.button("Rename");
+                                                self.automation.insert(
+                                                    "dialog.playlist.rename".into(),
+                                                    rename.rect,
+                                                );
+                                                if rename.clicked() {
+                                                    draft.name = self.playlist_name.clone();
+                                                }
+                                            });
+                                            if let Some(item) =
+                                                draft.items.get_mut(self.playlist_selected_item)
+                                            {
+                                                ui.horizontal_wrapped(|ui| {
+                                                    ui.label("Hold (ms)");
+                                                    ui.add(
+                                                        egui::DragValue::new(&mut item.hold_ms)
+                                                            .range(100..=86_400_000)
+                                                            .speed(100),
+                                                    );
+                                                    effect_picker(
+                                                        ui,
+                                                        "playlist.effect",
+                                                        &mut item.transition.kind,
+                                                    );
+                                                    ui.label("Transition (ms)");
+                                                    ui.add(
+                                                        egui::DragValue::new(
+                                                            &mut item.transition.duration_ms,
+                                                        )
+                                                        .range(100..=10_000)
+                                                        .speed(50),
+                                                    );
+                                                });
+                                            }
+                                        });
+                                self.automation.insert(
+                                    "dialog.playlist.details".into(),
+                                    details.header_response.rect,
+                                );
+                            });
+                        });
+                });
+            ui.separator();
+            egui::Frame::new()
+                .inner_margin(egui::Margin::symmetric(8, 0))
+                .show(ui, |ui| {
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        ui.spacing_mut().item_spacing.x =
+                            (viewport.x * (7.0 / 1917.0)).clamp(4.0, 8.0);
+                        let close_width = (viewport.x * (122.0 / 1600.0)).clamp(92.0, 146.0);
+                        let start_width = (viewport.x * (135.0 / 1600.0)).clamp(92.0, 162.0);
+                        let step_width = (viewport.x * (104.0 / 1600.0)).clamp(72.0, 125.0);
+                        let button =
+                            ui.add_sized([close_width, control_height], egui::Button::new("Close"));
+                        self.automation
+                            .insert("dialog.playlist.close".into(), button.rect);
+                        if button.clicked() {
+                            close = true;
+                        }
+                        ui.add_enabled_ui(running, |ui| {
+                            self.playlist_command_target(
+                                ui,
+                                "dialog.playlist.next",
+                                "Next",
+                                Command::PlaylistNext,
+                                Vec2::new(step_width, control_height),
+                                None,
+                            );
+                            self.playlist_command_target(
+                                ui,
+                                "dialog.playlist.previous",
+                                "Previous",
+                                Command::PlaylistPrevious,
+                                Vec2::new(step_width, control_height),
+                                None,
                             );
                         });
-                        let details = egui::CollapsingHeader::new("Playlist name and item timing")
-                            .id_salt("playlist.details")
-                            .show(ui, |ui| {
-                                ui.horizontal_wrapped(|ui| {
-                                    ui.label("Name");
-                                    let name = ui.add(
-                                        egui::TextEdit::singleline(&mut self.playlist_name)
-                                            .desired_width(230.0),
-                                    );
-                                    self.automation
-                                        .insert("dialog.playlist.name".into(), name.rect);
-                                    let rename = ui.button("Rename");
-                                    self.automation
-                                        .insert("dialog.playlist.rename".into(), rename.rect);
-                                    if rename.clicked() {
-                                        draft.name = self.playlist_name.clone();
-                                    }
-                                });
-                                if let Some(item) = draft.items.get_mut(self.playlist_selected_item)
-                                {
-                                    ui.horizontal_wrapped(|ui| {
-                                        ui.label("Hold (ms)");
-                                        ui.add(
-                                            egui::DragValue::new(&mut item.hold_ms)
-                                                .range(100..=86_400_000)
-                                                .speed(100),
-                                        );
-                                        effect_picker(
-                                            ui,
-                                            "playlist.effect",
-                                            &mut item.transition.kind,
-                                        );
-                                        ui.label("Transition (ms)");
-                                        ui.add(
-                                            egui::DragValue::new(&mut item.transition.duration_ms)
-                                                .range(100..=10_000)
-                                                .speed(50),
-                                        );
-                                    });
-                                }
-                            });
-                        self.automation.insert(
-                            "dialog.playlist.details".into(),
-                            details.header_response.rect,
+                        let toggle = self.playlist_toggle_command();
+                        self.playlist_command_target(
+                            ui,
+                            "dialog.playlist.start",
+                            if self.engine.playlist_run().is_some() {
+                                "Stop"
+                            } else {
+                                "Start"
+                            },
+                            toggle,
+                            Vec2::new(start_width, control_height),
+                            Some(if running { RED } else { PROGRAM }),
                         );
                     });
                 });
-            ui.separator();
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                let button = ui.add_sized([92.0, 29.0], egui::Button::new("Close"));
-                self.automation
-                    .insert("dialog.playlist.close".into(), button.rect);
-                if button.clicked() {
-                    close = true;
-                }
-                ui.add_enabled_ui(running, |ui| {
-                    self.command_button(
-                        ui,
-                        "dialog.playlist.next",
-                        "Next",
-                        Command::PlaylistNext,
-                        None,
-                    );
-                    self.command_button(
-                        ui,
-                        "dialog.playlist.previous",
-                        "Previous",
-                        Command::PlaylistPrevious,
-                        None,
-                    );
-                });
-                let toggle = self.playlist_toggle_command();
-                self.command_button(
-                    ui,
-                    "dialog.playlist.start",
-                    if self.engine.playlist_run().is_some() {
-                        "Stop"
-                    } else {
-                        "Start"
-                    },
-                    toggle,
-                    Some(if running { RED } else { PROGRAM }),
-                );
-            });
         });
         if delete {
             self.actions
@@ -729,13 +811,19 @@ mod playlist_layout_tests {
             let ordered = bounds("dialog.playlist.items.body");
             let close = bounds("dialog.playlist.close");
             let up = bounds("dialog.playlist.up");
-            let pane_height = (size.y * 0.33).clamp(110.0, 400.0);
-            for pane in [available, ordered] {
+            let expected_available_height =
+                (size.y * (323.0 / 900.0) - 10.0).clamp(110.0, 410.0) + 10.0;
+            let expected_ordered_height =
+                (size.y * (340.0 / 900.0) - 10.0).clamp(110.0, 430.0) + 10.0;
+            for (pane, expected_height) in [
+                (available, expected_available_height),
+                (ordered, expected_ordered_height),
+            ] {
                 assert!(
                     ctx.viewport_rect().contains_rect(pane),
                     "pane at {size:?}: {pane:?}"
                 );
-                assert!(pane.height() >= pane_height);
+                assert!((pane.height() - expected_height).abs() <= 1.0);
                 assert!(pane.bottom() < close.top());
             }
             assert!((available.top() - ordered.top()).abs() <= 1.0);
@@ -760,6 +848,38 @@ mod playlist_layout_tests {
                     ctx.viewport_rect().contains_rect(bounds(id)),
                     "footer {id} at {size:?}"
                 );
+            }
+            let flags = bounds("dialog.playlist.loop");
+            let expected_flag_gap = (size.y * (15.0 / 900.0)).clamp(8.0, 20.0);
+            assert!((flags.top() - ordered.bottom() - expected_flag_gap).abs() <= 1.0);
+            assert!(ctx.viewport_rect().contains_rect(flags));
+            assert!((bounds("dialog.playlist.add").top() - up.top()).abs() <= 1.0);
+            assert!(
+                (bounds("dialog.playlist.remove").top() - bounds("dialog.playlist.down").top())
+                    .abs()
+                    <= 1.0
+            );
+            if (size.x - 1600.0).abs() < 1.0 {
+                for (rect, expected) in [
+                    (available, Vec2::new(349.0, 323.0)),
+                    (ordered, Vec2::new(452.0, 340.0)),
+                    (bounds("dialog.playlist.add"), Vec2::new(80.0, 34.0)),
+                    (bounds("dialog.playlist.remove"), Vec2::new(80.0, 34.0)),
+                    (bounds("dialog.playlist.start"), Vec2::new(135.0, 34.0)),
+                    (bounds("dialog.playlist.previous"), Vec2::new(104.0, 34.0)),
+                    (bounds("dialog.playlist.next"), Vec2::new(104.0, 34.0)),
+                    (close, Vec2::new(122.0, 34.0)),
+                ] {
+                    assert!(
+                        (rect.width() - expected.x).abs() <= 2.0,
+                        "reference width {expected:?}: {rect:?}"
+                    );
+                    assert!(
+                        (rect.height() - expected.y).abs() <= 1.0,
+                        "reference height {expected:?}: {rect:?}"
+                    );
+                }
+                assert!((flags.top() - ordered.bottom() - 15.0).abs() <= 1.0);
             }
             assert_eq!(app.engine.project().program, program);
             assert_eq!(app.engine.project().preview, preview);

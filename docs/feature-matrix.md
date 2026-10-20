@@ -1,5 +1,7 @@
 # Feature matrix
 
+UI-022 experimental candidate: Settings/Playlist dimensions, Overlay label alignment and bounded diagnostic queue token sampling. Scope: UI and opt-in test instrumentation only; no backend/schema/dependency change. Windows CI/visual proof pending; no hardware tested. Owner UI-022, source reviewed2026-10-20; GPU/cadence/full reference gaps remain. See ADR0022.
+
 UI-021 experimental: staged overlay Apply/Discard/Keep, cached engine caption preview and Playlist layout/full-width selection. Windows2022/be79b2e:115 UI tests plus all suites/check/lint/build pass; exact screenshots inspected. Main native reaches stage51 then GPU shutdown fails, so later workflows/hardware qualification are unverified. Failure is visible, full production/parity acceptance remains open. Owner UI-021; verified2026-10-20. See ADR0021.
 
 ## UI-020 operator layout candidate (2026-10-20)

@@ -1,5 +1,7 @@
 # Verification
 
+UI-022 candidate: prepared Settings widget/Cancel/Apply, actual Overlay glyph alignment, Playlist dimensions/full-row interactions, bounded completion token and native geometry rejection regressions. Harness requires callback evidence while retaining strict shutdown/timeouts. Local fmt/diff/repository/reference/PowerShell syntax checks pass; no local compile/test/native. Exact Windows acceptance and screenshot comparison pending. See ADR0022.
+
 UI-021 verification: Windows2022 run39422425429/be79b2e passed check/Clippy/all suites including115 UI tests and build. Exact native Overlay/dirty-channel/Playlist captures were reviewed; main completed stage51 then GPU drain timed out and Queue::drop panicked (exit-1073741819). Later native workflows did not run. f6db67c/run39420668981 passed all13 native processes but had a rejected label overlap. Preserve bounded adapter/stage diagnostics and strict gates. Local fmt/diff/repository/reference/script syntax checks pass; no local compile/test/native run. See ADR0021 and ui021-visual-review.md.
 
 ## UI-020 verification candidate (2026-10-20)

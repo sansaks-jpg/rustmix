@@ -332,7 +332,12 @@ fn overlay_field_label(ui: &mut egui::Ui, label: &str, width: f32) -> Rect {
     // Grid measures occupied child bounds, not the requested child size.
     // Reserve the whole column before painting its right-aligned label.
     let (rect, _) = ui.allocate_exact_size(Vec2::new(width, 26.0), Sense::hover());
-    ui.place(rect, egui::Label::new(label).halign(Align::Max));
+    let mut label_ui = ui.new_child(
+        egui::UiBuilder::new()
+            .max_rect(rect)
+            .layout(egui::Layout::right_to_left(Align::Center)),
+    );
+    label_ui.label(label);
     rect
 }
 
@@ -373,7 +378,9 @@ impl RustMixApp {
         let (body, _) = ui.allocate_exact_size(Vec2::new(width, height), Sense::hover());
         // A wider source library keeps long source names readable on production
         // workspaces; compact displays retain room for the independently scrolling form.
-        let navigation_width = if width >= 900.0 {
+        let navigation_width = if id == "dialog.settings" {
+            (width * 0.218).max(140.0)
+        } else if width >= 900.0 {
             let ratio = if id == "dialog.add" { 0.184 } else { 0.142 };
             (width * ratio).max(164.0)
         } else {
@@ -1371,7 +1378,7 @@ impl RustMixApp {
             "Settings",
             "dialog.settings",
             &mut open,
-            Vec2::new(760.0, 550.0),
+            Vec2::new(ctx.viewport_rect().width() * 0.60, 550.0),
         )
         .show(ctx, |ui| {
             self.dialog_columns(
@@ -1403,26 +1410,44 @@ impl RustMixApp {
                         (SettingsPage::Alerts, "Alerts", "Alerts"),
                         (SettingsPage::About, "About", "About"),
                     ] {
-                        let r = sidebar_row(ui, app.settings_page == page, label, 17.5, None);
+                        let r = sidebar_row(ui, app.settings_page == page, label, 27.0, None);
                         app.automation
                             .insert(format!("dialog.settings.page.{key}"), r.rect);
                         if r.clicked() {
                             app.settings_page = page;
                         }
                     }
-                    ui.add_space(4.0);
-                    for action_lbl in ["Import", "Export", "Default"] {
-                        if ui
-                            .add_enabled(action_lbl == "Default", egui::Button::new(RichText::new(action_lbl).size(11.0)).fill(CHIP_BG).min_size(Vec2::new(152.0,21.0)))
-                            .clicked()
-                            && action_lbl == "Default"
-                        {
-                            reset_default = true;
+                    // Keep the navigation actions together at the bottom when
+                    // all pages fit. Compact layouts can scroll this navigation
+                    // independently of the permanently reachable OK/Cancel footer.
+                    let remaining = height - 12.0 - ui.min_rect().height() - 31.0;
+                    ui.add_space(remaining.max(4.0));
+                    let footer_width = ui.available_width();
+                    let footer = ui.horizontal(|ui| {
+                        ui.spacing_mut().item_spacing.x = 3.0;
+                        ui.spacing_mut().button_padding = Vec2::new(2.0, 3.0);
+                        let button_width = ((footer_width - 6.0) / 3.0).max(30.0);
+                        for action_lbl in ["Import", "Export", "Default"] {
+                            let action = ui.add_enabled(
+                                action_lbl == "Default",
+                                egui::Button::new(RichText::new(action_lbl).size(10.0))
+                                    .fill(CHIP_BG)
+                                    .min_size(Vec2::new(button_width, 27.0)),
+                            );
+                            app.automation.insert(format!("dialog.settings.navigation.{action_lbl}"), action.rect);
+                            if action.clicked() && action_lbl == "Default" {
+                                reset_default = true;
+                            }
                         }
-                    }
+                    });
+                    app.automation.insert("dialog.settings.navigation.footer".into(), footer.response.rect);
                 },
                 |app, ui| {
-                    light_form_frame(ui, 12, |ui| match app.settings_page {
+                    let field_width = (ui.ctx().viewport_rect().width() * (300.0 / 1600.0))
+                        .clamp(140.0, 360.0);
+                    light_form_frame(ui, 12, |ui| {
+                        ui.spacing_mut().combo_width = field_width;
+                        match app.settings_page {
                         SettingsPage::Display => {
                             egui::Grid::new("settings_display_grid")
                                 .num_columns(2)
@@ -1436,8 +1461,8 @@ impl RustMixApp {
                                             .size(11.5)
                                             .color(FORM_TEXT),
                                     );
-                                    egui::ComboBox::from_id_salt("settings.rate")
-                                        .width(210.0)
+                                    let rate = egui::ComboBox::from_id_salt("settings.rate")
+                                        .width(field_width)
                                         .selected_text(format!("{}p", draft.rate.label()))
                                         .show_ui(ui, |ui| {
                                             for (num, den, lbl) in [
@@ -1464,17 +1489,25 @@ impl RustMixApp {
                                                 );
                                             }
                                         });
+                                    app.automation.insert("dialog.settings.frameRate".into(), rate.response.rect);
                                     ui.end_row();
 
                                     ui.label("Actual Program raster"); ui.label("640×360 CPU reference"); ui.end_row();
-                                    ui.label("Independent fullscreen output"); ui.label("Unavailable: no output router"); ui.end_row();
+                                    ui.label("Program window / fullscreen");
+                                    let program_window = ui.add_sized([field_width, 32.0], egui::Label::new("Available through the Fullscreen menu").wrap());
+                                    app.automation.insert("dialog.settings.programWindow".into(), program_window.rect);
+                                    ui.end_row();
+                                    ui.label("Independent secondary output");
+                                    let secondary = ui.add_sized([field_width, 32.0], egui::Label::new("Unavailable: no independent output router").wrap());
+                                    app.automation.insert("dialog.settings.secondaryOutput".into(), secondary.rect);
+                                    ui.end_row();
                                     ui.label(
                                         RichText::new("Production Name")
                                             .size(11.5)
                                             .color(FORM_TEXT),
                                     );
                                     let title = ui.add_sized(
-                                        [210.0, 20.0],
+                                        [field_width, 20.0],
                                         egui::TextEdit::singleline(&mut app.settings_name)
                                             .char_limit(64),
                                     );
@@ -1591,6 +1624,7 @@ impl RustMixApp {
                                 &mut draft.shortcuts,
                                 "Enable single-key production shortcuts",
                             );
+                        }
                         }
                     });
                 },
@@ -3039,6 +3073,157 @@ mod operator_dialog_tests {
                     },
                 ],
             );
+        }
+    }
+
+    fn click_at_size(app: &mut RustMixApp, ctx: &egui::Context, id: &str, size: Vec2) {
+        for _ in 0..4 {
+            frame_at_size(app, ctx, vec![], size);
+        }
+        let rect = *app.automation.get(id).expect("visible settings widget");
+        assert!(ctx.viewport_rect().contains_rect(rect));
+        for pressed in [true, false] {
+            frame_at_size(
+                app,
+                ctx,
+                vec![
+                    egui::Event::PointerMoved(rect.center()),
+                    egui::Event::PointerButton {
+                        pos: rect.center(),
+                        button: egui::PointerButton::Primary,
+                        pressed,
+                        modifiers: egui::Modifiers::NONE,
+                    },
+                ],
+                size,
+            );
+        }
+    }
+
+    #[test]
+    fn overlay_label_glyphs_end_at_the_reserved_columns_right_edge() {
+        for width in [96.0, 144.0] {
+            for label in ["Title", "Subtitle", "Visibility"] {
+                let ctx = egui::Context::default();
+                let mut reserved = Rect::NOTHING;
+                let output = ctx.run_ui(egui::RawInput::default(), |ui| {
+                    reserved = overlay_field_label(ui, label, width);
+                });
+                let text = output
+                    .shapes
+                    .iter()
+                    .find_map(|shape| match &shape.shape {
+                        egui::epaint::Shape::Text(text) if text.galley.job.text == label => {
+                            Some(text)
+                        }
+                        _ => None,
+                    })
+                    .expect("actual painted label text");
+                let painted = text.visual_bounding_rect();
+                assert!(
+                    (painted.right() - reserved.right()).abs() <= 2.0,
+                    "Label glyphs must end at the reserved column: {painted:?} / {reserved:?}"
+                );
+                assert!(reserved.expand(2.0).contains_rect(painted));
+            }
+        }
+    }
+
+    #[test]
+    fn settings_proportions_navigation_actions_and_real_cancel_fit_production_sizes() {
+        for size in [
+            Vec2::new(1100.0, 700.0),
+            Vec2::new(1600.0, 900.0),
+            Vec2::new(1920.0, 1080.0),
+        ] {
+            let mut app = RustMixApp::headless();
+            let ctx = egui::Context::default();
+            app.theme(&ctx);
+            app.dispatch(Action::Settings, &ctx);
+            for _ in 0..4 {
+                frame_at_size(&mut app, &ctx, vec![], size);
+            }
+            let before = app.engine.project().clone();
+            let body = *app.automation.get("dialog.settings.body").unwrap();
+            let nav = *app.automation.get("dialog.settings.navigation").unwrap();
+            let page = *app.automation.get("dialog.settings.page").unwrap();
+            assert!((body.width() / size.x - 0.60).abs() < 0.025);
+            assert!((nav.width() / body.width() - 0.218).abs() < 0.015);
+            let display = *app.automation.get("dialog.settings.page.Display").unwrap();
+            let next = *app.automation.get("dialog.settings.page.Outputs").unwrap();
+            assert!((display.height() - 27.0).abs() <= 1.0);
+            assert!((next.top() - display.top() - 28.0).abs() <= 1.0);
+            for id in [
+                "dialog.settings.navigation.footer",
+                "dialog.settings.navigation.Import",
+                "dialog.settings.navigation.Export",
+                "dialog.settings.navigation.Default",
+            ] {
+                let rect = *app.automation.get(id).unwrap();
+                assert!(
+                    nav.contains_rect(rect),
+                    "Navigation footer escaped at {size:?}: {id}"
+                );
+            }
+            let expected = (size.x * (300.0 / 1600.0)).clamp(140.0, 360.0);
+            for id in [
+                "dialog.settings.frameRate",
+                "dialog.settings.projectName",
+                "dialog.settings.programWindow",
+                "dialog.settings.secondaryOutput",
+            ] {
+                let rect = *app.automation.get(id).unwrap();
+                assert!(
+                    page.contains_rect(rect),
+                    "Settings field escaped at {size:?}: {id}"
+                );
+                if id == "dialog.settings.frameRate" || id == "dialog.settings.projectName" {
+                    assert!((rect.width() - expected).abs() < 12.0);
+                }
+            }
+            click_at_size(&mut app, &ctx, "dialog.settings.page.Options", size);
+            assert!(app.settings_page == SettingsPage::Options);
+            click_at_size(&mut app, &ctx, "dialog.settings.page.Display", size);
+            click_at_size(&mut app, &ctx, "dialog.settings.projectName", size);
+            frame_at_size(
+                &mut app,
+                &ctx,
+                vec![egui::Event::Text("UI022".into())],
+                size,
+            );
+            assert!(app.settings_name.contains("UI022"));
+            assert_eq!(*app.engine.project(), before);
+            click_at_size(&mut app, &ctx, "dialog.settings.cancel", size);
+            assert!(!app.settings && app.settings_draft.is_none());
+            assert_eq!(*app.engine.project(), before);
+        }
+    }
+
+    #[test]
+    fn settings_compact_footer_stays_reachable_and_apply_uses_staged_values() {
+        for size in [Vec2::new(734.0, 466.0), Vec2::new(1600.0, 900.0)] {
+            let mut app = RustMixApp::headless();
+            let ctx = egui::Context::default();
+            app.theme(&ctx);
+            app.dispatch(Action::Settings, &ctx);
+            for _ in 0..4 {
+                frame_at_size(&mut app, &ctx, vec![], size);
+            }
+            let body = *app.automation.get("dialog.settings.body").unwrap();
+            let apply = *app.automation.get("dialog.settings.apply").unwrap();
+            let cancel = *app.automation.get("dialog.settings.cancel").unwrap();
+            assert!(body.bottom() <= apply.top() && body.bottom() <= cancel.top());
+            assert!(apply.right() <= cancel.left());
+            assert!(ctx.viewport_rect().contains_rect(apply));
+            assert!(ctx.viewport_rect().contains_rect(cancel));
+            let program = app.engine.project().program;
+            let preview = app.engine.project().preview;
+            app.settings_name = "UI022 staged settings".into();
+            click_at_size(&mut app, &ctx, "dialog.settings.apply", size);
+            frame_at_size(&mut app, &ctx, vec![], size);
+            assert_eq!(app.engine.project().name, "UI022 staged settings");
+            assert_eq!(app.engine.project().program, program);
+            assert_eq!(app.engine.project().preview, preview);
         }
     }
 

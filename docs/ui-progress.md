@@ -1,5 +1,7 @@
 # UI milestone progress
 
+UI-022 source candidate integrated after parallel ownership and combined review: Settings/Playlist reference dimensions, Overlay glyph alignment, strict native geometry and bounded completion diagnostics. Hosted tests and exact screenshots pending. See ADR0022/ui022-visual-review.md; prior GPU failure remains open.
+
 UI-021: overlay/Playlist corrections implemented through parallel work and exact screenshots. be79b2e passes hosted check/lint/tests/build; visual overlap and row hit-area defects corrected. Main native GPU teardown fails after finalstage51; full native/runtime/parity acceptance remains open. See ADR0021 and ui021-visual-review.md for measured gaps and next Settings targets.
 
 ## 2026-10-20 — UI-020 operator layout refinement (candidate)
