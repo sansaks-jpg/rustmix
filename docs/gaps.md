@@ -1,5 +1,14 @@
 # Known gaps
 
+UI-023 selected corrections accepted for 126291d/run 39452377970:251 tests including 127 UI,
+check/Clippy/build and 13 native processes pass; exact workspace/Recording PNG/JSON reviewed.
+Monitor/take alignment, compact effect containment, single-format recording navigation,
+12 px form gutter and 339.6 px filename field are verified. Recording configuration remains
+unsaved/read-only and Start unavailable. Full visual equivalence remains open: Light
+vector/caret contrast, dialog title bars/footer sizes/typography and matching-viewport
+DPI qualification. Hosted native slowdown reproduces, cadence misses targets, and earlier
+intermittent GPU failure still has no demonstrated causal fix. See ui023-visual-review.md.
+
 UI-022 outcome:7aeac9c/run39434584384 passes check/Clippy/all tests (121 UI), build and complete native workflows. Exact Settings/Playlist/Overlay captures accept selected dimensions/alignment, not full equivalence. Earlier GPU drain failure remains unexplained;50/59.94/60cadence targets still fail. Header/footer placement/typography and advanced backends remain open. UI023 Recording source is isolated and untested. See ADR0022/ui022-visual-review.md.
 
 UI-021 outcome: be79b2e passes hosted check/Clippy/all tests (115 UI) and build, with corrected Overlay labels/contained preview/full-width Playlist rows verified in exact screenshots. Main native GPU shutdown fails (Wait timeout, Queue::drop panic, exit-1073741819); later workflows do not run. Full parity, Settings proportions, Playlist dimensions, advanced overlays and cadence remain open. See ADR0021 and ui021-visual-review.md.

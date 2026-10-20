@@ -1,5 +1,12 @@
 # Roadmap
 
+- UI-023: flat operator treatment, left monitor titles, centered/bounded effect controls,
+  selected-format Recording page and readable form gutter accepted for source 126291d;
+  run 39452377970 passes 251 tests, build and 13 native processes with exact PNG/JSON review.
+  Next: Light-theme icon contrast, remaining dialog title/footer/typography dimensions
+  and the reproducible hosted slowdown. Full equivalence/backends/readiness stay open.
+  See docs/ui023-visual-review.md.
+
 - UI-022: selected Settings/Playlist/Overlay dimension/alignment corrections visually accepted on7aeac9c; run39434584384 fully green including121 UI tests and13 native processes. Next: review isolated UI023 Recording Setup candidate; resolve remaining header/typography/backend gaps, intermittent GPU failure and cadence. Full parity and production qualification stay open. See ui022-visual-review.md and ui023-recording-candidate.md.
 
 - UI-021: overlay draft safety/preview and Playlist workflow corrections visually verified on be79b2e. Hosted check/lint/tests/build pass; main native reaches finalstage51 then GPU drain/Queue::drop failure. Next: resolve measured GPU reliability and refine Settings proportions; full parity/cadence/hardware qualification stay open. See ADR0021 and ui021-visual-review.md.

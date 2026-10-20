@@ -1,7 +1,13 @@
 # UI-023 Recording Setup handoff
 
-Status: isolated source candidate; NOT merged, compiled, tested or visually accepted.
-Root accepted short-workflow source remains7aeac9c (UI022).
+Status: historical preparation record. The scoped candidate is now integrated in UI-023;
+126291d passes the complete hosted/native workflow in run 39452377970, with selected
+exact captures reviewed; the earlier2f9d63c also passed twice. The recording page,
+gutter and compact effect-column corrections are accepted for this experimental slice.
+See [current comparison and results](ui023-visual-review.md) for remaining full-equivalence,
+contrast, performance and readiness gaps.
+
+The remaining sections describe the original isolated handoff before integration.
 
 Parallel worker prepared only dialogs.rs in the separate local worktree
 C:/Users/WORKPLUS/Documents/WEB/rustmix-worktrees/ui023-recording, branch codex/ui023-recording,

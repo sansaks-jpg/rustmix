@@ -1,5 +1,16 @@
 # Verification
 
+UI-023 source 126291d/run 39452377970 passes locked workspace check, warnings-as-errors
+Clippy, all 251 tests including 127 UI, release build, all 13 native processes and packaging.
+Exact workspace/Recording PNG/JSON were inspected. New regressions check painted title/
+take alignment, all effect/caret bounds,12 px form gutter, recording navigation, disabled
+controls and unchanged project/output state through 1920x1200. All 13 GPU drains pass;
+stderr is empty. Native step675 s and profiler UI about1.5fps remain a hosted performance
+gap; cadence28.8106/36.9233/33.4939fps misses50/59.94/60 targets at 640x360. No physical,
+endurance, full-equivalence or causal GPU-fix claim. Local checks remain formatting,
+diff and inventory only. Earlier compile/test failures and cancelled/same-source repeat
+runs are retained in ADR 0023/ui023-visual-review.md.
+
 UI-022 verified on hosted Windows2022 run39434584384/7aeac9c: cargo check --workspace --locked, cargo clippy --workspace --all-targets --locked -- -D warnings, cargo test --workspace --all-targets --locked (121 UI plus other suites), release build and all13 native processes/package pass. Exact Settings/Playlist/Overlay PNG/JSON inspected. Callback evidence bounded and real; cadence43.1605/43.1390/42.4105fps misses50/59.94/60 targets. Intermittent prior GPU failure remains unresolved. Local checks only fmt/diff/repository/reference/PowerShell syntax; no local compile/test/native. See ADR0022/ui022-visual-review.md.
 
 UI-021 verification: Windows2022 run39422425429/be79b2e passed check/Clippy/all suites including115 UI tests and build. Exact native Overlay/dirty-channel/Playlist captures were reviewed; main completed stage51 then GPU drain timed out and Queue::drop panicked (exit-1073741819). Later native workflows did not run. f6db67c/run39420668981 passed all13 native processes but had a rejected label overlap. Preserve bounded adapter/stage diagnostics and strict gates. Local fmt/diff/repository/reference/script syntax checks pass; no local compile/test/native run. See ADR0021 and ui021-visual-review.md.

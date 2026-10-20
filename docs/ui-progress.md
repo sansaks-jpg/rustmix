@@ -1,5 +1,14 @@
 # UI milestone progress
 
+UI-023 (2026-10-20): source 126291d/run 39452377970 accepts selected operator/Recording
+corrections:251 tests (127 UI), check/Clippy/build,13 native processes and packaging pass;
+exact1100/1600/1920 workspace and1600 Recording PNG/JSON inspected. Long effects stay
+inside the take column; recording has12 px gutters and a339.6 px filename field. Earlier
+2f9d63c also passed twice. No local build/test/native run or full equivalence/backend
+qualification. Next: Light icon contrast and remaining dialog/typography dimensions;
+hosted slowdown, cadence and earlier intermittent GPU reliability remain open.
+See ADR 0023/ui023-visual-review.md for measurements and every failed/cancelled attempt.
+
 UI-022 accepted for selected visual corrections and short native workflow:7aeac9c/run39434584384 all checks/tests/build/native processes green. Exact Settings/Playlist/Overlay captures measured and independently reviewed. Full equivalence, cadence and intermittent GPU/endurance reliability remain open. UI023 Recording candidate is isolated, not merged or tested. See ADR0022/ui022-visual-review.md and ui023-recording-candidate.md.
 
 UI-021: overlay/Playlist corrections implemented through parallel work and exact screenshots. be79b2e passes hosted check/lint/tests/build; visual overlap and row hit-area defects corrected. Main native GPU teardown fails after finalstage51; full native/runtime/parity acceptance remains open. See ADR0021 and ui021-visual-review.md for measured gaps and next Settings targets.

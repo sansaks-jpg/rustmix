@@ -1,5 +1,9 @@
 # Feature matrix
 
+| Feature | Status | Scope | Test evidence | Platform | Hardware tested | Known limitations | Last verified date | Owner/task ID |
+|---|---|---|---|---|---|---|---|---|
+| Flat operator controls and Recording page | Experimental; selected corrections tested | Left monitor titles, centered/bounded effect controls, flat surfaces, single selected read-only Recording page and12 px form gutter | 126291d/run 39452377970:251 tests (127 UI), check/Clippy/build,13 native processes; exact workspace/Recording PNG/JSON review, all drains pass | Windows 2022 x64 | DX12 Microsoft Basic Render Driver CPU,driver 10.0.20348.5386,4 CPU; no physical device | Configuration unavailable/unsaved, no encoder; Light icon contrast/title/footer/typography gaps; reproducible hosted slowdown, cadence misses, no full equivalence or hardware/endurance qualification | 2026-10-20 | UI-023 / ADR 0023 |
+
 UI-022 experimental: exact-source7aeac9c/run39434584384 accepted short hosted workflows and selected visual corrections. Full reference equivalence, intermittent GPU reliability, cadence/endurance and hardware qualification stay open. See ADR0022/ui022-visual-review.md.
 
 ## UI-022 measured operator dimensions (2026-10-20)

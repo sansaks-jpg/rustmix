@@ -1,5 +1,13 @@
 # rustmix-ui
 
+UI-023: flat controls, left monitor titles, centered/bounded effect controls and the
+selected-format Recording page with 12 px form gutter are tested for source 126291d.
+Hosted run 39452377970 passes check/Clippy/all 251 tests (127 UI), release build and 13
+native processes; exact workspace/Recording PNGs and geometry inspected. Start remains
+disabled and configuration unsaved. No local compile/test/native run, dependency,
+schema or engine change. Full visual equivalence, Light icon contrast and the hosted
+slowdown remain open. See ADR 0023 and docs/ui023-visual-review.md.
+
 UI-022: measured Settings/Playlist dimensions, right-aligned Overlay glyphs, native geometry gates and one-pending-callback diagnostics verified in7aeac9c/run39434584384. All121 UI tests/other suites/check/Clippy/build and13 native processes pass; exact screenshots independently reviewed. Full UI parity, cadence/endurance and intermittent GPU failure remain open. No local compile/test/native run. UI023 candidate remains isolated; see ADR0022/ui022-visual-review.md.
 
 UI-021: explicit dirty-channel choices, cached isolated engine preview, reserved form labels and full-width Playlist rows implemented. Exact be79b2e screenshots verify selected visual corrections; hosted check/Clippy/all tests including115 UI tests/build pass. Main native reaches stage51 then fails GPU shutdown; later workflows not run. No local compile/test/native execution. Full parity/runtime acceptance remains open; see ADR0021 and ui021-visual-review.md.

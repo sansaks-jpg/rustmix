@@ -1,7 +1,7 @@
 # ADR 0023: Flat operator controls and selected recording page
 
 Date: 2026-10-20
-Status: implemented candidate; exact hosted validation and visual acceptance pending.
+Status: experimental; selected visual corrections and exact hosted workflow accepted.
 
 The supplied Interface screenshot places input number/name at the left monitor edge,
 centers take labels and uses flat rectangular controls on a charcoal workspace.
@@ -50,7 +50,7 @@ names do. Preserve the original 8-point inset gate and all tolerances. The faile
 run did not build or launch the application; exact revised acceptance is pending.
 
 2f9d63c/run39449101218 passes every hosted check,126 UI tests plus all suites,
-release build and all13 native processes. Exact workspace and Recording PNG/JSON
+release build and all 13 native processes. Exact workspace and Recording PNG/JSON
 were inspected. Monitor titles and take labels are corrected and recording uses
 one page with bounded navigation/footer;13 GPU drains pass and stderr is empty.
 The native step takes629s versus99s on UI-022; cadence targets still fail. The
@@ -58,7 +58,7 @@ fresh-runner repeat39450879950 remains pending. This is not GPU/production readi
 
 Visual follow-up: Recording's label column leaves only4px of separation and a
 316.4px filename field at1600. Relative to the observed page, reserve21% for the
-label (86..112px) and12px separation, bringing the filename close to340px while
+label (86..112 px) and12 px separation, bringing the filename close to340px while
 preserving the accepted page/rail/footer bounds. Use familiar Size/Frame Rate/
 Bit Rate/Audio labels; values still describe actual Program and unavailable output.
 Require actual painted-glyph gutter and field-width regressions at compact/large
@@ -71,3 +71,18 @@ text inside that width. The full label stays available on hover. Add headless
 and native gates for all four effect/caret pairs inside the take column. No
 transition mapping, engine command or enabled-state change. Supersede the
 not-yet-accepted9d2c863 native candidate with the combined visual correction.
+
+## Final exact-source result
+
+Source 126291d/run 39452377970 passes all 251 tests including 127 UI, check, Clippy,
+release build,13 native processes and packaging. Exact workspace and Recording
+PNG/JSON were inspected: selected alignment, flat treatment, single-format page,
+12 px gutter,339.6 px filename field and compact effect/caret containment are accepted.
+Every GPU drain passes and stderr is empty. No local compile/test/native run.
+
+Full UI equivalence remains open. Light icon contrast, dialog title/footer sizes,
+typography and matching-viewport/DPI comparison need more work. The native step
+takes675 s and the cadence/profile targets still fail on the software adapter;
+earlier intermittent GPU failure has no demonstrated causal resolution. These
+limitations, intermediate failures, cancelled candidate and same-source repeat
+are retained in ui023-visual-review.md. No encoder/backend/readiness claim.
