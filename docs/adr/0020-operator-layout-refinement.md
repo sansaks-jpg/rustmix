@@ -21,4 +21,17 @@ Local checks: cargo fmt --all -- --check, scripts/check-repository.ps1, git diff
 review only. New widget tests and the expanded native geometry checks are prepared, not executed.
 No full reference parity, native appearance acceptance, physical device or production readiness is
 claimed. Hosted Windows check/Clippy/tests/build/native smoke and screenshot inspection of this exact
-patch are required. Repository policy requires authorization before commits/push; none performed.
+patch are required. The user authorized task-scoped commits, push and hosted Windows CI on 2026-10-20.
+
+
+First hosted run 39362483497 (4a70d9f): workspace check and warnings-as-errors Clippy passed;
+88 UI tests passed and three failed the expanded toolbar target-height gate. The caret helper
+ignored its supplied height and still allocated a 20-point menu target; it now scopes the requested
+interaction height instead of discarding it. Mixer and dialog regressions passed this run.
+
+Inherited baseline run 39284383232 passed initial PNG import but failed reopen: media completion
+submitted a new producer generation after Program polling, then acceptance inspected an old black
+raster. Track the presented Program generation and wait for current acknowledgment before strict
+reopen state/pixel acceptance. The existing timeout still bounds the wait. A regression covers stale,
+missing and current acknowledgments and verifies current invalid state still fails. This is harness
+readiness, not relaxation of pixels or a new media capability. Revised hosted verification pending.

@@ -320,14 +320,18 @@ pub(crate) fn caret_menu_button<R>(
     height: f32,
     add_contents: impl FnOnce(&mut egui::Ui) -> R,
 ) -> egui::InnerResponse<Option<R>> {
-    let inner = ui.menu_button(" ", add_contents);
+    let inner = ui
+        .scope(|ui| {
+            ui.spacing_mut().interact_size.y = height;
+            ui.menu_button(" ", add_contents)
+        })
+        .inner;
     let c = inner.response.rect.center();
     let pts = vec![
         Pos2::new(c.x - 3.6, c.y - 1.6),
         Pos2::new(c.x + 3.6, c.y - 1.6),
         Pos2::new(c.x, c.y + 2.4),
     ];
-    let _ = height;
     ui.painter().add(egui::Shape::convex_polygon(
         pts,
         Color32::WHITE,
@@ -501,6 +505,7 @@ pub struct RustMixApp {
     pub(crate) last_program_rgba: Vec<u8>,
     program_worker: Option<program::ProgramWorker>,
     program_generation: u64,
+    program_presented_generation: Option<u64>,
     program_renderer: program::ProgramRenderer,
     program_pixels: Option<Arc<Vec<[u8; 4]>>>,
     video_stats: program::VideoStats,
@@ -754,6 +759,7 @@ impl RustMixApp {
             last_program_rgba: Vec::new(),
             program_worker: None,
             program_generation: 0,
+            program_presented_generation: None,
             program_renderer: program::ProgramRenderer::default(),
             program_pixels: None,
             video_stats: program::VideoStats::default(),

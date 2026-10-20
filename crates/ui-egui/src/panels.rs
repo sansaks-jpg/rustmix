@@ -271,6 +271,7 @@ impl RustMixApp {
                     self.video_produced_ns = frame.produced_ns;
                     self.generation_ms = frame.stats.render_ms as f32;
                     self.upload_program(ctx, frame.pixels);
+                    self.program_presented_generation = Some(frame.generation);
                 }
                 Ok(_) => {} // A frame from before the latest command cannot undo it.
                 Err(error) => {

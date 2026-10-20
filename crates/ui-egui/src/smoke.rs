@@ -556,6 +556,16 @@ impl RustMixApp {
         }
         Ok(())
     }
+    fn input_reopen_presented(&self) -> Result<bool> {
+        if self.job.is_some()
+            || self.media_loader.busy()
+            || self.program_presented_generation != Some(self.program_generation)
+        {
+            return Ok(false);
+        }
+        self.assert_input_smoke()?;
+        Ok(true)
+    }
     fn smoke_inputs(&mut self, ctx: &egui::Context, s: &mut Smoke) -> Result<()> {
         // Includes the playlist, keyboard editor and Basic-mode capture stages.
         if self.start.elapsed() > Duration::from_secs(150) {
@@ -597,10 +607,12 @@ impl RustMixApp {
         }
         self.validate_monitor_geometry(ctx.viewport_rect().right())?;
         if reopen {
-            if self.job.is_some() || self.media_loader.busy() {
+            // Media completion submits a new producer generation after this
+            // frame's poll_program. Never judge the previous (possibly black)
+            // raster merely because the decode queue just became idle.
+            if !self.input_reopen_presented()? {
                 return Ok(());
             }
-            self.assert_input_smoke()?;
             if s.stage == 0 {
                 ctx.send_viewport_cmd(egui::ViewportCommand::Screenshot(egui::UserData::default()));
                 s.captured = false;
@@ -1053,6 +1065,24 @@ impl RustMixApp {
 mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used, clippy::indexing_slicing)]
     use super::*;
+
+    #[test]
+    fn png_reopen_waits_for_the_new_generation_then_enforces_state_acceptance() {
+        let mut app = RustMixApp::headless();
+        // Reproduce the frame after decode completion submitted generation 2,
+        // while only the old black frame has been presented.
+        app.program_generation = 2;
+        app.program_presented_generation = Some(1);
+        app.last_program_rgba = vec![0; 640 * 360 * 4];
+        assert!(!app.media_loader.busy());
+        assert!(!app.input_reopen_presented().unwrap());
+        app.program_presented_generation = None;
+        assert!(!app.input_reopen_presented().unwrap());
+        // The acknowledgment gate must not bypass the actual acceptance: a
+        // current frame with missing imported sources remains a failure.
+        app.program_presented_generation = Some(2);
+        assert!(app.input_reopen_presented().is_err());
+    }
 
     #[test]
     fn scripted_save_waits_for_the_file_job_slot_and_writes_the_project() {
