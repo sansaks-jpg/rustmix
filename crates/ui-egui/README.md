@@ -1,5 +1,12 @@
 # rustmix-ui
 
+UI-020 candidate (2026-10-20): toolbar targets grow from compact to production-display sizes;
+Fullscreen placement uses local UI coordinates. Mixer channels establish a vertical layout inside
+the horizontal bank, preserve existing command IDs and expose additional geometry IDs. Source-tile
+names align left and empty filters give feedback. Source dialogs use bounded responsive layouts.
+Prepared widget/native geometry coverage is unrun; only formatting, diff and repository guards are
+permitted locally. New screenshots/build acceptance require hosted Windows. See ADR 0020.
+
 Current top-button behavior supersedes the manual workflow below: Fullscreen sends
 Program directly to a verified extended display. The arrow selects the monitor;
 F11 and dragging are unnecessary. Startup never opens Program output. The optional

@@ -1498,6 +1498,11 @@ impl RustMixApp {
     }
 
     fn toolbar(&mut self, ui: &mut egui::Ui) {
+        // Keep compact controls at the minimum viewport, with larger operator
+        // targets on production displays. Coordinates remain UI-local.
+        let expansion = ((ui.available_width() - 1080.0) / 500.0).clamp(0.0, 1.0);
+        let height = 22.0 + 6.0 * expansion;
+        let preset_width = 56.0 + 24.0 * expansion;
         ui.horizontal(|ui| {
             ui.spacing_mut().item_spacing.x = 3.0;
             let brand = ui
@@ -1509,7 +1514,7 @@ impl RustMixApp {
                     )
                     .fill(Color32::TRANSPARENT)
                     .stroke(Stroke::NONE)
-                    .min_size(egui::vec2(52.0, 22.0)),
+                    .min_size(egui::vec2(52.0, height)),
                 )
                 .on_hover_text(format!(
                     "{}\nClick for About RustMix",
@@ -1525,7 +1530,7 @@ impl RustMixApp {
                     .add_enabled(
                         self.job.is_none(),
                         egui::Button::new(RichText::new("New").strong())
-                            .min_size(egui::vec2(56.0, 22.0)),
+                            .min_size(egui::vec2(preset_width, height)),
                     )
                     .on_hover_text("New preset / project")
                     .clicked()
@@ -1536,7 +1541,7 @@ impl RustMixApp {
                 .add_enabled(
                     self.job.is_none(),
                     egui::Button::new(RichText::new("Open").strong())
-                        .min_size(egui::vec2(56.0, 22.0)),
+                        .min_size(egui::vec2(preset_width, height)),
                 )
                 .on_hover_text("Open preset · Ctrl+O")
                 .clicked()
@@ -1544,7 +1549,7 @@ impl RustMixApp {
                 self.actions.push(Action::Open);
             }
             ui.add_enabled_ui(self.job.is_none(), |ui| {
-                let open_menu = caret_menu_button(ui, 22.0, |ui| {
+                let open_menu = caret_menu_button(ui, height, |ui| {
                     if ui.button("Open project… · Ctrl+O").clicked() {
                         self.actions.push(Action::Open);
                         ui.close();
@@ -1572,7 +1577,7 @@ impl RustMixApp {
                 .add_enabled(
                     self.job.is_none(),
                     egui::Button::new(RichText::new("Save").strong())
-                        .min_size(egui::vec2(56.0, 22.0)),
+                        .min_size(egui::vec2(preset_width, height)),
                 )
                 .on_hover_text("Save · Ctrl+S")
                 .clicked()
@@ -1583,7 +1588,7 @@ impl RustMixApp {
                 .add_enabled(
                     self.job.is_none(),
                     egui::Button::new(RichText::new("Save As").strong())
-                        .min_size(egui::vec2(62.0, 22.0)),
+                        .min_size(egui::vec2(preset_width, height)),
                 )
                 .on_hover_text("Save a copy · Ctrl+Shift+S")
                 .clicked()
@@ -1591,7 +1596,7 @@ impl RustMixApp {
                 self.actions.push(Action::Save(true));
             }
             ui.add_enabled_ui(self.job.is_none(), |ui| {
-                let save_menu = caret_menu_button(ui, 22.0, |ui| {
+                let save_menu = caret_menu_button(ui, height, |ui| {
                     if ui.button("Save project · Ctrl+S").clicked() {
                         self.actions.push(Action::Save(false));
                         ui.close();
@@ -1614,7 +1619,7 @@ impl RustMixApp {
                     .add_enabled(
                         self.path.is_some() && self.job.is_none(),
                         egui::Button::new(RichText::new("Last").strong())
-                            .min_size(egui::vec2(52.0, 22.0)),
+                            .min_size(egui::vec2(52.0, height)),
                     )
                     .on_disabled_hover_text("Save or open a preset first")
                     .on_hover_text("Reload the most recently saved preset")
@@ -1622,7 +1627,8 @@ impl RustMixApp {
             {
                 self.actions.push(Action::Last);
             }
-            ui.add_space((ui.max_rect().width() * 0.48 - ui.cursor().left() - 48.0).max(4.0));
+            let fullscreen_anchor = ui.max_rect().left() + ui.max_rect().width() * 0.45;
+            ui.add_space((fullscreen_anchor - ui.cursor().left()).max(4.0));
             if !self.basic_mode {
                 let fullscreen = ui
                     .add(
@@ -1636,7 +1642,7 @@ impl RustMixApp {
                             })
                             .strong(),
                         )
-                        .min_size(egui::vec2(78.0, 22.0)),
+                        .min_size(egui::vec2(78.0 + 28.0 * expansion, height)),
                     )
                     .on_hover_text(
                         "Send Program fullscreen to the extended display; the operator window stays here",
@@ -1646,7 +1652,7 @@ impl RustMixApp {
                 if fullscreen.clicked() {
                     self.actions.push(Action::ProgramOutputExtend);
                 }
-                let menu = caret_menu_button(ui, 22.0, |ui| {
+                let menu = caret_menu_button(ui, height, |ui| {
                     self.extended_output_menu(ui);
                     ui.separator();
                     self.program_output_menu(ui);
@@ -1663,14 +1669,14 @@ impl RustMixApp {
                 if ui
                     .add(
                         egui::Button::new(RichText::new("?").strong())
-                            .min_size(egui::vec2(22.0, 22.0)),
+                            .min_size(egui::vec2(22.0, height)),
                     )
                     .on_hover_text("About RustMix")
                     .clicked()
                 {
                     self.actions.push(Action::About);
                 }
-                let settings_menu = caret_menu_button(ui, 22.0, |ui| {
+                let settings_menu = caret_menu_button(ui, height, |ui| {
                     for (label, page) in [
                         ("Display…", SettingsPage::Display),
                         ("Outputs / NDI / OMT / SRT…", SettingsPage::Outputs),
@@ -1703,7 +1709,7 @@ impl RustMixApp {
                 let settings = ui
                     .add(
                         egui::Button::new(RichText::new("Settings").strong())
-                            .min_size(egui::vec2(64.0, 22.0)),
+                            .min_size(egui::vec2(64.0 + 18.0 * expansion, height)),
                     )
                     .on_hover_text("Open Settings");
                 self.automation
@@ -1718,36 +1724,39 @@ impl RustMixApp {
                                 .strong(),
                         )
                         .selected(self.basic_mode)
-                        .min_size(egui::vec2(54.0, 22.0)),
+                        .min_size(egui::vec2(54.0 + 20.0 * expansion, height)),
                     )
                     .on_hover_text("Show Basic or Advanced operator controls");
                 self.automation.insert("toolbar.basic".into(), mode.rect);
                 if mode.clicked() {
                     self.actions.push(Action::BasicMode);
                 }
-                if !self.basic_mode
-                    && ui
-                        .add(
+                if !self.basic_mode {
+                    let pause = ui.add(
                             egui::Button::new(RichText::new("Pause Inputs").strong())
                                 .selected(self.engine.inputs_paused())
-                                .min_size(egui::vec2(84.0, 22.0)),
+                                .min_size(egui::vec2(84.0 + 16.0 * expansion, height)),
                         )
-                        .on_hover_text("Freeze input motion while keeping switching active")
-                        .clicked()
-                {
-                    self.actions.push(Action::PauseDemo);
+                        .on_hover_text("Freeze input motion while keeping switching active");
+                    self.automation.insert("toolbar.pause".into(), pause.rect);
+                    if pause.clicked() {
+                        self.actions.push(Action::PauseDemo);
+                    }
                 }
             });
         });
     }
 
     fn production_toolbar(&mut self, ui: &mut egui::Ui) {
+        let expansion = ((ui.available_width() - 1080.0) / 500.0).clamp(0.0, 1.0);
+        let height = 24.0 + 6.0 * expansion;
+        let group_gap = 10.0 + 22.0 * expansion;
         ui.horizontal(|ui| {
             ui.spacing_mut().item_spacing.x = 3.0;
             let add = ui
                 .add(
                     egui::Button::new(RichText::new("Add Input").strong())
-                        .min_size(egui::vec2(72.0, 24.0)),
+                        .min_size(egui::vec2(72.0, height)),
                 )
                 .on_hover_text("Open Input Select · Ctrl+I");
             self.automation.insert("production.add".into(), add.rect);
@@ -1756,11 +1765,11 @@ impl RustMixApp {
             }
             if self.basic_mode {
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    self.workspace_lock(ui);
+                    self.workspace_lock(ui, height);
                 });
                 return;
             }
-            let caret = caret_menu_button(ui, 24.0, |ui| {
+            let caret = caret_menu_button(ui, height, |ui| {
                 for (idx, (label, kind)) in [
                     ("Generators / PNG", InputKind::Grid),
                     ("Moving shapes", InputKind::Geometry),
@@ -1785,11 +1794,11 @@ impl RustMixApp {
             caret
                 .response
                 .on_hover_text("Quick input category selector");
-            ui.add_space(10.0);
+            ui.add_space(group_gap);
 
             // 1. Record: [ ⚙ | Record ]
             let rec_gear =
-                vector_icon_button(ui, VectorIcon::Gear, egui::vec2(26.0, 24.0), false, None)
+                vector_icon_button(ui, VectorIcon::Gear, egui::vec2(26.0, height), false, None)
                     .on_hover_text("Open Recording Setup");
             self.automation
                 .insert("output.record.settings".into(), rec_gear.rect);
@@ -1806,8 +1815,8 @@ impl RustMixApp {
             } else {
                 "Record".into()
             };
-            let mut rec_btn_w =
-                egui::Button::new(RichText::new(rec_lbl).strong()).min_size(egui::vec2(68.0, 24.0));
+            let mut rec_btn_w = egui::Button::new(RichText::new(rec_lbl).strong())
+                .min_size(egui::vec2(68.0, height));
             if self.rec_active {
                 rec_btn_w = rec_btn_w.fill(Color32::from_rgb(200, 30, 30));
             }
@@ -1818,11 +1827,11 @@ impl RustMixApp {
             if rec_btn.clicked() {
                 self.actions.push(Action::ToggleRecordSim);
             }
-            ui.add_space(10.0);
+            ui.add_space(group_gap);
 
             // 2. External: [ ⚙ | External ]
             let ext_gear =
-                vector_icon_button(ui, VectorIcon::Gear, egui::vec2(26.0, 24.0), false, None)
+                vector_icon_button(ui, VectorIcon::Gear, egui::vec2(26.0, height), false, None)
                     .on_hover_text("Configure external output routes (no output backend)");
             self.automation
                 .insert("output.external.settings".into(), ext_gear.rect);
@@ -1839,7 +1848,7 @@ impl RustMixApp {
                 })
                 .strong(),
             )
-            .min_size(egui::vec2(66.0, 24.0));
+            .min_size(egui::vec2(66.0, height));
             if self.external_active {
                 ext_btn_w = ext_btn_w.fill(Color32::from_rgb(200, 30, 30));
             }
@@ -1851,11 +1860,11 @@ impl RustMixApp {
             if ext_btn.clicked() {
                 self.actions.push(Action::ToggleExternalSim);
             }
-            ui.add_space(10.0);
+            ui.add_space(group_gap);
 
             // 3. Stream: [ ⚙ | Stream | ▾ ]
             let stm_gear =
-                vector_icon_button(ui, VectorIcon::Gear, egui::vec2(26.0, 24.0), false, None)
+                vector_icon_button(ui, VectorIcon::Gear, egui::vec2(26.0, height), false, None)
                     .on_hover_text("Open Streaming Settings");
             self.automation
                 .insert("output.stream.settings".into(), stm_gear.rect);
@@ -1872,8 +1881,8 @@ impl RustMixApp {
             } else {
                 "Stream".into()
             };
-            let mut stm_btn_w =
-                egui::Button::new(RichText::new(stm_lbl).strong()).min_size(egui::vec2(64.0, 24.0));
+            let mut stm_btn_w = egui::Button::new(RichText::new(stm_lbl).strong())
+                .min_size(egui::vec2(64.0, height));
             if self.stream_active {
                 stm_btn_w = stm_btn_w.fill(Color32::from_rgb(200, 30, 30));
             }
@@ -1884,7 +1893,7 @@ impl RustMixApp {
             if stm_btn.clicked() {
                 self.actions.push(Action::ToggleStreamSim);
             }
-            caret_menu_button(ui, 24.0, |ui| {
+            caret_menu_button(ui, height, |ui| {
                 for ch in 1..=3 {
                     if ui.button(format!("Destination {ch} Settings…")).clicked() {
                         self.stream_channel = ch;
@@ -1893,11 +1902,11 @@ impl RustMixApp {
                     }
                 }
             });
-            ui.add_space(10.0);
+            ui.add_space(group_gap);
 
             // 4. MultiCorder: [ ⚙ | MultiCorder ]
             let mc_gear =
-                vector_icon_button(ui, VectorIcon::Gear, egui::vec2(26.0, 24.0), false, None)
+                vector_icon_button(ui, VectorIcon::Gear, egui::vec2(26.0, height), false, None)
                     .on_hover_text("Open MultiCorder");
             self.automation
                 .insert("output.multicorder.settings".into(), mc_gear.rect);
@@ -1905,7 +1914,7 @@ impl RustMixApp {
                 self.actions.push(Action::MultiCorder);
             }
             let mut mc_btn_w = egui::Button::new(RichText::new("MultiCorder").strong())
-                .min_size(egui::vec2(82.0, 24.0));
+                .min_size(egui::vec2(82.0, height));
             if self.mc_running {
                 mc_btn_w = mc_btn_w.fill(PROGRAM);
             }
@@ -1915,11 +1924,11 @@ impl RustMixApp {
             if mc_btn.clicked() {
                 self.actions.push(Action::MultiCorder);
             }
-            ui.add_space(10.0);
+            ui.add_space(group_gap);
 
             // 5. PlayList: [ ⚙ | PlayList ]
             let pl_gear =
-                vector_icon_button(ui, VectorIcon::Gear, egui::vec2(26.0, 24.0), false, None)
+                vector_icon_button(ui, VectorIcon::Gear, egui::vec2(26.0, height), false, None)
                     .on_hover_text("Open PlayList");
             self.automation
                 .insert("output.playlist.settings".into(), pl_gear.rect);
@@ -1934,7 +1943,7 @@ impl RustMixApp {
                 })
                 .strong(),
             )
-            .min_size(egui::vec2(68.0, 24.0));
+            .min_size(egui::vec2(68.0, height));
             if self.engine.playlist_run().is_some() {
                 pl_btn_w = pl_btn_w.fill(PROGRAM);
             }
@@ -1953,17 +1962,22 @@ impl RustMixApp {
             // Right-side modern vector icon cluster
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 ui.spacing_mut().item_spacing.x = 3.0;
-                self.workspace_lock(ui);
-                let snap =
-                    vector_icon_button(ui, VectorIcon::Camera, egui::vec2(26.0, 24.0), false, None)
-                        .on_hover_text("Save Program snapshot to PNG");
+                self.workspace_lock(ui, height);
+                let snap = vector_icon_button(
+                    ui,
+                    VectorIcon::Camera,
+                    egui::vec2(26.0, height),
+                    false,
+                    None,
+                )
+                .on_hover_text("Save Program snapshot to PNG");
                 if snap.clicked() {
                     self.actions.push(Action::Snapshot);
                 }
                 let mv = vector_icon_button(
                     ui,
                     VectorIcon::Grid,
-                    egui::vec2(26.0, 24.0),
+                    egui::vec2(26.0, height),
                     self.multiview,
                     None,
                 )
@@ -1974,7 +1988,7 @@ impl RustMixApp {
                 }
                 // Colored audio bar icon button
                 let (audio_rect, audio_resp) =
-                    ui.allocate_exact_size(egui::vec2(26.0, 24.0), Sense::click());
+                    ui.allocate_exact_size(egui::vec2(26.0, height), Sense::click());
                 ui.painter().rect_filled(audio_rect, 4.0, CHIP_BG);
                 ui.painter().rect_stroke(
                     audio_rect,
@@ -1992,7 +2006,7 @@ impl RustMixApp {
                 {
                     let bx = audio_rect.left() + 6.0 + idx as f32 * 5.0;
                     let bar = egui::Rect::from_min_max(
-                        egui::pos2(bx, audio_rect.bottom() - 4.0 - 14.0 * h),
+                        egui::pos2(bx, audio_rect.bottom() - 4.0 - (height - 10.0) * h),
                         egui::pos2(bx + 3.5, audio_rect.bottom() - 4.0),
                     );
                     ui.painter().rect_filled(bar, 1.0, col);
@@ -2008,7 +2022,7 @@ impl RustMixApp {
                 let sc_btn = vector_icon_button(
                     ui,
                     VectorIcon::Sliders,
-                    egui::vec2(26.0, 24.0),
+                    egui::vec2(26.0, height),
                     self.shortcuts_open,
                     None,
                 )
@@ -2021,7 +2035,7 @@ impl RustMixApp {
                 let overlay_btn = ui
                     .add(
                         egui::Button::new(RichText::new("Overlay").strong())
-                            .min_size(egui::vec2(64.0, 24.0)),
+                            .min_size(egui::vec2(64.0, height)),
                     )
                     .on_hover_text("Open Overlay Settings");
                 self.automation
@@ -2035,11 +2049,11 @@ impl RustMixApp {
         });
     }
 
-    fn workspace_lock(&mut self, ui: &mut egui::Ui) {
+    fn workspace_lock(&mut self, ui: &mut egui::Ui, height: f32) {
         let lock = vector_icon_button(
             ui,
             VectorIcon::Lock(self.ui_locked),
-            egui::vec2(26.0, 24.0),
+            egui::vec2(26.0, height),
             self.ui_locked,
             None,
         )

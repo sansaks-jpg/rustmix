@@ -1,5 +1,11 @@
 # Known gaps
 
+2026-10-20 UI-020: larger responsive toolbar targets and a corrected vertical mixer layout are
+source candidates. Source dialog geometry and truthful staged fields are included in this increment.
+Exact-patch compilation, regression execution, desktop captures and visual acceptance remain pending.
+Full UI equivalence, accessibility/device delivery, all source types and production output readiness
+remain open. No reference vendor artwork or proprietary implementation was imported. See ADR 0020.
+
 Task 1.3 continuation (2026-10-19): four external-output configuration slots and staged editing
 are implemented in source, with schema 6 and atomic source/config changes. New regression tests
 are prepared, not executed in this session. G05 remains open: configuration is not an SDI,

@@ -1,5 +1,15 @@
 # Native UI architecture
 
+## UI-020 operator layout candidate
+
+Toolbar target heights interpolate between compact 22/24 logical points and 28/30 on wider
+production displays; the Fullscreen anchor is relative to the panel's left edge. Mixer strip
+frames explicitly establish a vertical child under the horizontal channel bank. Additional strip,
+header, gain, mute, solo and meter IDs support geometry assertions without changing engine APIs.
+Dialog dimensions remain viewport-bounded with independently scrolling bodies and fixed footers.
+Source screenshots and static checks inform the patch; native appearance is not accepted until
+exact-patch hosted screenshots are inspected. See ADR 0020.
+
 Task 1.3 source update (2026-10-19): the External gear directly opens a bounded editor with
 four independent drafts. The engine owns persisted output routes/configuration and atomic Apply;
 Apply stores the selected slot and leaves other drafts staged, while Cancel discards unapplied

@@ -1,5 +1,10 @@
 # Roadmap
 
+- UI-020 candidate (2026-10-20): refine the operator toolbar, source tiles/mixer and source dialogs
+  against observed screenshots in rustmix-reference. Preserve engine-owned commands and independent
+  Preview/Program. Local format/repository guards only; hosted build/tests/native screenshot review
+  remain required. This is an incremental UI correction, not full reference acceptance. See ADR 0020.
+
 - Task 1.3 continuation (2026-10-19): finish the existing four-slot external-output configuration
   slice, atomic source/config Apply, preserved drafts, schema-6 migration and validation tests.
   Source implementation only; new hosted build/test/native acceptance pending. No hardware or

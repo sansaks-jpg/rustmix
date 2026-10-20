@@ -938,7 +938,70 @@ impl RustMixApp {
         }
         Ok(())
     }
+    fn validate_toolbar_geometry(&self, right: f32) -> Result<()> {
+        let mut top = vec![
+            "toolbar.brand",
+            "toolbar.settings",
+            "toolbar.settings.menu",
+            "toolbar.basic",
+        ];
+        if !self.basic_mode {
+            top.extend(["toolbar.fullscreen", "output.program.menu", "toolbar.pause"]);
+        }
+        let production = if self.basic_mode {
+            vec!["production.add", "output.lock"]
+        } else {
+            vec![
+                "production.add",
+                "output.record.settings",
+                "output.record",
+                "output.external.settings",
+                "output.external",
+                "output.stream.settings",
+                "output.stream",
+                "output.multicorder.settings",
+                "output.multicorder",
+                "output.playlist.settings",
+                "output.playlist",
+                "output.overlay",
+                "output.shortcuts",
+                "output.audioPane",
+                "output.multiview",
+                "output.lock",
+            ]
+        };
+        for row in [&top[..], &production[..]] {
+            for (index, id) in row.iter().enumerate() {
+                let rect = self
+                    .automation
+                    .get(*id)
+                    .ok_or_else(|| Error::Invalid(format!("Missing toolbar control: {id}")))?;
+                if !rect.is_finite()
+                    || rect.left() < 0.0
+                    || rect.right() > right
+                    || rect.height() < 21.0
+                {
+                    return Err(Error::Invalid(format!(
+                        "Toolbar target is clipped: {id} {rect:?}"
+                    )));
+                }
+                for other in row.iter().skip(index + 1) {
+                    if self
+                        .automation
+                        .get(*other)
+                        .is_some_and(|next| rect.intersects(*next))
+                    {
+                        return Err(Error::Invalid(format!(
+                            "Toolbar controls overlap: {id} / {other}"
+                        )));
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
     fn validate_monitor_geometry(&self, right: f32) -> Result<()> {
+        self.validate_toolbar_geometry(right)?;
         let preview = self
             .automation
             .get("monitor.preview")
@@ -1214,6 +1277,34 @@ mod tests {
             ..Default::default()
         };
         let _ = ctx.run_ui(raw, |ui| app.frame_ui(ui));
+    }
+    #[test]
+    fn operator_toolbars_resize_without_clipping_or_switching_buses() {
+        for size in [[1100.0, 700.0], [1600.0, 900.0], [1920.0, 1200.0]] {
+            let mut app = RustMixApp::headless();
+            let ctx = egui::Context::default();
+            app.theme(&ctx);
+            for _ in 0..4 {
+                frame(&mut app, &ctx, vec![], size);
+            }
+            app.validate_toolbar_geometry(size[0]).unwrap();
+            let height = app.automation["toolbar.settings"].height();
+            if size[0] >= 1600.0 {
+                assert!(height >= 27.0, "Production display needs larger targets");
+                assert!(app.automation["production.add"].height() >= 29.0);
+            }
+            let program = app.engine.project().program;
+            let preview = app.engine.project().preview;
+            click(&mut app, &ctx, "toolbar.pause", size);
+            assert!(app.engine.inputs_paused());
+            assert_eq!(app.engine.project().program, program);
+            assert_eq!(app.engine.project().preview, preview);
+            click(&mut app, &ctx, "toolbar.pause", size);
+            assert!(!app.engine.inputs_paused());
+            click(&mut app, &ctx, "toolbar.basic", size);
+            frame(&mut app, &ctx, vec![], size);
+            app.validate_toolbar_geometry(size[0]).unwrap();
+        }
     }
     fn click(app: &mut RustMixApp, ctx: &egui::Context, id: &str, size: [f32; 2]) {
         // A newly shown Window has an initial sizing pass. Use fresh stable

@@ -1,5 +1,18 @@
 # Verification
 
+## UI-020 verification candidate (2026-10-20)
+
+Local verification is restricted to formatting, diff inspection and repository/reference inventory
+guards. The new toolbar regression renders Advanced/Basic at 1100x700, 1600x900 and 1920x1200,
+checks visible targets for clipping/overlap and clicks Pause Inputs without exchanging Preview/Program.
+The existing native monitor-geometry gate now checks toolbar target bounds/overlap too. Mixer widget
+regressions exercise vertical strip geometry under a horizontal parent and the real mute widget's
+typed command without switching buses. Source-dialog regressions cover the changed staged controls.
+These tests are prepared, not executed. Required acceptance: locked workspace check, Clippy with
+warnings denied, all-target tests, release build and native smoke on the exact patch, followed by
+inspection of workspace/dialog PNGs at the supported sizes. Existing screenshots describe the old
+revision; they do not verify UI-020. No local executable build or launch was performed.
+
 ## Task 1.3 prepared acceptance (2026-10-19)
 
 The external-output source change requires engine tests for atomic complete-slot Apply, rejected

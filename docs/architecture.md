@@ -1,5 +1,10 @@
 # Workspace architecture
 
+2026-10-20 UI-020: operator layout changes stay in ui-egui. Toolbar sizing and channel orientation
+are presentation concerns; input/audio/category mutations continue through typed engine commands.
+No crate, dependency, project-schema or platform-backend change is introduced. Hosted acceptance
+of this source candidate remains pending. See ADR 0020.
+
 2026-10-19 continuation: schema 7 adds typed audio-only WAV/microphone descriptors. Portable
 `engine::audio_engine` renders actual fixed 48 kHz stereo blocks with Master/A/B and guest returns;
 `engine::wav` validates PCM16/float32 RIFF data. `rustmix-platform` encapsulates Windows WASAPI

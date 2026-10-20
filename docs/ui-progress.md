@@ -1,5 +1,20 @@
 # UI milestone progress
 
+## 2026-10-20 — UI-020 operator layout refinement (candidate)
+
+Inspected local observed UI evidence: rustmix-reference/vmix/UI-UX.md and main-window screenshot,
+plus source-dialog references and existing RustMix artifact screenshots. The repository inventory
+reports 30 areas, 40 input types, 20 effects, 16 overlay/stinger channels, 9 audio destinations and
+777 unique shortcut names. These counts describe reference breadth, not implemented backend support.
+Only observed UI behavior/layout informed this change; no vendor binary, resources, reverse-
+engineered implementation or reference code was imported.
+
+Parallel work used separate detached worktrees for panels.rs and dialogs.rs, with the root owning
+toolbars and integration. Existing unrelated documentation changes were preserved. Changes and
+acceptance limits are recorded in ADR 0020. Local formatting/repository/diff verification is allowed;
+new compilation, widget tests, native captures and visual acceptance are pending hosted Windows.
+The goal of full UI/UX and feature correspondence remains incomplete.
+
 ## Task 1.3 continuation — four external-output configuration slots (2026-10-19)
 
 Continued the pre-existing uncommitted engine/UI output work. Three sub-agents handled a

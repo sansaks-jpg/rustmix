@@ -1,5 +1,11 @@
 # Feature matrix
 
+## UI-020 operator layout candidate (2026-10-20)
+
+| Feature | Status | Scope | Test evidence | Platform | Hardware tested | Known limitations | Last verified date | Owner/task ID |
+|---|---|---|---|---|---|---|---|---|
+| Operator layout refinement | experimental; source candidate | Responsive toolbar targets, vertical mixer channels, source-tile readability, bounded source dialogs | Formatting/repository guards and source review only; widget/native regressions prepared, unrun | Windows target | None for this patch | Exact-patch build, native screenshot comparison and full reference equivalence pending; unavailable backends remain unavailable | 2026-10-20 static checks only | UI-020 / ADR 0020 |
+
 ## Task 1.3 source continuation (2026-10-19; runtime acceptance pending)
 
 | Feature | Status | Scope | Test evidence | Platform | Hardware tested | Known limitations / failure behavior | Last verified date | Owner/task ID |

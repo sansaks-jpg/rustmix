@@ -1028,6 +1028,10 @@ impl RustMixApp {
                 let tile_w =
                     ((width - (columns.saturating_sub(1) as f32) * 6.0) / columns as f32).max(175.0);
                 let inner_w = (tile_w - 4.0).max(165.0);
+                if filtered.is_empty() {
+                    ui.add_space(8.0);
+                    ui.label(RichText::new("No inputs match this category or search.").color(DIM));
+                }
                 for row in filtered.chunks(columns) {
                     ui.horizontal_top(|ui| {
                         ui.spacing_mut().item_spacing.x = 6.0;
@@ -1089,6 +1093,7 @@ impl RustMixApp {
                                                                     .strong()
                                                                     .color(Color32::WHITE),
                                                                 )
+                                                                .halign(egui::Align::Min)
                                                                 .truncate(),
                                                             );
                                                             ui.with_layout(
@@ -1545,202 +1550,226 @@ impl RustMixApp {
         let before = a.clone();
         let is_master = input_id.is_none();
         let header_fill = if !a.muted { PROGRAM } else { CHIP_BG };
-        ui.push_id(id, |ui| {
-            egui::Frame::new()
+        ui.push_id(&id, |ui| {
+            let strip = egui::Frame::new()
                 .fill(Color32::from_rgb(20, 25, 32))
                 .corner_radius(4.0)
                 .stroke(Stroke::new(1.0, Color32::from_rgb(52, 62, 74)))
                 .inner_margin(2.0)
                 .show(ui, |ui| {
-                    ui.set_width(76.0);
-                    ui.set_min_height(height - 4.0);
-                    egui::Frame::new()
-                        .fill(header_fill)
-                        .corner_radius(egui::CornerRadius {
-                            nw: 3,
-                            ne: 3,
-                            sw: 0,
-                            se: 0,
-                        })
-                        .inner_margin(egui::Margin::symmetric(4, 2))
-                        .show(ui, |ui| {
-                            ui.set_width(68.0);
-                            ui.vertical_centered(|ui| {
-                                ui.add(
-                                    egui::Label::new(
-                                        RichText::new(name).small().strong().color(Color32::WHITE),
-                                    )
-                                    .truncate(),
-                                );
+                    // The mixer bank is horizontal; Frame inherits that layout.
+                    // Each channel must establish its own vertical signal strip.
+                    ui.vertical(|ui| {
+                        ui.set_width(76.0);
+                        ui.set_min_height(height - 4.0);
+                        let header = egui::Frame::new()
+                            .fill(header_fill)
+                            .corner_radius(egui::CornerRadius {
+                                nw: 3,
+                                ne: 3,
+                                sw: 0,
+                                se: 0,
+                            })
+                            .inner_margin(egui::Margin::symmetric(4, 2))
+                            .show(ui, |ui| {
+                                ui.set_width(68.0);
+                                ui.vertical_centered(|ui| {
+                                    ui.add(
+                                        egui::Label::new(
+                                            RichText::new(name)
+                                                .small()
+                                                .strong()
+                                                .color(Color32::WHITE),
+                                        )
+                                        .truncate(),
+                                    );
+                                });
                             });
-                        });
-                    ui.add_space(4.0);
-                    let fader_h = (height - 58.0).max(68.0);
-                    ui.horizontal_top(|ui| {
-                        ui.spacing_mut().item_spacing.x = 3.0;
-                        // Left button column inside strip: [Gear], [i / S], [Speaker]
-                        ui.vertical(|ui| {
-                            ui.spacing_mut().item_spacing.y = 4.0;
-                            ui.add_space(8.0);
-                            let gear = vector_icon_button(
-                                ui,
-                                VectorIcon::Gear,
-                                egui::vec2(22.0, 22.0),
-                                false,
-                                None,
-                            )
-                            .on_hover_text("Audio Settings");
-                            if let Some(source_id) = input_id {
-                                self.automation.insert(
-                                    format!("audio.input.{}.settings", source_id.0),
-                                    gear.rect,
-                                );
-                                if gear.clicked() {
-                                    self.selected_audio = Some(source_id);
-                                    self.actions.push(Action::InputAudio(source_id));
-                                }
-                            } else if gear.clicked() {
-                                self.actions.push(Action::SettingsAt(SettingsPage::Audio));
-                            }
-                            ui.add_space(12.0);
-                            if is_master {
-                                let info = ui
-                                    .add(
-                                        egui::Button::new(RichText::new("i").strong().size(11.0))
-                                            .min_size(egui::vec2(22.0, 20.0)),
-                                    )
-                                    .on_hover_text("Master Audio Outputs");
-                                if info.clicked() {
-                                    self.actions
-                                        .push(Action::SettingsAt(SettingsPage::AudioOutputs));
-                                }
-                            } else {
-                                let solo = ui.add(
-                                    egui::Button::new(RichText::new("S").strong().size(11.0))
-                                        .selected(a.solo)
-                                        .min_size(egui::vec2(22.0, 20.0)),
-                                );
-                                if solo.clicked() {
-                                    a.solo = !a.solo;
-                                }
-                            }
-                            let spk = vector_icon_button(
-                                ui,
-                                VectorIcon::Speaker(!a.muted),
-                                egui::vec2(22.0, 22.0),
-                                !a.muted,
-                                Some(if a.muted { CHIP_BG } else { PROGRAM }),
-                            )
-                            .on_hover_text("Mute / Unmute channel");
-                            if spk.clicked() {
-                                a.muted = !a.muted;
-                            }
-                        });
-                        // Right column inside strip: vertical fader with scale ticks + stereo level meter
-                        let fader = ui
-                            .add_sized(
-                                [24.0, fader_h],
-                                egui::Slider::new(&mut a.gain_db, -60.0..=12.0)
-                                    .vertical()
-                                    .show_value(false),
-                            )
-                            .on_hover_text(audio::gain_label(&a));
-                        for step in 0..=10 {
-                            let y = egui::lerp(
-                                (fader.rect.top() + 6.0)..=(fader.rect.bottom() - 6.0),
-                                step as f32 / 10.0,
-                            );
-                            ui.painter().hline(
-                                (fader.rect.left() + 1.0)..=(fader.rect.left() + 4.0),
-                                y,
-                                Stroke::new(1.0, Color32::from_gray(190)),
-                            );
-                            ui.painter().hline(
-                                (fader.rect.right() - 4.0)..=(fader.rect.right() - 1.0),
-                                y,
-                                Stroke::new(1.0, Color32::from_gray(190)),
-                            );
-                        }
-                        if is_master {
-                            self.automation
-                                .insert("audio.MASTER.gain".into(), fader.rect);
-                        }
                         self.automation
-                            .insert(format!("audio.{name}.gain"), fader.rect);
-                        let (meter_rect, _) =
-                            ui.allocate_exact_size(egui::vec2(14.0, fader_h), Sense::hover());
-                        ui.painter()
-                            .rect_filled(meter_rect, 2.0, Color32::from_rgb(10, 14, 18));
-                        for (ch, peak) in peaks.into_iter().enumerate() {
-                            let frac = ((audio::db(peak) + 60.0) / 60.0).clamp(0.0, 1.0);
-                            let x = meter_rect.left() + 1.5 + ch as f32 * 6.0;
-                            let fill = Rect::from_min_max(
-                                egui::pos2(x, meter_rect.bottom() - meter_rect.height() * frac),
-                                egui::pos2(x + 4.5, meter_rect.bottom()),
-                            );
-                            ui.painter().rect_filled(
-                                fill,
-                                1.0,
-                                if peak >= 1.0 {
-                                    RED
+                            .insert(format!("audio.{id}.header"), header.response.rect);
+                        ui.add_space(4.0);
+                        let fader_h = (height - 58.0).max(68.0);
+                        ui.horizontal_top(|ui| {
+                            ui.spacing_mut().item_spacing.x = 3.0;
+                            // Left button column inside strip: [Gear], [i / S], [Speaker]
+                            ui.vertical(|ui| {
+                                ui.spacing_mut().item_spacing.y = 4.0;
+                                ui.add_space(8.0);
+                                let gear = vector_icon_button(
+                                    ui,
+                                    VectorIcon::Gear,
+                                    egui::vec2(22.0, 22.0),
+                                    false,
+                                    None,
+                                )
+                                .on_hover_text("Audio Settings");
+                                if let Some(source_id) = input_id {
+                                    self.automation.insert(
+                                        format!("audio.input.{}.settings", source_id.0),
+                                        gear.rect,
+                                    );
+                                    if gear.clicked() {
+                                        self.selected_audio = Some(source_id);
+                                        self.actions.push(Action::InputAudio(source_id));
+                                    }
+                                } else if gear.clicked() {
+                                    self.actions.push(Action::SettingsAt(SettingsPage::Audio));
+                                }
+                                ui.add_space(12.0);
+                                if is_master {
+                                    let info = ui
+                                        .add(
+                                            egui::Button::new(
+                                                RichText::new("i").strong().size(11.0),
+                                            )
+                                            .min_size(egui::vec2(22.0, 20.0)),
+                                        )
+                                        .on_hover_text("Master Audio Outputs");
+                                    if info.clicked() {
+                                        self.actions
+                                            .push(Action::SettingsAt(SettingsPage::AudioOutputs));
+                                    }
                                 } else {
-                                    Color32::from_rgb(35, 195, 65)
-                                },
+                                    let solo = ui.add(
+                                        egui::Button::new(RichText::new("S").strong().size(11.0))
+                                            .selected(a.solo)
+                                            .min_size(egui::vec2(22.0, 20.0)),
+                                    );
+                                    self.automation
+                                        .insert(format!("audio.{id}.solo"), solo.rect);
+                                    if solo.clicked() {
+                                        a.solo = !a.solo;
+                                    }
+                                }
+                                let spk = vector_icon_button(
+                                    ui,
+                                    VectorIcon::Speaker(!a.muted),
+                                    egui::vec2(22.0, 22.0),
+                                    !a.muted,
+                                    Some(if a.muted { CHIP_BG } else { PROGRAM }),
+                                )
+                                .on_hover_text("Mute / Unmute channel");
+                                self.automation.insert(format!("audio.{id}.mute"), spk.rect);
+                                if spk.clicked() {
+                                    a.muted = !a.muted;
+                                }
+                            });
+                            // Right column inside strip: vertical fader with scale ticks + stereo level meter
+                            let fader = ui
+                                .add_sized(
+                                    [24.0, fader_h],
+                                    egui::Slider::new(&mut a.gain_db, -60.0..=12.0)
+                                        .vertical()
+                                        .show_value(false),
+                                )
+                                .on_hover_text(audio::gain_label(&a));
+                            self.automation
+                                .insert(format!("audio.{id}.gain"), fader.rect);
+                            for step in 0..=10 {
+                                let y = egui::lerp(
+                                    (fader.rect.top() + 6.0)..=(fader.rect.bottom() - 6.0),
+                                    step as f32 / 10.0,
+                                );
+                                ui.painter().hline(
+                                    (fader.rect.left() + 1.0)..=(fader.rect.left() + 4.0),
+                                    y,
+                                    Stroke::new(1.0, Color32::from_gray(190)),
+                                );
+                                ui.painter().hline(
+                                    (fader.rect.right() - 4.0)..=(fader.rect.right() - 1.0),
+                                    y,
+                                    Stroke::new(1.0, Color32::from_gray(190)),
+                                );
+                            }
+                            if is_master {
+                                self.automation
+                                    .insert("audio.MASTER.gain".into(), fader.rect);
+                            }
+                            self.automation
+                                .insert(format!("audio.{name}.gain"), fader.rect);
+                            let (meter_rect, _) =
+                                ui.allocate_exact_size(egui::vec2(14.0, fader_h), Sense::hover());
+                            self.automation
+                                .insert(format!("audio.{id}.meter"), meter_rect);
+                            ui.painter().rect_filled(
+                                meter_rect,
+                                2.0,
+                                Color32::from_rgb(10, 14, 18),
                             );
-                        }
-                    });
-                    // Bottom row inside strip: vector headphone + rotary dial on Master, or M/A/B bus buttons on Inputs
-                    ui.horizontal(|ui| {
-                        if is_master {
-                            ui.add_space(8.0);
-                            let (hp_rect, _) =
-                                ui.allocate_exact_size(egui::vec2(18.0, 18.0), Sense::hover());
-                            paint_vector_icon(
-                                ui.painter(),
-                                hp_rect,
-                                VectorIcon::Headphones,
-                                Color32::WHITE,
-                            );
-                            let (dial, dial_resp) = ui.allocate_exact_size(
-                                egui::vec2(18.0, 18.0),
-                                Sense::click_and_drag(),
-                            );
-                            let dial_resp = dial_resp.on_hover_text(
+                            for (ch, peak) in peaks.into_iter().enumerate() {
+                                let frac = ((audio::db(peak) + 60.0) / 60.0).clamp(0.0, 1.0);
+                                let x = meter_rect.left() + 1.5 + ch as f32 * 6.0;
+                                let fill = Rect::from_min_max(
+                                    egui::pos2(x, meter_rect.bottom() - meter_rect.height() * frac),
+                                    egui::pos2(x + 4.5, meter_rect.bottom()),
+                                );
+                                ui.painter().rect_filled(
+                                    fill,
+                                    1.0,
+                                    if peak >= 1.0 {
+                                        RED
+                                    } else {
+                                        Color32::from_rgb(35, 195, 65)
+                                    },
+                                );
+                            }
+                        });
+                        // Bottom row inside strip: vector headphone + rotary dial on Master, or M/A/B bus buttons on Inputs
+                        ui.horizontal(|ui| {
+                            if is_master {
+                                ui.add_space(8.0);
+                                let (hp_rect, _) =
+                                    ui.allocate_exact_size(egui::vec2(18.0, 18.0), Sense::hover());
+                                paint_vector_icon(
+                                    ui.painter(),
+                                    hp_rect,
+                                    VectorIcon::Headphones,
+                                    Color32::WHITE,
+                                );
+                                let (dial, dial_resp) = ui.allocate_exact_size(
+                                    egui::vec2(18.0, 18.0),
+                                    Sense::click_and_drag(),
+                                );
+                                let dial_resp = dial_resp.on_hover_text(
                                 "Visual demonstration only; headphone audio output is unavailable",
                             );
-                            if dial_resp.dragged() {
-                                self.monitor_level = (self.monitor_level
-                                    - dial_resp.drag_delta().y * 0.01)
-                                    .clamp(0.0, 1.0);
-                            }
-                            ui.painter().circle_filled(
-                                dial.center(),
-                                8.0,
-                                Color32::from_rgb(52, 62, 74),
-                            );
-                            ui.painter().circle_stroke(
-                                dial.center(),
-                                8.0,
-                                Stroke::new(1.0, Color32::from_rgb(30, 36, 44)),
-                            );
-                            let ang = -std::f32::consts::FRAC_PI_4 * 3.0
-                                + self.monitor_level * std::f32::consts::FRAC_PI_2 * 3.0;
-                            ui.painter().line_segment(
-                                [
+                                if dial_resp.dragged() {
+                                    self.monitor_level = (self.monitor_level
+                                        - dial_resp.drag_delta().y * 0.01)
+                                        .clamp(0.0, 1.0);
+                                }
+                                ui.painter().circle_filled(
                                     dial.center(),
-                                    dial.center() + egui::vec2(ang.cos() * 6.0, ang.sin() * 6.0),
-                                ],
-                                Stroke::new(1.5, TEAL),
-                            );
-                        } else {
-                            ui.spacing_mut().item_spacing.x = 2.0;
-                            ui.spacing_mut().button_padding = egui::vec2(3.0, 1.0);
-                            for (v, label) in a.sends.iter_mut().zip(["M", "A", "B"]) {
-                                ui.toggle_value(v, RichText::new(label).size(10.0));
+                                    8.0,
+                                    Color32::from_rgb(52, 62, 74),
+                                );
+                                ui.painter().circle_stroke(
+                                    dial.center(),
+                                    8.0,
+                                    Stroke::new(1.0, Color32::from_rgb(30, 36, 44)),
+                                );
+                                let ang = -std::f32::consts::FRAC_PI_4 * 3.0
+                                    + self.monitor_level * std::f32::consts::FRAC_PI_2 * 3.0;
+                                ui.painter().line_segment(
+                                    [
+                                        dial.center(),
+                                        dial.center()
+                                            + egui::vec2(ang.cos() * 6.0, ang.sin() * 6.0),
+                                    ],
+                                    Stroke::new(1.5, TEAL),
+                                );
+                            } else {
+                                ui.spacing_mut().item_spacing.x = 2.0;
+                                ui.spacing_mut().button_padding = egui::vec2(3.0, 1.0);
+                                for (v, label) in a.sends.iter_mut().zip(["M", "A", "B"]) {
+                                    ui.toggle_value(v, RichText::new(label).size(10.0));
+                                }
                             }
-                        }
+                        });
                     });
                 });
+            self.automation
+                .insert(format!("audio.{id}.strip"), strip.response.rect);
         });
         if a != before { Some(a) } else { None }
     }
@@ -1952,6 +1981,119 @@ impl RustMixApp {
 mod processing_tests {
     #![allow(clippy::unwrap_used)]
     use super::*;
+    fn mixer_frame(
+        app: &mut RustMixApp,
+        ctx: &egui::Context,
+        events: Vec<egui::Event>,
+        height: f32,
+    ) {
+        let _ = ctx.run_ui(
+            egui::RawInput {
+                screen_rect: Some(Rect::from_min_size(
+                    egui::Pos2::ZERO,
+                    egui::vec2(400.0, 320.0),
+                )),
+                events,
+                ..Default::default()
+            },
+            |ui| {
+                ui.horizontal_top(|ui| {
+                    let input = app.engine.project().inputs.first().cloned().unwrap();
+                    if let Some(audio) = app.strip(
+                        ui,
+                        (format!("input.{}", input.id.0), &input.name),
+                        input.audio,
+                        [0.2, 0.3],
+                        height,
+                        Some(input.id),
+                    ) {
+                        app.actions
+                            .push(Action::Engine(Command::SetInputAudio(input.id, audio)));
+                    }
+                });
+            },
+        );
+    }
+
+    #[test]
+    fn mixer_strip_stacks_header_above_controls_in_a_horizontal_bank() {
+        for height in [150.0, 240.0] {
+            let mut app = RustMixApp::headless();
+            let ctx = egui::Context::default();
+            for _ in 0..3 {
+                mixer_frame(&mut app, &ctx, vec![], height);
+            }
+            let id = app.engine.project().inputs.first().unwrap().id.0;
+            let bounds = |suffix: &str| {
+                *app.automation
+                    .get(&format!("audio.input.{id}.{suffix}"))
+                    .unwrap()
+            };
+            let strip = bounds("strip");
+            let header = bounds("header");
+            let fader = bounds("gain");
+            let meter = bounds("meter");
+            let mute = bounds("mute");
+            assert!(
+                strip.width() <= 90.0,
+                "A mixer channel must remain a compact vertical strip"
+            );
+            assert!(fader.top() >= header.bottom());
+            assert!(meter.top() >= header.bottom());
+            assert!(mute.top() >= header.bottom());
+            assert!(fader.right() <= meter.left());
+            for rect in [header, fader, meter, mute] {
+                assert!(strip.contains_rect(rect));
+            }
+        }
+    }
+
+    #[test]
+    fn compact_mixer_mute_dispatches_only_its_input_audio_command() {
+        let mut app = RustMixApp::headless();
+        let ctx = egui::Context::default();
+        for _ in 0..3 {
+            mixer_frame(&mut app, &ctx, vec![], 240.0);
+        }
+        let input = app.engine.project().inputs.first().cloned().unwrap();
+        let before_program = app.engine.project().program;
+        let before_preview = app.engine.project().preview;
+        let position = app
+            .automation
+            .get(&format!("audio.input.{}.mute", input.id.0))
+            .unwrap()
+            .center();
+        for pressed in [true, false] {
+            mixer_frame(
+                &mut app,
+                &ctx,
+                vec![
+                    egui::Event::PointerMoved(position),
+                    egui::Event::PointerButton {
+                        pos: position,
+                        button: egui::PointerButton::Primary,
+                        pressed,
+                        modifiers: egui::Modifiers::NONE,
+                    },
+                ],
+                240.0,
+            );
+        }
+        assert_eq!(app.actions.len(), 1);
+        assert!(
+            matches!(
+                app.actions.first(),
+                Some(Action::Engine(Command::SetInputAudio(id, audio)))
+                    if *id == input.id
+                        && audio.muted != input.audio.muted
+                        && audio.gain_db == input.audio.gain_db
+            ),
+            "Mute must dispatch only the typed input audio command"
+        );
+        assert_eq!(app.engine.project().program, before_program);
+        assert_eq!(app.engine.project().preview, before_preview);
+    }
+
     #[test]
     fn custom_images_reach_program_size_and_sharpen_changes_edges() {
         let base = vec![[0, 0, 0, 255]; 16];

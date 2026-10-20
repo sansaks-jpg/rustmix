@@ -28,7 +28,7 @@ pub(super) fn operator_window<'a>(
         .constrain_to(bounds)
 }
 
-/// Applies the modern dark-slate card surface used inside operator dialogs (`Add Input`,
+/// Applies the compact, flat form surface used inside operator dialogs (`Add Input`,
 /// `Input Settings`, `Settings`, `Recording Setup`, `Streaming Settings`, `Overlay Settings`,
 /// `PlayList`, `MultiCorder`).
 fn light_form_frame<R>(
@@ -38,7 +38,7 @@ fn light_form_frame<R>(
 ) -> egui::InnerResponse<R> {
     egui::Frame::new()
         .fill(FORM_LIGHT)
-        .corner_radius(6.0)
+        .corner_radius(1.0)
         .stroke(Stroke::new(1.0, FORM_BORDER))
         .inner_margin(margin)
         .show(ui, |ui| {
@@ -67,8 +67,10 @@ fn sidebar_row(
     icon_index: Option<usize>,
 ) -> egui::Response {
     ui.push_id(label, |ui| {
-        let (rect, response) =
-            ui.allocate_exact_size(Vec2::new(152.0, row_height), egui::Sense::click());
+        let (rect, response) = ui.allocate_exact_size(
+            Vec2::new(ui.available_width(), row_height),
+            egui::Sense::click(),
+        );
         let bg = if active {
             PROGRAM
         } else if response.hovered() {
@@ -76,7 +78,7 @@ fn sidebar_row(
         } else {
             SIDEBAR
         };
-        ui.painter().rect_filled(rect, 4.0, bg);
+        ui.painter().rect_filled(rect, 1.0, bg);
         let text_x = if let Some(idx) = icon_index {
             let icon_rect = egui::Rect::from_center_size(
                 egui::pos2(rect.left() + 12.0, rect.center().y),
@@ -156,10 +158,10 @@ fn sidebar_row(
                 egui::pos2(text_x, rect.center().y),
                 egui::Align2::LEFT_CENTER,
                 label,
-                egui::FontId::proportional(11.0),
+                egui::FontId::proportional(12.0),
                 Color32::WHITE,
             );
-        response
+        response.on_hover_text(label)
     })
     .inner
 }
@@ -300,7 +302,11 @@ impl RustMixApp {
             .available_width()
             .min((ui.ctx().viewport_rect().width() - 48.0).max(250.0));
         let (body, _) = ui.allocate_exact_size(Vec2::new(width, height), Sense::hover());
-        let navigation_rect = egui::Rect::from_min_size(body.min, Vec2::new(164.0, height));
+        // A wider source library keeps long source names readable on production
+        // workspaces; compact displays retain room for the independently scrolling form.
+        let navigation_width = if width >= 900.0 { 212.0 } else { 164.0 };
+        let navigation_rect =
+            egui::Rect::from_min_size(body.min, Vec2::new(navigation_width, height));
         let page_rect = egui::Rect::from_min_max(
             egui::pos2(navigation_rect.right() + 6.0, body.top()),
             body.max,
@@ -318,7 +324,7 @@ impl RustMixApp {
             .show(&mut navigation_ui, |ui| {
                 egui::ScrollArea::vertical()
                     .id_salt((id, "navigation.scroll"))
-                    .max_width(152.0)
+                    .max_width(navigation_width - 12.0)
                     .max_height((height - 12.0).max(80.0))
                     .auto_shrink([false, false])
                     .show(ui, |ui| navigation(self, ui));
@@ -418,7 +424,7 @@ impl RustMixApp {
             "Input Select",
             "dialog.add_input",
             &mut open,
-            Vec2::new(780.0, 560.0),
+            Vec2::new(1120.0, 640.0),
         )
         .show(ctx, |ui| {
             self.dialog_columns(
@@ -428,10 +434,14 @@ impl RustMixApp {
                 |app, ui| {
                     if app.add_loading { ui.disable(); }
                     ui.spacing_mut().item_spacing.y = 1.0;
-                    for (idx, (label, kind, _)) in ADD_CATEGORIES.into_iter().enumerate() {
+                    // File video is a primary source choice. Keep stable category ordinals
+                    // while placing it above the procedural library and future integrations.
+                    let categories = ADD_CATEGORIES.into_iter().enumerate().skip(VIDEO_TAB)
+                        .chain(ADD_CATEGORIES.into_iter().enumerate().take(VIDEO_TAB));
+                    for (idx, (label, kind, _)) in categories {
                         let active = app.add_tab == idx && app.add_kind == kind;
                         let supported = matches!(idx, 0 | 1 | 3 | 4 | 6 | 11 | 12 | 13 | 14 | 15 | VIDEO_TAB);
-                        let r = ui.add_enabled_ui(supported, |ui| sidebar_row(ui, active, label, 21.0, Some(idx))).inner
+                        let r = ui.add_enabled_ui(supported, |ui| sidebar_row(ui, active, label, 25.0, Some(idx))).inner
                             .on_disabled_hover_text("Unavailable: no media/device backend for this source type");
                         if idx == VIDEO_TAB {
                             app.automation.insert("dialog.add.video".into(), r.rect);
@@ -552,7 +562,7 @@ impl RustMixApp {
                                     ui.add_space(4.0);
                                     ui.label(
                                         RichText::new(format!(
-                                            "{} · 384x216 preview",
+                                            "{} · 320x180 preview",
                                             if app.add_tab == 1 { "PNG image".into() } else { app.add_kind.label().to_owned() }
                                         ))
                                         .size(11.0)
@@ -572,6 +582,8 @@ impl RustMixApp {
                                     .clicked()
                                 {
                                     app.add_name.clear();
+                                    app.add_image = None;
+                                    app.add_preview = None;
                                 }
                             });
                         });
@@ -605,7 +617,7 @@ impl RustMixApp {
                     if cancel.clicked() {
                         close_requested = true;
                     }
-                    let confirm = ui.add_enabled(!self.add_loading,
+                    let confirm = ui.add_enabled(!self.add_loading && (matches!(self.add_tab, 12 | 13 | VIDEO_TAB) || !self.add_name.trim().is_empty()),
                         egui::Button::new(RichText::new("OK").color(Color32::WHITE).strong())
                             .fill(PROGRAM)
                             .min_size(Vec2::new(92.0, 29.0)),
@@ -655,7 +667,7 @@ impl RustMixApp {
             format!("Input: {} {title_name}", self.engine.project().input_number(id)),
             "dialog.input_properties",
             &mut open,
-            Vec2::new(790.0, 580.0),
+            Vec2::new(1160.0, 660.0),
         )
         .show(ctx, |ui| {
             self.dialog_columns(
@@ -665,7 +677,7 @@ impl RustMixApp {
                 |app, ui| {
                     if app.properties_loading { ui.disable(); }
                     ui.spacing_mut().item_spacing.y = 1.0;
-                    for (idx, (page, label, key)) in [
+                    for (page, label, key) in [
                         (InputPage::General, "General", "General"),
                         (InputPage::ColourAdjust, "Colour Adjust", "ColourAdjust"),
                         (InputPage::ColourKey, "Colour Key", "ColourKey"),
@@ -685,10 +697,10 @@ impl RustMixApp {
                         (InputPage::Status, "Source status", "Status"),
                     ]
                     .into_iter()
-                    .enumerate()
                     {
                         let supported = !matches!(page, InputPage::Triggers | InputPage::TallyLights | InputPage::Ptz | InputPage::Advanced);
-                        let r = ui.add_enabled_ui(supported, |ui| sidebar_row(ui, app.input_page == page, label, 18.5, Some(idx))).inner
+                        let row_height = if ctx.viewport_rect().height() < 700.0 { 18.5 } else { 25.0 };
+                        let r = ui.add_enabled_ui(supported, |ui| sidebar_row(ui, app.input_page == page, label, row_height, None)).inner
                             .on_disabled_hover_text("This source control is unavailable");
                         app.automation
                             .insert(format!("dialog.properties.page.{key}"), r.rect);
@@ -777,19 +789,31 @@ impl RustMixApp {
                                                     .size(11.5)
                                                     .color(FORM_TEXT),
                                             );
-                                            egui::ComboBox::from_id_salt("prop.aspect")
+                                            ui.add_enabled(false, egui::Button::new("Widescreen")
+                                                .min_size(Vec2::new(175.0, 20.0)))
+                                                .on_disabled_hover_text("The current compositor uses a fixed 16:9 working raster. Use Image fit below for Contain, Cover or Stretch.");
+                                            ui.end_row();
+
+                                            ui.label(RichText::new("Category").size(11.5).color(FORM_TEXT));
+                                            let selected_category = draft.category
+                                                .and_then(|id| app.engine.project().preferences.categories.iter().find(|category| category.id == id))
+                                                .map_or("None", |category| category.name.as_str());
+                                            let category = egui::ComboBox::from_id_salt("prop.category")
                                                 .width(175.0)
-                                                .selected_text("Widescreen")
+                                                .selected_text(selected_category)
                                                 .show_ui(ui, |ui| {
-                                                    let _ = ui.selectable_label(true, "Widescreen");
-                                                    let _ = ui.selectable_label(false, "Normal");
-                                                    let _ =
-                                                        ui.selectable_label(false, "Anamorphic");
+                                                    let none = ui.selectable_value(&mut draft.category, None, "None");
+                                                    app.automation.insert("dialog.properties.category.none".into(), none.rect);
+                                                    for category in &app.engine.project().preferences.categories {
+                                                        let response = ui.selectable_value(&mut draft.category, Some(category.id), &category.name);
+                                                        app.automation.insert(format!("dialog.properties.category.{}", category.id), response.rect);
+                                                    }
                                                 });
+                                            app.automation.insert("dialog.properties.category".into(), category.response.rect);
                                             ui.end_row();
 
                                             ui.label(
-                                                RichText::new("Category")
+                                                RichText::new("Generator")
                                                     .size(11.5)
                                                     .color(FORM_TEXT),
                                             );
@@ -1156,7 +1180,7 @@ impl RustMixApp {
                             ui.set_min_width((ui.available_width() - 2.0).max(80.0));
                             ui.horizontal(|ui| {
                                 let avail_w = (ui.available_width() - 42.0).max(160.0);
-                                let preview_h = 132.0_f32;
+                                let preview_h = if ctx.viewport_rect().height() >= 850.0 { 190.0_f32 } else { 132.0_f32 };
                                 let preview_w = (preview_h * 16.0 / 9.0).min(avail_w);
                                 let pad_left = ((avail_w - preview_w) * 0.5).max(0.0);
                                 ui.add_space(pad_left);
@@ -2753,5 +2777,93 @@ impl RustMixApp {
         if cancel_clicked || !open {
             self.confirm_remove_input = None;
         }
+    }
+}
+
+#[cfg(test)]
+mod operator_dialog_tests {
+    // Test fixtures intentionally fail fast; runtime paths remain fallible.
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
+    use super::*;
+
+    fn frame(app: &mut RustMixApp, ctx: &egui::Context, events: Vec<egui::Event>) {
+        let raw = egui::RawInput {
+            screen_rect: Some(egui::Rect::from_min_size(
+                egui::Pos2::ZERO,
+                Vec2::new(1600.0, 900.0),
+            )),
+            events,
+            ..Default::default()
+        };
+        let _ = ctx.run_ui(raw, |ui| app.frame_ui(ui));
+    }
+
+    fn click(app: &mut RustMixApp, ctx: &egui::Context, id: &str) {
+        for _ in 0..4 {
+            frame(app, ctx, vec![]);
+        }
+        let rect = *app.automation.get(id).expect("visible dialog widget");
+        assert!(
+            ctx.viewport_rect().contains_rect(rect),
+            "widget must be on screen: {id}"
+        );
+        for pressed in [true, false] {
+            frame(
+                app,
+                ctx,
+                vec![
+                    egui::Event::PointerMoved(rect.center()),
+                    egui::Event::PointerButton {
+                        pos: rect.center(),
+                        button: egui::PointerButton::Primary,
+                        pressed,
+                        modifiers: egui::Modifiers::NONE,
+                    },
+                ],
+            );
+        }
+    }
+
+    #[test]
+    fn category_editor_stages_real_categories_without_changing_the_generator() {
+        let mut app = RustMixApp::headless();
+        let ctx = egui::Context::default();
+        app.theme(&ctx);
+        let original = app.engine.project().input(InputId(3)).unwrap().clone();
+        app.dispatch(Action::Properties(original.id), &ctx);
+        click(&mut app, &ctx, "dialog.properties.category");
+        click(&mut app, &ctx, "dialog.properties.category.0");
+        assert_eq!(app.properties.as_ref().unwrap().category, Some(0));
+        assert_eq!(app.properties.as_ref().unwrap().kind, original.kind);
+        assert_eq!(app.engine.project().input(original.id).unwrap(), &original);
+        click(&mut app, &ctx, "dialog.properties.cancel");
+        assert_eq!(app.engine.project().input(original.id).unwrap(), &original);
+
+        app.dispatch(Action::Properties(original.id), &ctx);
+        click(&mut app, &ctx, "dialog.properties.category");
+        click(&mut app, &ctx, "dialog.properties.category.1");
+        click(&mut app, &ctx, "dialog.properties.apply");
+        let updated = app.engine.project().input(original.id).unwrap();
+        assert_eq!(updated.category, Some(1));
+        assert_eq!(updated.kind, original.kind);
+        assert_eq!(app.engine.project().program, InputId(1));
+        assert_eq!(app.engine.project().preview, InputId(2));
+    }
+
+    #[test]
+    fn empty_generator_cannot_submit_from_the_add_dialog() {
+        let mut app = RustMixApp::headless();
+        let ctx = egui::Context::default();
+        app.theme(&ctx);
+        app.dispatch(Action::Add, &ctx);
+        app.add_name = "   ".into();
+        let original_count = app.engine.project().inputs.len();
+        click(&mut app, &ctx, "dialog.add.confirm");
+        assert!(app.add_open);
+        assert_eq!(app.engine.project().inputs.len(), original_count);
+        app.add_name = "Operator generator".into();
+        click(&mut app, &ctx, "dialog.add.confirm");
+        assert!(!app.add_open);
+        assert_eq!(app.engine.project().inputs.len(), original_count + 1);
     }
 }
