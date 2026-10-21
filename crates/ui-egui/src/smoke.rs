@@ -115,6 +115,7 @@ pub(crate) struct Smoke {
     pub(crate) stage: u32,
     frames: u32,
     last_stage: u32,
+    visual_started_at: Option<f64>,
     pub(crate) wait: u32,
     pub(crate) captured: bool,
     /// Scratch text/pixel evidence for opt-in smoke modes with staged values.
@@ -128,6 +129,24 @@ pub(crate) struct Smoke {
     queue_completion_probe: QueueCompletionProbe,
 }
 impl Smoke {
+    fn visual_settled_at(&self, now: f64, animation_time: f32) -> bool {
+        let animation_time = f64::from(animation_time);
+        self.visual_started_at.is_some_and(|start| {
+            start.is_finite()
+                && now.is_finite()
+                && animation_time.is_finite()
+                && (0.0..=5.0).contains(&animation_time)
+                && now - start >= animation_time + 0.10
+        })
+    }
+
+    fn visual_settled(&self, ctx: &egui::Context) -> bool {
+        self.visual_settled_at(
+            ctx.input(|input| input.time),
+            ctx.global_style().animation_time,
+        )
+    }
+
     fn push_stage_sample(&mut self, sample: SmokeStageSample) {
         if self.stage_trace.len() >= 128 {
             self.stage_trace.pop_front();
@@ -210,9 +229,10 @@ impl RustMixApp {
             return;
         };
         s.frames = s.frames.saturating_add(1);
-        if s.stage != s.last_stage {
+        if s.stage != s.last_stage || s.visual_started_at.is_none() {
             s.wait = 0;
             s.last_stage = s.stage;
+            s.visual_started_at = Some(ctx.input(|input| input.time));
         }
         s.wait = s.wait.saturating_add(1);
         let result = self.smoke_run(ctx, &mut s);
@@ -705,6 +725,9 @@ impl RustMixApp {
                         s.stage += 1;
                     }
                     1 => {
+                        if !s.visual_settled(ctx) {
+                            return Ok(());
+                        }
                         self.validate_operator_chrome(
                             ctx,
                             match kind {
@@ -770,6 +793,9 @@ impl RustMixApp {
                 s.stage = 49;
             }
             49 => {
+                if !s.visual_settled(ctx) {
+                    return Ok(());
+                }
                 self.validate_basic_state(s)?;
                 if self.overlay_switch_pending != Some(1) {
                     return Err(Error::Invalid(
@@ -966,6 +992,9 @@ impl RustMixApp {
                 s.stage = 59;
             }
             59 => {
+                if !s.visual_settled(ctx) {
+                    return Ok(());
+                }
                 if (ctx.viewport_rect().size() - egui::vec2(1917.0, 1168.0)).length() > 1.0
                     || self.add_tab != dialogs::VIDEO_TAB
                 {
@@ -1869,6 +1898,24 @@ impl RustMixApp {
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used, clippy::indexing_slicing)]
+    #[test]
+    fn native_visual_capture_requires_elapsed_animation_time_not_only_pass_count() {
+        let mut state = super::Smoke {
+            visual_started_at: Some(10.0),
+            wait: 4000,
+            ..Default::default()
+        };
+        assert!(!state.visual_settled_at(10.0, 0.2));
+        assert!(!state.visual_settled_at(10.05, 0.2));
+        assert!(!state.visual_settled_at(10.2, 0.2));
+        assert!(state.visual_settled_at(10.5, 0.2));
+        assert!(!state.visual_settled_at(9.0, 0.2));
+        assert!(!state.visual_settled_at(f64::NAN, 0.2));
+        assert!(!state.visual_settled_at(11.0, f32::NAN));
+        state.visual_started_at = None;
+        assert!(!state.visual_settled_at(11.0, 0.2));
+    }
+
     #[test]
     fn queue_completion_probe_keeps_only_one_pending_registration_and_bounds_delivery() {
         let mut probe = super::QueueCompletionProbe::default();

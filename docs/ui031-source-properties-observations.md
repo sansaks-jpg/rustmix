@@ -59,3 +59,13 @@ own mandatory native process loading the saved core workflow project. Keep the
 main switch/transport/pause/stability/small/large picture checks and all screenshot,
 geometry/state/drain gates. Both retain540s deadlines and600s external limits.
 This is bounded verification scheduling; GPU reliability remains unproven.
+
+Additional exact-image finding: fa5e4ba's Add1600 screenshot captures a partially
+transparent opening animation despite its four-pass wait. egui can produce several
+UI passes before sufficient animation time elapses. Pinned egui0.35 Area source
+uses InputState.time and global_style.animation_time for fade-in. The opt-in native
+harness now records stage start in that same UI clock and waits animation_time+
+100ms before dialog/dirty-overlay/large-Add captures. Normal UI animation, media
+clocks, deadlines, geometry and readback/drain acceptance remain unchanged. A pure
+regression rejects many early passes, clock rewind and invalid times; valid elapsed
+time is mandatory. This improves evidence timing, not GPU execution or reliability.
