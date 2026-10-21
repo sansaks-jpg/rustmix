@@ -114,7 +114,18 @@ impl Engine {
                     .standard(slot)
                     .cloned()
                     .ok_or_else(|| invalid("Shortcut overlay is missing"))?;
-                overlay.enabled = !overlay.enabled;
+                if let Some(preview_input) = self.project.input(self.project.preview) {
+                    let is_current = overlay.enabled && overlay.title == preview_input.name;
+                    if is_current {
+                        overlay.enabled = false;
+                    } else {
+                        overlay.enabled = true;
+                        overlay.title = preview_input.name.clone();
+                        overlay.subtitle = preview_input.source_label().into();
+                    }
+                } else {
+                    overlay.enabled = !overlay.enabled;
+                }
                 Command::SetOverlay(slot, overlay)
             }
             ShortcutAction::Preview(id) if self.project.input(id).is_some() => {

@@ -78,36 +78,61 @@ pub(crate) fn process_source_pixels(
             ImageFit::Cover => (w as f32 / *cw as f32).max(h as f32 / *ch as f32),
             ImageFit::Stretch => 1.0,
         };
-        resized = (0..h)
-            .flat_map(|y| {
-                (0..w).map(move |x| {
-                    let (sx, sy) = if fx.image_fit == ImageFit::Stretch {
-                        (
-                            (x as f32 + 0.5) * *cw as f32 / w.max(1) as f32,
-                            (y as f32 + 0.5) * *ch as f32 / h.max(1) as f32,
-                        )
-                    } else {
-                        (
-                            ((x as f32 + 0.5) - w as f32 * 0.5) / scale + *cw as f32 * 0.5,
-                            ((y as f32 + 0.5) - h as f32 * 0.5) / scale + *ch as f32 * 0.5,
-                        )
-                    };
-                    if sx < 0.0 || sy < 0.0 || sx >= *cw as f32 || sy >= *ch as f32 {
-                        return [0, 0, 0, 255];
-                    }
-                    let pixel = custom
-                        .get((sy as u32 * *cw + sx as u32) as usize)
-                        .copied()
-                        .unwrap_or([0, 0, 0, 255]);
-                    let alpha = u32::from(pixel.get(3).copied().unwrap_or(255));
-                    let mut opaque = [0, 0, 0, 255];
-                    for (out, value) in opaque.iter_mut().zip(pixel).take(3) {
-                        *out = ((u32::from(value) * alpha + 127) / 255) as u8;
-                    }
-                    opaque
-                })
+        let (cw_val, ch_val) = (*cw, *ch);
+        let x_map: Vec<Option<u32>> = (0..w)
+            .map(|x| {
+                let sx = if fx.image_fit == ImageFit::Stretch {
+                    (x as f32 + 0.5) * cw_val as f32 / w.max(1) as f32
+                } else {
+                    ((x as f32 + 0.5) - w as f32 * 0.5) / scale + cw_val as f32 * 0.5
+                };
+                (sx >= 0.0 && sx < cw_val as f32).then_some(sx as u32)
             })
-            .collect::<Vec<_>>();
+            .collect();
+        let mut buf = Vec::with_capacity((w * h) as usize);
+        let mut prev_sy: Option<u32> = None;
+        for y in 0..h {
+            let sy = if fx.image_fit == ImageFit::Stretch {
+                (y as f32 + 0.5) * ch_val as f32 / h.max(1) as f32
+            } else {
+                ((y as f32 + 0.5) - h as f32 * 0.5) / scale + ch_val as f32 * 0.5
+            };
+            if sy < 0.0 || sy >= ch_val as f32 {
+                buf.resize(buf.len() + w as usize, [0, 0, 0, 255]);
+                prev_sy = None;
+                continue;
+            }
+            let sy_u32 = sy as u32;
+            if prev_sy == Some(sy_u32) && buf.len() >= w as usize {
+                let start = buf.len() - w as usize;
+                buf.extend_from_within(start..buf.len());
+                continue;
+            }
+            prev_sy = Some(sy_u32);
+            let row_base = (sy_u32 * cw_val) as usize;
+            for sx in &x_map {
+                let Some(sx_u32) = *sx else {
+                    buf.push([0, 0, 0, 255]);
+                    continue;
+                };
+                let [r, g, b, a] = custom
+                    .get(row_base + sx_u32 as usize)
+                    .copied()
+                    .unwrap_or([0, 0, 0, 255]);
+                if a == 255 {
+                    buf.push([r, g, b, 255]);
+                } else {
+                    let alpha = u32::from(a);
+                    buf.push([
+                        ((u32::from(r) * alpha + 127) / 255) as u8,
+                        ((u32::from(g) * alpha + 127) / 255) as u8,
+                        ((u32::from(b) * alpha + 127) / 255) as u8,
+                        255,
+                    ]);
+                }
+            }
+        }
+        resized = buf;
         resized.as_slice()
     } else {
         base
@@ -347,26 +372,30 @@ impl RustMixApp {
         };
         self.textures.retain(|id, _| p.input(*id).is_some());
         self.thumbnail_pixels.retain(|id, _| p.input(*id).is_some());
-        let mut raw_sources: HashMap<InputId, Vec<[u8; 4]>> = HashMap::new();
+        self.thumbnail_renderer.retain_inputs(&p);
         for input in &p.inputs {
-            let input_ms = self
-                .engine
-                .playback(input.id)
-                .map_or(0, |clock| clock.position_ms());
-            if let Ok(pixels) = render::source(input, thumbnail_w, thumbnail_h, input_ms) {
-                raw_sources.insert(input.id, pixels);
-            }
-        }
-
-        let mut processed_preview =
-            processed_sources(&p, &raw_sources, &self.input_fx, thumbnail_w, thumbnail_h);
-        for input in &p.inputs {
-            if let Some(processed) = processed_preview.remove(&input.id) {
+            let processed = match self.thumbnail_renderer.source_pixels(
+                input.id,
+                &self.engine,
+                &self.input_fx,
+                [thumbnail_w, thumbnail_h],
+            ) {
+                Ok(pixels) => pixels,
+                Err(error) => {
+                    self.notice = format!("Input preview retained its last valid frame: {error}");
+                    self.warning = true;
+                    continue;
+                }
+            };
+            {
                 // A project revision can change audio/routing without changing any
                 // thumbnail pixels. Exact comparison avoids redundant GPU uploads;
                 // a missing texture still uploads even when its pixels are cached.
                 if self.textures.contains_key(&input.id)
-                    && self.thumbnail_pixels.get(&input.id) == Some(&processed)
+                    && self
+                        .thumbnail_pixels
+                        .get(&input.id)
+                        .is_some_and(|old| Arc::ptr_eq(old, &processed) || old == &processed)
                 {
                     continue;
                 }
@@ -433,45 +462,29 @@ impl RustMixApp {
         }
     }
 
-    pub(crate) fn input_has_playback(input: &InputState) -> bool {
-        if input.config.video_source.is_some() || input.config.audio_source.is_some() {
-            return true;
+    /// Only procedural samples have the demo's sixty-second duration. Media
+    /// reports actual worker timestamps; an unknown duration has no fill.
+    fn transport_position(&self, input: &InputState) -> (u64, Option<u64>) {
+        if !input.has_playback() {
+            return (0, None);
         }
-        if input.kind == InputKind::Countdown {
-            return true;
+        if input.config.audio_source.is_some() {
+            return self.audio_ui.source_position(input.id).unwrap_or((0, None));
         }
-        if input.kind == InputKind::Color
-            || input.config.media_path.is_some()
-            || input.kind == InputKind::Bars
-        {
-            return false;
+        if input.config.video_source.is_some() {
+            return (self.video_position_ms(input.id).unwrap_or(0), None);
         }
-        matches!(
-            input.kind,
-            InputKind::Grid | InputKind::Geometry | InputKind::Studio
-        )
-    }
-
-    pub(crate) fn input_has_audio(input: &InputState) -> bool {
-        if input.config.audio_source.is_some() || input.config.video_source.is_some() {
-            return true;
-        }
-        if input.kind == InputKind::Color
-            || input.config.media_path.is_some()
-            || input.kind == InputKind::Bars
-            || input.kind == InputKind::Countdown
-            || input.kind == InputKind::Graphics
-        {
-            return false;
-        }
-        matches!(
-            input.kind,
-            InputKind::Grid | InputKind::Geometry | InputKind::Studio
+        (
+            self.engine
+                .playback(input.id)
+                .map_or(0, |clock| clock.position_ms()),
+            Some(playback::DEMO_DURATION_MS),
         )
     }
 
     fn monitor(&mut self, ui: &mut egui::Ui, program: bool) {
         let p = self.engine.project();
+        let rate = p.preferences.rate;
         let aspect = p.preferences.width as f32 / p.preferences.height.max(1) as f32;
         let id = if program { p.program } else { p.preview };
         let Some(input) = p.input(id).cloned() else {
@@ -687,23 +700,32 @@ impl RustMixApp {
                 ui.set_min_width((available.x - 12.0).max(40.0));
                 ui.horizontal(|ui| {
                     ui.spacing_mut().item_spacing.x = 4.0;
-                    let has_playback = Self::input_has_playback(&input);
+                    let has_playback = input.has_playback();
                     let is_paused = !has_playback
                         || self.engine.inputs_paused()
-                        || self.engine.playback(id).is_some_and(|clock| clock.paused());
+                        || self.engine.playback(id).is_some_and(|clock| {
+                            if input.is_procedural_playback() {
+                                clock.paused()
+                            } else {
+                                clock.manually_paused()
+                            }
+                        });
                     let play_btn = ui
                         .push_id(("source.play", program, id.0), |ui| {
-                            vector_icon_button(
-                                ui,
-                                if is_paused {
-                                    VectorIcon::Play
-                                } else {
-                                    VectorIcon::Pause
-                                },
-                                egui::vec2(20.0, 18.0),
-                                !is_paused && has_playback,
-                                None,
-                            )
+                            ui.add_enabled_ui(has_playback, |ui| {
+                                vector_icon_button(
+                                    ui,
+                                    if is_paused {
+                                        VectorIcon::Play
+                                    } else {
+                                        VectorIcon::Pause
+                                    },
+                                    egui::vec2(20.0, 18.0),
+                                    !is_paused && has_playback,
+                                    None,
+                                )
+                            })
+                            .inner
                         })
                         .inner
                         .on_hover_text(if has_playback {
@@ -725,13 +747,16 @@ impl RustMixApp {
                     }
                     let restart_btn = ui
                         .push_id(("source.restart", program, id.0), |ui| {
-                            vector_icon_button(
-                                ui,
-                                VectorIcon::Restart,
-                                egui::vec2(20.0, 18.0),
-                                false,
-                                None,
-                            )
+                            ui.add_enabled_ui(has_playback, |ui| {
+                                vector_icon_button(
+                                    ui,
+                                    VectorIcon::Restart,
+                                    egui::vec2(20.0, 18.0),
+                                    false,
+                                    None,
+                                )
+                            })
+                            .inner
                         })
                         .inner
                         .on_hover_text(if has_playback {
@@ -749,28 +774,20 @@ impl RustMixApp {
                     if restart_btn.clicked() && has_playback {
                         self.actions.push(Action::Engine(Command::RestartInput(id)));
                     }
-                    let position = if has_playback {
-                        self.engine
-                            .playback(id)
-                            .map_or(0, |clock| clock.position_ms())
-                    } else {
-                        0
-                    };
+                    let (position, duration) = self.transport_position(&input);
                     let minutes = position / 60_000;
                     let sec = (position / 1000) % 60;
                     let frm = if has_playback {
-                        p.preferences
-                            .rate
-                            .frame_at(position)
-                            .saturating_sub(p.preferences.rate.frame_at(position / 1000 * 1000))
+                        rate.frame_at(position)
+                            .saturating_sub(rate.frame_at(position / 1000 * 1000))
                     } else {
                         0
                     };
-                    let prog_frac = if has_playback {
-                        (position as f32 / playback::DEMO_DURATION_MS as f32).clamp(0.0, 1.0)
-                    } else {
-                        0.0
-                    };
+                    let prog_frac = duration
+                        .filter(|duration| *duration > 0)
+                        .map_or(0.0, |duration| {
+                            (position as f32 / duration as f32).clamp(0.0, 1.0)
+                        });
                     let bar_w = (ui.available_width() - 100.0).max(12.0);
                     let (bar_rect, _) =
                         ui.allocate_exact_size(egui::vec2(bar_w, 6.0), Sense::hover());
@@ -1036,20 +1053,52 @@ impl RustMixApp {
                                     .overlays
                                     .standard(slot)
                                     .is_some_and(|o| o.enabled);
-                                let btn = ui.add(
-                                    egui::Button::new(
-                                        RichText::new(format!("{}", slot + 1)).size(10.5).strong(),
+                                let tooltip = if let Some(o) =
+                                    self.engine.project().overlays.standard(slot)
+                                {
+                                    if o.enabled {
+                                        format!(
+                                            "Overlay {} (Active: {})\nClick to toggle off or switch to Preview",
+                                            slot + 1,
+                                            o.title
+                                        )
+                                    } else {
+                                        format!(
+                                            "Overlay {}\nClick to overlay current Preview on Program",
+                                            slot + 1
+                                        )
+                                    }
+                                } else {
+                                    format!("Overlay {}", slot + 1)
+                                };
+                                let btn = ui
+                                    .add(
+                                        egui::Button::new(
+                                            RichText::new(format!("{}", slot + 1)).size(10.5).strong(),
+                                        )
+                                        .selected(active)
+                                        .min_size(egui::vec2(cell_w, overlay_height)),
                                     )
-                                    .selected(active)
-                                    .min_size(egui::vec2(cell_w, overlay_height)),
-                                );
+                                    .on_hover_text(tooltip);
                                 self.automation
                                     .insert(format!("switcher.overlay.{}", slot + 1), btn.rect);
                                 if btn.clicked()
                                     && let Some(mut o) =
                                         self.engine.project().overlays.standard(slot).cloned()
                                 {
-                                    o.enabled = !o.enabled;
+                                    let p = self.engine.project();
+                                    if let Some(preview_input) = p.input(p.preview) {
+                                        let is_current = o.enabled && o.title == preview_input.name;
+                                        if is_current {
+                                            o.enabled = false;
+                                        } else {
+                                            o.enabled = true;
+                                            o.title = preview_input.name.clone();
+                                            o.subtitle = preview_input.source_label().into();
+                                        }
+                                    } else {
+                                        o.enabled = !o.enabled;
+                                    }
                                     self.actions
                                         .push(Action::Engine(Command::SetOverlay(slot, o)));
                                 }
@@ -1505,14 +1554,14 @@ impl RustMixApp {
                                                     if self.basic_mode {
                                                         return;
                                                     }
-                                                    let looped = self.engine.playback(input.id).is_none_or(|clock| clock.looping());
-                                                    let loop_btn = vector_icon_button(
+                                                    let looped = input.has_playback() && self.engine.playback(input.id).is_some_and(|clock| clock.looping());
+                                                    let loop_btn = ui.add_enabled_ui(input.has_playback(), |ui| vector_icon_button(
                                                         ui,
                                                         VectorIcon::Loop,
                                                         egui::vec2(rem_w, controls_h),
                                                         looped,
                                                         None,
-                                                    )
+                                                    )).inner
                                                     .on_hover_text("Toggle Loop playback");
                                                     self.automation.insert(format!("input.{}.loop", input.id.0), loop_btn.rect);
                                                     if loop_btn.clicked() {
@@ -1591,7 +1640,7 @@ impl RustMixApp {
                                                         audio_btn = audio_btn.fill(self.program_color());
                                                     }
                                                     let audio_resp = ui
-                                                        .add(audio_btn)
+                                                        .add_enabled(input.has_audio(), audio_btn)
                                                         .on_hover_text("Toggle Input Audio");
                                                     self.automation.insert(
                                                         format!("input.{}.audio", input.id.0),
@@ -1647,7 +1696,6 @@ impl RustMixApp {
 
     pub(crate) fn audio(&mut self, ui: &mut egui::Ui) {
         let p = self.engine.project().clone();
-        let solo = p.inputs.iter().any(|i| i.audio.solo);
         let height = (ui.available_height() - 12.0).clamp(150.0, 240.0);
         let (_, rail_width) = mixer_widths(ui.ctx().viewport_rect().width());
         egui::ScrollArea::horizontal()
@@ -1679,7 +1727,7 @@ impl RustMixApp {
                         },
                     );
                     if let Some(a) = p.buses.first() {
-                        let peaks = audio::bus_peaks(&p, 0, self.now);
+                        let peaks = self.audio_ui.master_peaks();
                         let changed = self.strip(
                             ui,
                             ("bus.0".into(), "Master"),
@@ -1692,16 +1740,15 @@ impl RustMixApp {
                             self.actions.push(Action::Engine(Command::SetBus(0, a)));
                         }
                     }
-                    let audio_inputs: Vec<&InputState> = p
-                        .inputs
-                        .iter()
-                        .filter(|i| Self::input_has_audio(i))
-                        .collect();
+                    let audio_inputs: Vec<&InputState> =
+                        p.inputs.iter().filter(|i| i.has_audio()).collect();
                     if !audio_inputs.is_empty() {
                         let rail = mixer_rail(ui, rail_width, height, "INPUTS");
                         self.automation.insert("audio.rail.inputs".into(), rail);
                         for input in audio_inputs {
-                            let peaks = audio::input_peaks(input, solo, self.now);
+                            // Per-input measured peaks are not published by
+                            // the audio worker yet. Never animate fake levels.
+                            let peaks = [0.0; 2];
                             let changed = self.strip(
                                 ui,
                                 (format!("input.{}", input.id.0), &input.name),
@@ -1880,8 +1927,13 @@ impl RustMixApp {
                             }
                             self.automation
                                 .insert(format!("audio.{name}.gain"), fader.rect);
-                            let (meter_rect, _) =
+                            let (meter_rect, meter_response) =
                                 ui.allocate_exact_size(egui::vec2(14.0, fader_h), Sense::hover());
+                            meter_response.on_hover_text(if input_id.is_some() {
+                                "Input peak metering unavailable"
+                            } else {
+                                "Measured Master peak · silent while Audio is off"
+                            });
                             self.automation
                                 .insert(format!("audio.{id}.meter"), meter_rect);
                             ui.painter().rect_filled(
@@ -2293,6 +2345,7 @@ mod processing_tests {
     fn production_workspace_prioritizes_inputs_with_a_visible_master_and_restorable_mixer() {
         for size in [[1100.0, 700.0], [1600.0, 900.0], [1917.0, 1168.0]] {
             let mut app = RustMixApp::headless();
+            add_test_audio_descriptor(&mut app);
             let ctx = egui::Context::default();
             app.theme(&ctx);
             for _ in 0..4 {
@@ -2585,6 +2638,7 @@ mod processing_tests {
     fn mixer_rails_scale_with_viewport_even_inside_a_narrow_scrolling_dock() {
         for width in [400.0, 1100.0, 1600.0, 1920.0] {
             let mut app = RustMixApp::headless();
+            add_test_audio_descriptor(&mut app);
             let ctx = egui::Context::default();
             for _ in 0..3 {
                 let _ = ctx.run_ui(
@@ -2607,6 +2661,70 @@ mod processing_tests {
                 assert!((rail.width() - expected_rail_width).abs() <= 0.1);
             }
         }
+    }
+
+    fn add_test_audio_descriptor(app: &mut RustMixApp) {
+        let mut input = app.engine.project().inputs.first().cloned().unwrap();
+        input.config.audio_source = Some(AudioSource::Microphone { device_id: None });
+        app.engine.execute(Command::UpdateInput(input), 0).unwrap();
+    }
+
+    #[test]
+    fn blank_monitors_stay_empty_and_mixer_strips_follow_audio_descriptors() {
+        let mut app = RustMixApp::headless();
+        app.engine = Engine::new_preset(VideoStandard::default(), 0).unwrap();
+        let ctx = egui::Context::default();
+        app.theme(&ctx);
+        for time in [0, 1000, 15_000, 75_000] {
+            app.engine.tick(time);
+            for _ in 0..3 {
+                workspace_frame(&mut app, &ctx, [1600.0, 900.0]);
+            }
+            for name in ["preview", "program"] {
+                assert_eq!(
+                    app.automation
+                        .get(&format!("monitor.{name}.progress"))
+                        .unwrap()
+                        .width(),
+                    0.0
+                );
+            }
+            assert!(!app.automation.contains_key("audio.rail.inputs"));
+            assert!(app.automation.contains_key("audio.bus.0.strip"));
+            assert_eq!(app.audio_ui.master_peaks(), [0.0; 2]);
+            for input in &app.engine.project().inputs {
+                assert_eq!(app.transport_position(input), (0, None));
+            }
+        }
+        add_test_audio_descriptor(&mut app);
+        for _ in 0..3 {
+            workspace_frame(&mut app, &ctx, [1600.0, 900.0]);
+        }
+        assert!(app.automation.contains_key("audio.input.1.strip"));
+        assert!(!app.automation.contains_key("audio.input.2.strip"));
+        assert_eq!(app.audio_ui.status_label(), "off");
+    }
+
+    #[test]
+    fn undecoded_video_and_unarmed_wav_do_not_inherit_demo_progress() {
+        let mut app = RustMixApp::headless();
+        app.engine.tick(12_000);
+        let mut input = app.engine.project().inputs.first().cloned().unwrap();
+        assert_eq!(
+            app.transport_position(&input),
+            (12_000, Some(playback::DEMO_DURATION_MS))
+        );
+        input.config.video_source = Some(VideoSource::File {
+            path: "not-opened.mp4".into(),
+        });
+        assert!(input.has_playback());
+        assert_eq!(app.transport_position(&input), (0, None));
+        input.config.video_source = None;
+        input.config.audio_source = Some(AudioSource::WavFile {
+            path: "not-opened.wav".into(),
+        });
+        assert_eq!(app.transport_position(&input), (0, None));
+        assert_eq!(app.audio_ui.master_peaks(), [0.0; 2]);
     }
 
     #[test]

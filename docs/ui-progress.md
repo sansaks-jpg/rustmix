@@ -746,3 +746,14 @@ Exact workspace/dialog screenshots were compared against the supplied references
 proportion/readability corrections are accepted. Native GPU shutdown drain failed, so later
 workflow stages did not run and complete native/full-reference acceptance remains open.
 See ui020-visual-review.md and ADR0020 for dimensions, failures and next priorities.
+
+
+## 2026-10-22 - Center overlay buttons preview targeting and toggle (vMix alignment)
+
+In accordance with reference vMix workflow, the switcher's center overlay buttons (`switcher.overlay.{1..8}`)
+and shortcut actions `ShortcutAction::ToggleOverlay(slot)` now inspect the active Preview (`pvw`) input:
+- When clicked, if the overlay channel is not currently displaying the active Preview source, it activates
+  on that channel with the Preview source's title and label (`overlay.enabled = true`, updating `title` and `subtitle`).
+- If the overlay channel is already enabled and displaying that exact Preview source, clicking toggles it off (`overlay.enabled = false`).
+- If the overlay channel was showing a different source, clicking switches the overlay to the current Preview source.
+- Tooltips provide operator feedback indicating the active source or the Preview overlay action.

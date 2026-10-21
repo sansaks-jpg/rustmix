@@ -1491,7 +1491,7 @@ impl RustMixApp {
             || [
                 "switcher.cut",
                 "switcher.fade",
-                "output.record",
+                "output.overlay",
                 "output.playlist",
                 "toolbar.fullscreen",
                 "input.1.loop",
@@ -1787,14 +1787,6 @@ impl RustMixApp {
         } else {
             vec![
                 "production.add",
-                "output.record.settings",
-                "output.record",
-                "output.external.settings",
-                "output.external",
-                "output.stream.settings",
-                "output.stream",
-                "output.multicorder.settings",
-                "output.multicorder",
                 "output.playlist.settings",
                 "output.playlist",
                 "output.overlay",
@@ -2142,15 +2134,18 @@ mod tests {
         preferences.width = 1280;
         preferences.height = 720;
         app.execute(Command::SetPreferences(preferences));
-        app.program_worker = Some(program::ProgramWorker::spawn(
-            program::Snapshot {
-                generation: 0,
-                engine: app.engine.clone(),
-                sources: app.input_fx.clone(),
-            },
-            app.start,
-            None,
-        ));
+        app.program_worker = Some(
+            program::ProgramWorker::spawn(
+                program::Snapshot {
+                    generation: 0,
+                    engine: app.engine.clone(),
+                    sources: app.input_fx.clone(),
+                },
+                app.start,
+                None,
+            )
+            .unwrap(),
+        );
         app.dispatch(Action::Add, &ctx);
         app.select_add_category(0);
         app.add_name = "New stage".into();
@@ -2428,7 +2423,11 @@ mod tests {
         let mut stable = None;
         for _ in 0..6 {
             frame(app, ctx, vec![], size);
-            let bounds = *app.automation.get(id).expect("Visible operator control");
+            assert!(
+                app.automation.contains_key(id),
+                "Visible operator control: {id}"
+            );
+            let bounds = *app.automation.get(id).unwrap();
             if previous.is_some_and(|old| {
                 old.center().distance(bounds.center()) < 0.5
                     && (old.size() - bounds.size()).length() < 0.5
@@ -2486,7 +2485,7 @@ mod tests {
             for id in [
                 "switcher.cut",
                 "switcher.fade",
-                "output.record",
+                "output.overlay",
                 "output.playlist",
                 "input.1.loop",
                 "input.1.audio",
@@ -2933,15 +2932,7 @@ mod tests {
         app.engine.tick(app.now);
         app.refresh_textures(&ctx);
         assert_eq!(app.last_program_rgba, frozen);
-        for action in [
-            Action::ToggleRecordSim,
-            Action::ToggleStreamSim,
-            Action::ToggleExternalSim,
-        ] {
-            app.dispatch(action, &ctx);
-            assert!(app.warning);
-            assert!(!app.rec_active && !app.stream_active && !app.external_active);
-        }
+        assert!(!app.rec_active && !app.stream_active && !app.external_active);
     }
 
     #[test]
@@ -3033,7 +3024,7 @@ mod tests {
     }
 
     #[test]
-    fn unavailable_shortcut_and_stream_controls_cannot_dispatch_fake_features() {
+    fn core_shortcuts_control_transport_without_enabling_deferred_outputs() {
         let mut app = RustMixApp::headless();
         let ctx = egui::Context::default();
         app.theme(&ctx);
@@ -3042,15 +3033,14 @@ mod tests {
         for _ in 0..3 {
             frame(&mut app, &ctx, vec![], size);
         }
+        let program = app.engine.project().program;
+        let preview = app.engine.project().preview;
+        click(&mut app, &ctx, "dialog.shortcuts.action.10", size);
+        assert!(app.engine.inputs_paused());
         let revision = app.engine.project().revision;
-        for index in [10, 11] {
-            click(
-                &mut app,
-                &ctx,
-                &format!("dialog.shortcuts.action.{index}"),
-                size,
-            );
-        }
+        click(&mut app, &ctx, "dialog.shortcuts.action.11", size);
+        assert_eq!(app.engine.project().program, program);
+        assert_eq!(app.engine.project().preview, preview);
         assert!(app.engine.transition().is_none());
         assert!(!app.rec_active && !app.stream_active);
         assert_eq!(app.engine.project().revision, revision);
@@ -3140,8 +3130,8 @@ mod tests {
         let before = app.engine.project().clone();
         let pixels = app.last_program_rgba.clone();
 
-        // The production gear is a real entry point, not a status-only menu.
-        click(&mut app, &ctx, "output.external.settings", size);
+        // Deferred editor compatibility is tested without exposing it in the core toolbar.
+        app.dispatch(Action::ExternalSettings(1), &ctx);
         assert_eq!(app.external_settings.as_ref().unwrap().selected, 1);
         click(&mut app, &ctx, "dialog.external.source.program", size);
         click(&mut app, &ctx, "dialog.external.rate", size);
@@ -3200,7 +3190,7 @@ mod tests {
         click(&mut app, &ctx, "dialog.external.cancel", size);
         assert!(app.external_settings.is_none());
         assert_eq!(*app.engine.project(), applied);
-        click(&mut app, &ctx, "output.external", size);
+        assert!(!app.automation.contains_key("output.external"));
         assert_eq!(*app.engine.project(), applied);
         assert!(!app.external_active && !app.rec_active && !app.stream_active);
         assert_eq!(app.engine.project().program, before.program);
@@ -3215,12 +3205,12 @@ mod tests {
         app.theme(&ctx);
         let size = [1600.0, 900.0];
         let initial = app.engine.project().clone();
-        click(&mut app, &ctx, "output.external.open", size);
+        app.dispatch(Action::ExternalSettings(1), &ctx);
         click(&mut app, &ctx, "dialog.external.source.program", size);
         click(&mut app, &ctx, "dialog.external.cancel", size);
         assert_eq!(*app.engine.project(), initial);
 
-        click(&mut app, &ctx, "output.external.open", size);
+        app.dispatch(Action::ExternalSettings(1), &ctx);
         click(&mut app, &ctx, "dialog.external.source.program", size);
         // Malformed configuration must reject the complete source/config update.
         app.external_settings.as_mut().unwrap().outputs[0]
@@ -3263,6 +3253,9 @@ mod tests {
     #[test]
     fn overlay_settings_stage_slot_edits_and_apply_only_on_apply() {
         let mut app = RustMixApp::headless();
+        let mut audio_input = app.engine.project().inputs.first().cloned().unwrap();
+        audio_input.config.audio_source = Some(AudioSource::Microphone { device_id: None });
+        app.execute(Command::UpdateInput(audio_input));
         let ctx = egui::Context::default();
         app.theme(&ctx);
         let size = [1600.0, 900.0];
@@ -3354,18 +3347,19 @@ mod tests {
         click(&mut app, &ctx, "multiview.return", size);
         assert!(!app.multiview);
 
-        // Reference production-bar dialogs (Recording Setup, Streaming Settings, MultiCorder, PlayList, Shortcuts).
-        click(&mut app, &ctx, "output.record.settings", size);
+        // Deferred dialog compatibility has no entry point in the core toolbar.
+        assert!(!app.automation.contains_key("output.record.settings"));
+        app.dispatch(Action::RecordingSetup, &ctx);
         assert!(app.recording_setup);
         click(&mut app, &ctx, "dialog.recording.ok", size);
         assert!(!app.recording_setup);
 
-        click(&mut app, &ctx, "output.stream.settings", size);
+        app.dispatch(Action::StreamingSetup, &ctx);
         assert!(app.streaming_setup);
         click(&mut app, &ctx, "dialog.streaming.close", size);
         assert!(!app.streaming_setup);
 
-        click(&mut app, &ctx, "output.multicorder.settings", size);
+        app.dispatch(Action::MultiCorder, &ctx);
         assert!(app.multicorder_open);
         click(&mut app, &ctx, "dialog.multicorder.close", size);
         assert!(!app.multicorder_open);
@@ -3723,5 +3717,47 @@ mod tests {
         assert!(app.engine.project().input(id).is_none());
         assert!(app.confirm_remove_input.is_none());
         assert!(app.properties.is_none() && app.properties_fx.is_none());
+    }
+
+    #[test]
+    fn center_overlay_buttons_toggle_and_target_current_preview_source() {
+        let mut app = RustMixApp::headless();
+        let ctx = egui::Context::default();
+        app.theme(&ctx);
+        let size = [1600.0, 900.0];
+        for _ in 0..3 {
+            frame(&mut app, &ctx, vec![], size);
+        }
+        // Initially, Preview is Camera B (InputId(2)) and Overlay 1 is disabled.
+        assert_eq!(app.engine.project().preview, InputId(2));
+        assert!(!app.engine.project().overlays.standard[0].enabled);
+
+        // Click center overlay 1: it activates with Camera B
+        click(&mut app, &ctx, "switcher.overlay.1", size);
+        let o1 = &app.engine.project().overlays.standard[0];
+        assert!(o1.enabled);
+        assert_eq!(o1.title, "Camera B");
+
+        // Click center overlay 1 again while Preview is still Camera B: it turns OFF
+        click(&mut app, &ctx, "switcher.overlay.1", size);
+        assert!(!app.engine.project().overlays.standard[0].enabled);
+
+        // Switch Preview to Camera C (InputId(3))
+        app.execute(Command::SelectPreview(InputId(3)));
+        assert_eq!(app.engine.project().preview, InputId(3));
+
+        // Click center overlay 1: it activates with Camera C
+        click(&mut app, &ctx, "switcher.overlay.1", size);
+        let o1 = &app.engine.project().overlays.standard[0];
+        assert!(o1.enabled);
+        assert_eq!(o1.title, "Camera C");
+
+        // Now switch Preview to Camera A (InputId(1)) and click center overlay 1:
+        // It switches overlay 1 to Camera A
+        app.execute(Command::SelectPreview(InputId(1)));
+        click(&mut app, &ctx, "switcher.overlay.1", size);
+        let o1 = &app.engine.project().overlays.standard[0];
+        assert!(o1.enabled);
+        assert_eq!(o1.title, "Camera A");
     }
 }

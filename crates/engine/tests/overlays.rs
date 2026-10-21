@@ -167,6 +167,30 @@ fn f_keys_cover_all_eight_standard_channels() {
 }
 
 #[test]
+fn toggle_overlay_targets_and_toggles_preview_input() {
+    let mut e = Engine::default();
+    assert_eq!(e.project().preview, InputId(2));
+    assert!(!e.project().overlays.standard[0].enabled);
+
+    let cmd = e.shortcut_command(&ShortcutAction::ToggleOverlay(0)).unwrap();
+    e.execute(cmd, 0).unwrap();
+    let o = &e.project().overlays.standard[0];
+    assert!(o.enabled);
+    assert_eq!(o.title, "Camera B");
+
+    let cmd = e.shortcut_command(&ShortcutAction::ToggleOverlay(0)).unwrap();
+    e.execute(cmd, 0).unwrap();
+    assert!(!e.project().overlays.standard[0].enabled);
+
+    e.execute(Command::SelectPreview(InputId(3)), 0).unwrap();
+    let cmd = e.shortcut_command(&ShortcutAction::ToggleOverlay(0)).unwrap();
+    e.execute(cmd, 0).unwrap();
+    let o = &e.project().overlays.standard[0];
+    assert!(o.enabled);
+    assert_eq!(o.title, "Camera C");
+}
+
+#[test]
 fn schema_four_migrates_title_panels_into_the_channel_bank() {
     let directory = tempfile::tempdir().unwrap();
     let path = directory.path().join("legacy-overlays.json");
@@ -205,4 +229,17 @@ fn schema_four_migrates_title_panels_into_the_channel_bank() {
         original
     );
     assert_eq!(persistence::load(&path).unwrap(), migrated);
+}
+
+#[test]
+fn removing_an_input_clears_stinger_references_and_blocks_in_flight_stingers() {
+    let mut e = Engine::default();
+    e.execute(Command::SetStinger(1, stinger(InputId(7), 500)), 0)
+        .unwrap();
+    e.execute(Command::TriggerStinger(1), 0).unwrap();
+    assert!(e.execute(Command::RemoveInput(InputId(7)), 100).is_err());
+    e.execute(Command::StopStinger, 100).unwrap();
+    e.execute(Command::RemoveInput(InputId(7)), 100).unwrap();
+    assert_eq!(e.project().overlays.stingers[1].stinger_input, None);
+    e.project().validate().unwrap();
 }
