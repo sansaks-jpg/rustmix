@@ -433,6 +433,43 @@ impl RustMixApp {
         }
     }
 
+    pub(crate) fn input_has_playback(input: &InputState) -> bool {
+        if input.config.video_source.is_some() || input.config.audio_source.is_some() {
+            return true;
+        }
+        if input.kind == InputKind::Countdown {
+            return true;
+        }
+        if input.kind == InputKind::Color
+            || input.config.media_path.is_some()
+            || input.kind == InputKind::Bars
+        {
+            return false;
+        }
+        matches!(
+            input.kind,
+            InputKind::Grid | InputKind::Geometry | InputKind::Studio
+        )
+    }
+
+    pub(crate) fn input_has_audio(input: &InputState) -> bool {
+        if input.config.audio_source.is_some() || input.config.video_source.is_some() {
+            return true;
+        }
+        if input.kind == InputKind::Color
+            || input.config.media_path.is_some()
+            || input.kind == InputKind::Bars
+            || input.kind == InputKind::Countdown
+            || input.kind == InputKind::Graphics
+        {
+            return false;
+        }
+        matches!(
+            input.kind,
+            InputKind::Grid | InputKind::Geometry | InputKind::Studio
+        )
+    }
+
     fn monitor(&mut self, ui: &mut egui::Ui, program: bool) {
         let p = self.engine.project();
         let aspect = p.preferences.width as f32 / p.preferences.height.max(1) as f32;
@@ -650,7 +687,9 @@ impl RustMixApp {
                 ui.set_min_width((available.x - 12.0).max(40.0));
                 ui.horizontal(|ui| {
                     ui.spacing_mut().item_spacing.x = 4.0;
-                    let is_paused = self.engine.inputs_paused()
+                    let has_playback = Self::input_has_playback(&input);
+                    let is_paused = !has_playback
+                        || self.engine.inputs_paused()
                         || self.engine.playback(id).is_some_and(|clock| clock.paused());
                     let play_btn = ui
                         .push_id(("source.play", program, id.0), |ui| {
@@ -662,12 +701,16 @@ impl RustMixApp {
                                     VectorIcon::Pause
                                 },
                                 egui::vec2(20.0, 18.0),
-                                !is_paused,
+                                !is_paused && has_playback,
                                 None,
                             )
                         })
                         .inner
-                        .on_hover_text("Play / Pause source playback");
+                        .on_hover_text(if has_playback {
+                            "Play / Pause source playback"
+                        } else {
+                            "Static source · playback unavailable"
+                        });
                     self.automation.insert(
                         format!(
                             "monitor.{}.play",
@@ -675,7 +718,7 @@ impl RustMixApp {
                         ),
                         play_btn.rect,
                     );
-                    if play_btn.clicked() {
+                    if play_btn.clicked() && has_playback {
                         let paused = self.engine.playback(id).is_some_and(|clock| clock.paused());
                         self.actions
                             .push(Action::Engine(Command::SetInputPaused(id, !paused)));
@@ -691,7 +734,11 @@ impl RustMixApp {
                             )
                         })
                         .inner
-                        .on_hover_text("Restart playback from 00:00:00");
+                        .on_hover_text(if has_playback {
+                            "Restart playback from 00:00:00"
+                        } else {
+                            "Static source · restart unavailable"
+                        });
                     self.automation.insert(
                         format!(
                             "monitor.{}.restart",
@@ -699,22 +746,31 @@ impl RustMixApp {
                         ),
                         restart_btn.rect,
                     );
-                    if restart_btn.clicked() {
+                    if restart_btn.clicked() && has_playback {
                         self.actions.push(Action::Engine(Command::RestartInput(id)));
                     }
-                    let position = self
-                        .engine
-                        .playback(id)
-                        .map_or(0, |clock| clock.position_ms());
+                    let position = if has_playback {
+                        self.engine
+                            .playback(id)
+                            .map_or(0, |clock| clock.position_ms())
+                    } else {
+                        0
+                    };
                     let minutes = position / 60_000;
                     let sec = (position / 1000) % 60;
-                    let frm = p
-                        .preferences
-                        .rate
-                        .frame_at(position)
-                        .saturating_sub(p.preferences.rate.frame_at(position / 1000 * 1000));
-                    let prog_frac =
-                        (position as f32 / playback::DEMO_DURATION_MS as f32).clamp(0.0, 1.0);
+                    let frm = if has_playback {
+                        p.preferences
+                            .rate
+                            .frame_at(position)
+                            .saturating_sub(p.preferences.rate.frame_at(position / 1000 * 1000))
+                    } else {
+                        0
+                    };
+                    let prog_frac = if has_playback {
+                        (position as f32 / playback::DEMO_DURATION_MS as f32).clamp(0.0, 1.0)
+                    } else {
+                        0.0
+                    };
                     let bar_w = (ui.available_width() - 100.0).max(12.0);
                     let (bar_rect, _) =
                         ui.allocate_exact_size(egui::vec2(bar_w, 6.0), Sense::hover());
@@ -724,7 +780,9 @@ impl RustMixApp {
                         bar_rect.min,
                         egui::vec2(bar_rect.width() * prog_frac, bar_rect.height()),
                     );
-                    ui.painter().rect_filled(fill_rect, 3.0, color);
+                    if has_playback && prog_frac > 0.0 {
+                        ui.painter().rect_filled(fill_rect, 3.0, color);
+                    }
                     self.automation.insert(
                         format!(
                             "monitor.{}.progress",
@@ -1634,24 +1692,31 @@ impl RustMixApp {
                             self.actions.push(Action::Engine(Command::SetBus(0, a)));
                         }
                     }
-                    let rail = mixer_rail(ui, rail_width, height, "INPUTS");
-                    self.automation.insert("audio.rail.inputs".into(), rail);
-                    for input in &p.inputs {
-                        let peaks = audio::input_peaks(input, solo, self.now);
-                        let changed = self.strip(
-                            ui,
-                            (format!("input.{}", input.id.0), &input.name),
-                            input.audio.clone(),
-                            peaks,
-                            height,
-                            Some(input.id),
-                        );
-                        if let Some(a) = changed {
-                            let mut i = input.clone();
-                            i.audio = a;
-                            self.selected_audio = Some(i.id);
-                            self.actions
-                                .push(Action::Engine(Command::SetInputAudio(i.id, i.audio)));
+                    let audio_inputs: Vec<&InputState> = p
+                        .inputs
+                        .iter()
+                        .filter(|i| Self::input_has_audio(i))
+                        .collect();
+                    if !audio_inputs.is_empty() {
+                        let rail = mixer_rail(ui, rail_width, height, "INPUTS");
+                        self.automation.insert("audio.rail.inputs".into(), rail);
+                        for input in audio_inputs {
+                            let peaks = audio::input_peaks(input, solo, self.now);
+                            let changed = self.strip(
+                                ui,
+                                (format!("input.{}", input.id.0), &input.name),
+                                input.audio.clone(),
+                                peaks,
+                                height,
+                                Some(input.id),
+                            );
+                            if let Some(a) = changed {
+                                let mut i = input.clone();
+                                i.audio = a;
+                                self.selected_audio = Some(i.id);
+                                self.actions
+                                    .push(Action::Engine(Command::SetInputAudio(i.id, i.audio)));
+                            }
                         }
                     }
                 });

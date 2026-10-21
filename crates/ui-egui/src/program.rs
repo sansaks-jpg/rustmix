@@ -70,7 +70,10 @@ impl ProgramWorker {
                 u64::try_from(origin.elapsed().as_nanos()).unwrap_or(u64::MAX),
             );
             let mut renderer = ProgramRenderer::default();
-            let mut stats = VideoStats::default();
+            let mut stats = VideoStats {
+                fps: rate.numerator as f64 / rate.denominator.max(1) as f64,
+                ..VideoStats::default()
+            };
             let mut sample_start = Instant::now();
             let mut sample_frames = 0_u64;
             let mut previous_pixels: Option<Pixels> = None;
@@ -84,7 +87,10 @@ impl ProgramWorker {
                         rate,
                         u64::try_from(origin.elapsed().as_nanos()).unwrap_or(u64::MAX),
                     );
-                    stats = VideoStats::default();
+                    stats = VideoStats {
+                        fps: rate.numerator as f64 / rate.denominator.max(1) as f64,
+                        ..VideoStats::default()
+                    };
                     sample_frames = 0;
                     sample_start = Instant::now();
                 }

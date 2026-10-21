@@ -1,5 +1,9 @@
 /target/
 /references/private/
 /artifacts/
+/dist/
+/dist-*/
 *.rustmix.json
+/dist/
+/dist-*/
 *.rustmix.json.*

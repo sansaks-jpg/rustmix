@@ -1534,7 +1534,14 @@ impl Engine {
         }
     }
     fn tick_playback(&mut self, now: u64) {
-        for clock in self.playback.values_mut() {
+        for (id, clock) in &mut self.playback {
+            if let Some(input) = self.project.input(*id)
+                && (input.kind == InputKind::Color
+                    || input.kind == InputKind::Bars
+                    || input.config.media_path.is_some())
+            {
+                continue;
+            }
             clock.advance(now, self.inputs_paused);
         }
     }

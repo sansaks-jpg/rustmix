@@ -2185,7 +2185,8 @@ impl RustMixApp {
             ui.spacing_mut().item_spacing.x = 8.0;
             ui.label(
                 RichText::new({
-                    let [w, h] = p.preferences.video_standard().monitor_size();
+                    let w = p.preferences.width;
+                    let h = p.preferences.height;
                     format!("{w}×{h}/{}p", p.preferences.rate.label())
                 })
                 .strong()
@@ -2219,10 +2220,14 @@ impl RustMixApp {
             self.automation
                 .insert("status.audio".into(), audio_status.rect);
             ui.label(RichText::new("CPU:").strong().color(DIM));
-            ui.label(
-                RichText::new(format!("{:.1} ms", self.generation_ms))
-                    .color(ui.visuals().text_color()),
-            );
+            let cpu_label = if self.generation_ms > 0.0 {
+                format!("{:.1} ms", self.generation_ms)
+            } else if self.video_stats.render_ms > 0.0 {
+                format!("{:.1} ms", self.video_stats.render_ms)
+            } else {
+                "<0.1 ms".into()
+            };
+            ui.label(RichText::new(cpu_label).color(ui.visuals().text_color()));
             if self.rec_active {
                 let s = self.now.saturating_sub(self.rec_started_ms) / 1000;
                 ui.label(
