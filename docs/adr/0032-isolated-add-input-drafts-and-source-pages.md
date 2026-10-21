@@ -1,7 +1,7 @@
 # ADR 0032: Isolated Add Input drafts and truthful source pages
 
 Date: 2026-10-21
-Status: implemented source candidate; hosted compile/test/native acceptance pending.
+Status: implemented; selected scope accepted on source4850b0f/run39587449408 attempt3 (282 tests,16 native processes). Prior GPU shutdown failures remain open.
 Scope: ADD-UX-01 through ADD-UX-06 from the focused Add Input audit.
 
 The existing Add Input dialog shares a filename/name field and a decoded PNG
