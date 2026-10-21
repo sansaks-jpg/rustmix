@@ -201,13 +201,13 @@ pub struct WorkspaceState {
     pub name: String,
     pub dock_json: String,
 }
-/// Current project schema. Schema 8 adds typed video-file source descriptors.
+/// Current project schema. Schema 9 adds Photos, Browser and camera descriptors.
 /// Schema 7 adds typed audio-only source descriptors.
 /// Schema 6 adds the four external output slots
 /// (routing and configuration); schema 5 replaced the four-overlay array with
 /// the sixteen-channel production bank; 1–7 load through the persistence
 /// migration.
-pub const SCHEMA: u32 = 8;
+pub const SCHEMA: u32 = 9;
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ProjectState {
     pub schema: u32,

@@ -14,7 +14,7 @@ use windows::{
         Storage::FileSystem::GetDriveTypeW,
         System::{
             Com::{
-                COINIT_MULTITHREADED, CoInitializeEx, CoUninitialize,
+                COINIT_MULTITHREADED, CoInitializeEx, CoTaskMemFree, CoUninitialize,
                 StructuredStorage::PROPVARIANT,
             },
             WindowsProgramming::{DRIVE_CDROM, DRIVE_FIXED, DRIVE_RAMDISK, DRIVE_REMOVABLE},
@@ -183,8 +183,120 @@ impl Drop for Runtime {
     }
 }
 
+struct CaptureOwner(IMFMediaSource);
+impl Drop for CaptureOwner {
+    fn drop(&mut self) {
+        // SAFETY: Owned media source remains on its COM owner thread, reader is
+        // released first by field order; Shutdown releases driver capture resources.
+        let _ = unsafe { self.0.Shutdown() };
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CameraDevice {
+    pub id: String,
+    pub name: String,
+}
+
+fn camera_attributes() -> Result<IMFAttributes> {
+    let mut attributes = None;
+    // SAFETY: Valid exclusive out pointer, then owned attributes on this COM worker.
+    unsafe {
+        mf("camera attributes", MFCreateAttributes(&mut attributes, 2))?;
+        let attributes = attributes.ok_or(VideoError::Invalid("Missing camera attributes"))?;
+        mf(
+            "camera source type",
+            attributes.SetGUID(
+                &MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE,
+                &MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE_VIDCAP_GUID,
+            ),
+        )?;
+        Ok(attributes)
+    }
+}
+
+fn camera_string(attributes: &IMFAttributes, key: &GUID) -> Result<String> {
+    // SAFETY: Attributes/key are live on their COM thread. The 4097-code-unit
+    // buffer is initialized and owned; GetString cannot write beyond its slice.
+    unsafe {
+        let length = mf("camera string length", attributes.GetStringLength(key))?;
+        if length == 0 || length > 4096 {
+            return Err(VideoError::Invalid("Camera identity exceeds its bound"));
+        }
+        let mut text = vec![0; length as usize + 1];
+        mf(
+            "read camera identity",
+            attributes.GetString(key, &mut text, None),
+        )?;
+        let end = text.iter().position(|c| *c == 0).unwrap_or(text.len());
+        String::from_utf16(
+            text.get(..end)
+                .ok_or(VideoError::Invalid("Camera identity length"))?,
+        )
+        .map_err(|_| VideoError::Invalid("Camera identity is not valid text"))
+    }
+}
+
+/// Discovery only: no source is activated or captured by enumeration.
+pub fn camera_devices() -> Result<Vec<CameraDevice>> {
+    let _runtime = Runtime::start()?;
+    let attributes = camera_attributes()?;
+    let mut pointer = std::ptr::null_mut();
+    let mut count = 0;
+    // SAFETY: MF writes an owned CoTaskMem array with count initialized COM
+    // references. Windows owns discovery, all interfaces stay on this thread.
+    mf("enumerate cameras", unsafe {
+        MFEnumDeviceSources(&attributes, &mut pointer, &mut count)
+    })?;
+    if pointer.is_null() {
+        return Ok(Vec::new());
+    }
+    struct Activations {
+        pointer: *mut Option<IMFActivate>,
+        count: usize,
+    }
+    impl Drop for Activations {
+        fn drop(&mut self) {
+            // SAFETY: Array/count come directly from successful MF enumeration;
+            // take releases each owned reference exactly once before freeing array.
+            unsafe {
+                for item in std::slice::from_raw_parts_mut(self.pointer, self.count) {
+                    *item = None;
+                }
+                CoTaskMemFree(Some(self.pointer.cast()));
+            }
+        }
+    }
+    let array = Activations {
+        pointer,
+        count: count as usize,
+    };
+    if count > 128 {
+        return Err(VideoError::Invalid(
+            "More than 128 camera devices are unsupported",
+        ));
+    }
+    let mut result = Vec::new();
+    // SAFETY: Same live initialized MF array, bounded to 128. Borrowed only until
+    // the RAII owner above drops it; no interface escapes this worker.
+    for activation in unsafe { std::slice::from_raw_parts(array.pointer, array.count) }
+        .iter()
+        .flatten()
+    {
+        result.push(CameraDevice {
+            id: camera_string(
+                activation,
+                &MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE_VIDCAP_SYMBOLIC_LINK,
+            )?,
+            name: camera_string(activation, &MF_DEVSOURCE_ATTRIBUTE_FRIENDLY_NAME)?,
+        });
+    }
+    Ok(result)
+}
+
 pub struct VideoFile {
     reader: IMFSourceReader,
+    _capture: Option<CaptureOwner>,
     _runtime: Runtime,
     format: VideoFormat,
     source_size: [u32; 2],
@@ -230,6 +342,14 @@ impl VideoFile {
         let reader = mf("open local MP4", unsafe {
             MFCreateSourceReaderFromURL(PCWSTR(wide.as_ptr()), &attributes)
         })?;
+        Self::from_reader(runtime, None, reader)
+    }
+
+    fn from_reader(
+        runtime: Runtime,
+        capture: Option<CaptureOwner>,
+        reader: IMFSourceReader,
+    ) -> Result<Self> {
         // SAFETY: Reader is a live owned interface on its initializing worker.
         // Stream selectors are SDK constants; only video is enabled (no audio
         // device, network URL or capture source is opened by this module).
@@ -263,6 +383,7 @@ impl VideoFile {
         let format = decoded_format(&current)?;
         Ok(Self {
             reader,
+            _capture: capture,
             _runtime: runtime,
             format,
             source_size,
@@ -271,6 +392,51 @@ impl VideoFile {
             pending_discontinuity: true,
             pending_type_change: false,
         })
+    }
+
+    /// Explicit operator-selected camera. Never selects a different device on failure.
+    pub fn open_camera(device_id: &str) -> Result<Self> {
+        if device_id.is_empty() || device_id.len() > 4096 || device_id.chars().any(char::is_control)
+        {
+            return Err(VideoError::Invalid("Invalid camera device ID"));
+        }
+        let runtime = Runtime::start()?;
+        let attributes = camera_attributes()?;
+        let wide: Vec<u16> = device_id.encode_utf16().chain(Some(0)).collect();
+        // SAFETY: Attributes and NUL-terminated identity live through each call;
+        // the selected source and reader are owned on this COM worker only.
+        let (source, reader) = unsafe {
+            mf(
+                "select camera",
+                attributes.SetString(
+                    &MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE_VIDCAP_SYMBOLIC_LINK,
+                    PCWSTR(wide.as_ptr()),
+                ),
+            )?;
+            let source = mf("open selected camera", MFCreateDeviceSource(&attributes))?;
+            let mut processing = None;
+            mf(
+                "camera processor attributes",
+                MFCreateAttributes(&mut processing, 2),
+            )?;
+            let processing =
+                processing.ok_or(VideoError::Invalid("Missing camera processor attributes"))?;
+            mf(
+                "camera conversion",
+                processing.SetUINT32(&MF_SOURCE_READER_ENABLE_ADVANCED_VIDEO_PROCESSING, 1),
+            )?;
+            mf(
+                "camera low latency",
+                processing.SetUINT32(&MF_LOW_LATENCY, 1),
+            )?;
+            let owner = CaptureOwner(source);
+            let reader = mf(
+                "open camera reader",
+                MFCreateSourceReaderFromMediaSource(&owner.0, &processing),
+            )?;
+            (owner, reader)
+        };
+        Self::from_reader(runtime, Some(source), reader)
     }
 
     pub fn format(&self) -> VideoFormat {

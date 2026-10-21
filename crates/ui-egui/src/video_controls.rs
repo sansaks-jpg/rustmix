@@ -41,7 +41,7 @@ pub(crate) struct VideoUi {
 /// restart constructs a new slot so an obsolete reader cannot publish frames.
 pub(crate) struct VideoSlot {
     player: VideoPlayer,
-    path: String,
+    source: VideoSource,
     sequence: Option<u64>,
     revision: u64,
     control: Option<(bool, bool, u64)>,
@@ -74,7 +74,6 @@ fn health_message(health: &VideoSourceHealth) -> Option<String> {
 
 fn present_video_error(input_fx: &mut HashMap<InputId, InputFx>, id: InputId, error: &str) {
     let fx = input_fx.entry(id).or_default();
-    fx.custom_rgba = None;
     fx.image_pending = false;
     fx.image_error = Some(bounded_reason(error));
 }
@@ -139,12 +138,26 @@ fn probe_video(_path: PathBuf) -> std::result::Result<VideoProbe, String> {
 impl RustMixApp {
     pub(crate) fn poll_video(&mut self, ctx: &egui::Context) {
         self.poll_video_probe();
-        let mut desired: Vec<(InputId, String, bool)> = Vec::new();
+        self.armed_sources
+            .retain(|id| self.engine.project().input(*id).is_some());
+        let mut desired: Vec<(InputId, VideoSource, bool)> = Vec::new();
         {
             let project = self.engine.project();
             for input in &project.inputs {
-                if let Some(VideoSource::File { path }) = &input.config.video_source {
-                    desired.push((input.id, path.clone(), input.online));
+                if let Some(source) = &input.config.video_source {
+                    let armed = !matches!(
+                        source,
+                        VideoSource::Camera { .. } | VideoSource::Browser { .. }
+                    ) || self.armed_sources.contains(&input.id);
+                    if armed {
+                        desired.push((input.id, source.clone(), input.online));
+                    } else {
+                        let fx = self.input_fx.entry(input.id).or_default();
+                        fx.custom_rgba = None;
+                        fx.image_pending = false;
+                        fx.image_error =
+                            Some("Stopped. Use Start source in Input Settings.".into());
+                    }
                 }
             }
         }
@@ -153,7 +166,7 @@ impl RustMixApp {
         self.video_players.retain(|id, slot| {
             desired
                 .iter()
-                .any(|(input, path, _)| input == id && path == &slot.path)
+                .any(|(input, path, _)| input == id && path == &slot.source)
         });
         let paused_all = self.engine.inputs_paused();
         let mut changed = false;
@@ -180,13 +193,13 @@ impl RustMixApp {
                 }
                 self.video_generation = self.video_generation.wrapping_add(1);
                 let generation = self.video_generation;
-                match VideoPlayer::spawn(*id, generation, path.clone(), ctx.clone()) {
+                match VideoPlayer::spawn_source(*id, generation, path.clone(), ctx.clone()) {
                     Ok(player) => {
                         self.video_players.insert(
                             *id,
                             VideoSlot {
                                 player,
-                                path: path.clone(),
+                                source: path.clone(),
                                 sequence: None,
                                 revision: 0,
                                 control: None,
@@ -389,6 +402,8 @@ impl RustMixApp {
 
     pub(crate) fn stop_video_players(&mut self) {
         self.video_players.clear();
+        self.armed_sources.clear();
+        self.source_ui.retire();
         self.cancel_video_add();
     }
 

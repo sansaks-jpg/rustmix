@@ -349,3 +349,81 @@ fn video_configuration_round_trips_and_older_inputs_default_to_no_video() {
         original_bytes
     );
 }
+
+#[test]
+fn new_source_descriptors_validate_and_roundtrip_without_changing_program() {
+    let sources = [
+        VideoSource::Photos {
+            paths: vec!["C:/photos/a.png".into(), "C:/photos/b.jpg".into()],
+            interval_ms: 500,
+        },
+        VideoSource::Browser {
+            url: "http://127.0.0.1:8912/graphics".into(),
+            width: 1280,
+            height: 720,
+        },
+        VideoSource::Camera {
+            device_id: "test-camera-stable-id".into(),
+        },
+    ];
+    let mut engine = Engine::default();
+    let program = engine.project().program;
+    let preview = engine.project().preview;
+    for source in sources {
+        source.validate().unwrap();
+        engine
+            .execute(
+                Command::AddInputAt {
+                    name: source.label().into(),
+                    kind: InputKind::Color,
+                    config: InputConfig {
+                        video_source: Some(source),
+                        ..Default::default()
+                    },
+                    index: 0,
+                },
+                0,
+            )
+            .unwrap();
+    }
+    assert_eq!(engine.project().program, program);
+    assert_eq!(engine.project().preview, preview);
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("sources.json");
+    persistence::save(&path, engine.project()).unwrap();
+    assert_eq!(persistence::load(&path).unwrap(), *engine.project());
+    for source in [
+        VideoSource::Photos {
+            paths: vec![],
+            interval_ms: 1000,
+        },
+        VideoSource::Photos {
+            paths: vec!["a.png".into(); 257],
+            interval_ms: 1000,
+        },
+        VideoSource::Photos {
+            paths: vec!["a.png".into()],
+            interval_ms: 0,
+        },
+        VideoSource::Browser {
+            url: "http://user:password@example.com".into(),
+            width: 640,
+            height: 360,
+        },
+        VideoSource::Browser {
+            url: "file:///private.txt".into(),
+            width: 640,
+            height: 360,
+        },
+        VideoSource::Browser {
+            url: "https://example.com".into(),
+            width: u32::MAX,
+            height: 360,
+        },
+        VideoSource::Camera {
+            device_id: "".into(),
+        },
+    ] {
+        assert!(source.validate().is_err());
+    }
+}

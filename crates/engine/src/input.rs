@@ -74,16 +74,86 @@ fn valid_audio_identity(value: &str) -> bool {
 /// A descriptor never establishes that its container's codec is supported.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum VideoSource {
-    File { path: String },
+    File {
+        path: String,
+    },
+    Photos {
+        paths: Vec<String>,
+        interval_ms: u32,
+    },
+    Browser {
+        url: String,
+        width: u32,
+        height: u32,
+    },
+    Camera {
+        device_id: String,
+    },
 }
 
 impl VideoSource {
     pub fn label(&self) -> &'static str {
-        "Video file"
+        match self {
+            Self::File { .. } => "Video file",
+            Self::Photos { .. } => "Photos",
+            Self::Browser { .. } => "Web Browser",
+            Self::Camera { .. } => "Camera",
+        }
     }
 
     pub fn validate(&self) -> Result<()> {
-        let Self::File { path } = self;
+        let path = match self {
+            Self::Camera { device_id } => {
+                return if valid_audio_identity(device_id) {
+                    Ok(())
+                } else {
+                    Err(invalid("Choose a valid camera device ID"))
+                };
+            }
+            Self::Browser { url, width, height } => {
+                let authority = url
+                    .split_once("://")
+                    .map(|(_, rest)| rest.split('/').next().unwrap_or(""));
+                return if valid_audio_identity(url)
+                    && !url.chars().any(char::is_whitespace)
+                    && (url.starts_with("https://") || url.starts_with("http://"))
+                    && authority.is_some_and(|a| !a.is_empty() && !a.contains('@'))
+                    && (64..=1920).contains(width)
+                    && (64..=1080).contains(height)
+                {
+                    Ok(())
+                } else {
+                    Err(invalid(
+                        "Browser needs an HTTP(S) URL without credentials and a 64–1920 by 64–1080 viewport",
+                    ))
+                };
+            }
+            Self::Photos { paths, interval_ms } => {
+                return if !paths.is_empty()
+                    && paths.len() <= 256
+                    && (500..=3_600_000).contains(interval_ms)
+                    && paths.iter().all(|p| {
+                        valid_audio_identity(p)
+                            && !p.starts_with("//")
+                            && !p.starts_with(r"\\")
+                            && std::path::Path::new(p)
+                                .extension()
+                                .and_then(|e| e.to_str())
+                                .is_some_and(|e| {
+                                    ["png", "jpg", "jpeg", "bmp"]
+                                        .iter()
+                                        .any(|x| e.eq_ignore_ascii_case(x))
+                                })
+                    }) {
+                    Ok(())
+                } else {
+                    Err(invalid(
+                        "Photos needs 1–256 local PNG/JPEG/BMP files and an interval of 0.5–3600 seconds",
+                    ))
+                };
+            }
+            Self::File { path } => path,
+        };
         if !valid_audio_identity(path) {
             return Err(invalid(
                 "Video file source must reference a local MP4 path of at most 4096 bytes",

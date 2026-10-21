@@ -595,7 +595,9 @@ impl RustMixApp {
                     self.automation
                         .insert("dialog.add.confirm".into(), confirm.rect);
                     if confirm.clicked() && !self.add_loading {
-                        close_requested = if matches!(self.add_tab, 12 | 13) {
+                        close_requested = if matches!(self.add_tab, 9 | 17 | 22) {
+                            self.confirm_extra_source(ctx)
+                        } else if matches!(self.add_tab, 12 | 13) {
                             self.confirm_audio_input(ctx)
                         } else if self.add_tab == VIDEO_TAB {
                             self.confirm_video_input(ctx)
@@ -1076,6 +1078,15 @@ impl RustMixApp {
                                 &mut draft.online,
                                 "Source online (off = black)",
                             );
+                            if let Some(source)=&draft.config.video_source
+                                && matches!(source,VideoSource::Camera{..}|VideoSource::Browser{..}) {
+                                ui.label(format!("Source type: {}",source.label()));
+                                let armed=app.armed_sources.contains(&id);
+                                if ui.button(if armed {"Stop source"} else {"Start source"}).clicked() {
+                                    if armed {app.armed_sources.remove(&id);} else {app.armed_sources.insert(id);}
+                                }
+                                if let Some(error)=app.input_fx.get(&id).and_then(|fx|fx.image_error.as_ref()) { ui.colored_label(RED,error); }
+                            }
                             if let Some(VideoSource::File { path }) = &draft.config.video_source {
                                 ui.label("Source type: MP4 video, decoded on its own owner worker. MP4 audio is not decoded.");
                                 ui.label(format!("Path: {path}"));

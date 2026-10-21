@@ -1,5 +1,5 @@
-//! Local MP4 video-only owner workers and independently readable engine feeds.
-//! Audio tracks, capture, GPU decoding and A/V synchronization are not provided.
+//! Bounded source owners for MP4, cameras, Photos and Browser frames.
+//! No embedded MP4/browser/camera audio, GPU decode or A/V synchronization claim.
 //! Open/read/seek are synchronous Media Foundation calls on their owner worker.
 //! Stop/Drop request cancellation without blocking the UI; a blocked MF call
 //! can delay termination indefinitely. Its global worker permit is retained
@@ -9,7 +9,7 @@ use eframe::egui;
 #[cfg(any(windows, test))]
 use rustmix_engine::video_source::{VideoFeedError, VideoFrame, VideoFrameMetadata};
 use rustmix_engine::{
-    InputId,
+    InputId, VideoSource,
     video_source::{VideoFeed, VideoSourceHealth},
 };
 use std::sync::{
@@ -69,15 +69,15 @@ pub struct VideoPlayer {
 impl VideoPlayer {
     /// Pure descriptor validation and thread creation only; no file/device I/O
     /// occurs on the UI thread. Each generation owns its own immutable feed ID.
-    pub fn spawn(
+    pub fn spawn_source(
         input_id: InputId,
         generation: u64,
-        path: String,
+        source: VideoSource,
         repaint: egui::Context,
     ) -> Result<Self, String> {
         #[cfg(windows)]
         {
-            validate_path(&path)?;
+            source.validate().map_err(|e| e.to_string())?;
             let feed =
                 Arc::new(VideoFeed::new(input_id, generation).map_err(|error| error.to_string())?);
             let permit = Permit::acquire()?;
@@ -93,9 +93,16 @@ impl VideoPlayer {
             thread::Builder::new()
                 .name(format!("rustmix-video-{}", input_id.0))
                 .spawn(move || {
-                    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                        native::run(&worker, input_id, generation, &path)
-                    }));
+                    let result =
+                        std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| match &source {
+                            VideoSource::File { path } => {
+                                native::run(&worker, input_id, generation, path, false)
+                            }
+                            VideoSource::Camera { device_id } => {
+                                native::run(&worker, input_id, generation, device_id, true)
+                            }
+                            _ => source_workers::run(&worker, input_id, generation, &source),
+                        }));
                     let failure = match result {
                         Ok(Ok(())) => None,
                         Ok(Err(error)) => Some(error),
@@ -129,7 +136,7 @@ impl VideoPlayer {
         }
         #[cfg(not(windows))]
         {
-            let _ = (input_id, generation, path, repaint);
+            let _ = (input_id, generation, source, repaint);
             Err("Local MP4 video decoding requires Windows Media Foundation".into())
         }
     }
@@ -212,25 +219,6 @@ impl Drop for Permit {
         });
     }
 }
-#[cfg(windows)]
-fn validate_path(path: &str) -> Result<(), String> {
-    if path.len() > 4096
-        || path.trim().is_empty()
-        || path.chars().any(char::is_control)
-        || path.contains("://")
-        || path.starts_with("//")
-        || path.starts_with(r"\\")
-        || !std::path::Path::new(path)
-            .extension()
-            .and_then(|extension| extension.to_str())
-            .is_some_and(|extension| extension.eq_ignore_ascii_case("mp4"))
-    {
-        Err("Select a bounded local MP4 file; video audio is not decoded".into())
-    } else {
-        Ok(())
-    }
-}
-
 #[cfg(any(windows, test))]
 const STATUS_LIMIT: u32 = 120;
 #[cfg(any(windows, test))]
@@ -552,6 +540,60 @@ impl<R: FrameReader> Playback<R> {
     }
 }
 
+pub(crate) fn discover_cameras() -> Result<Vec<(String, String)>, String> {
+    #[cfg(windows)]
+    {
+        rustmix_platform::media_foundation::camera_devices()
+            .map(|items| items.into_iter().map(|d| (d.id, d.name)).collect())
+            .map_err(|e| e.to_string())
+    }
+    #[cfg(not(windows))]
+    {
+        Err("Camera capture requires Windows".into())
+    }
+}
+
+pub(crate) fn probe_source(source: &VideoSource) -> Result<(), String> {
+    source.validate().map_err(|e| e.to_string())?;
+    #[cfg(windows)]
+    {
+        match source {
+            VideoSource::Photos { paths, .. } => {
+                for path in paths {
+                    source_workers::photo(std::path::Path::new(path))?;
+                }
+                Ok(())
+            }
+            VideoSource::Browser { url, width, height } => {
+                source_workers::probe_browser(url, *width, *height)
+            }
+            VideoSource::Camera { device_id } => {
+                use rustmix_platform::media_foundation::{VideoFile, VideoRead};
+                let mut camera = VideoFile::open_camera(device_id).map_err(|e| e.to_string())?;
+                for _ in 0..120 {
+                    match camera.read_frame().map_err(|e| e.to_string())? {
+                        VideoRead::Frame(_) => return Ok(()),
+                        VideoRead::EndOfStream => {
+                            return Err("Camera ended before its first frame".into());
+                        }
+                        _ => thread::sleep(Duration::from_millis(10)),
+                    }
+                }
+                Err("Camera did not deliver a frame".into())
+            }
+            _ => Err("Use the Video page to check MP4".into()),
+        }
+    }
+    #[cfg(not(windows))]
+    {
+        Err("These source workers require Windows".into())
+    }
+}
+
+#[cfg(windows)]
+#[path = "source_workers.rs"]
+mod source_workers;
+
 #[cfg(windows)]
 mod native {
     use super::*;
@@ -560,6 +602,7 @@ mod native {
         file: VideoFile,
         input_id: InputId,
         generation: u64,
+        camera: bool,
     }
     impl FrameReader for NativeReader {
         fn read(&mut self) -> Result<ReadEvent, String> {
@@ -601,7 +644,11 @@ mod native {
             }
         }
         fn seek_zero(&mut self) -> Result<(), String> {
-            self.file.seek_100ns(0).map_err(|error| error.to_string())
+            if self.camera {
+                Ok(())
+            } else {
+                self.file.seek_100ns(0).map_err(|error| error.to_string())
+            }
         }
     }
     pub(super) fn run(
@@ -609,13 +656,18 @@ mod native {
         input_id: InputId,
         generation: u64,
         path: &str,
+        camera: bool,
     ) -> Result<(), String> {
         if shared.stop.load(Ordering::Acquire) {
             return Ok(());
         }
         set_health_bounded(&shared.feed, VideoSourceHealth::Probing)?;
-        let file =
-            VideoFile::open(std::path::Path::new(path)).map_err(|error| error.to_string())?;
+        let file = if camera {
+            VideoFile::open_camera(path)
+        } else {
+            VideoFile::open(std::path::Path::new(path))
+        }
+        .map_err(|error| error.to_string())?;
         if shared.stop.load(Ordering::Acquire) {
             return Ok(());
         }
@@ -624,6 +676,7 @@ mod native {
             file,
             input_id,
             generation,
+            camera,
         };
         let mut playback = Playback::new(reader, Arc::clone(&shared.feed));
         let origin = Instant::now();

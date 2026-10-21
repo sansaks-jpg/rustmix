@@ -68,6 +68,16 @@ function Invoke-NativeSmoke([string[]]$SmokeArguments) {
     if (Test-Path artifacts/profile-error.txt) { throw (Get-Content artifacts/profile-error.txt -Raw) }
     if (Test-Path artifacts/smoke-error.txt) { throw (Get-Content artifacts/smoke-error.txt -Raw) }
 }
+Invoke-NativeSmoke @('--ui-source-smoke')
+foreach ($name in @('source-photos-form','source-browser-form','source-camera-discovery')) {
+    foreach ($suffix in @('.png','-elements.json')) {
+        if (-not (Test-Path -LiteralPath (Join-Path artifacts ($name + $suffix)))) { throw "Missing source evidence: $name$suffix" }
+    }
+}
+foreach ($name in @('source-browser-program.png','sources-ok.json','sources.rustmix.json')) {
+    if (-not (Test-Path -LiteralPath (Join-Path artifacts $name))) { throw "Missing real-source evidence: $name" }
+}
+
 Invoke-NativeSmoke @('--ui-smoke')
 foreach ($file in @('smoke-ok.json','workspace-1100.png','workspace-1600.png','workspace-1920.png','smoke.rustmix.json','ui-elements.json','layout-stability.json','pause-transport.json','paused-program.png')) {
     if (-not (Test-Path (Join-Path artifacts $file))) { throw "Missing native evidence: $file" }

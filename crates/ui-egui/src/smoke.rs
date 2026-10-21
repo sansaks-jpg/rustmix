@@ -120,6 +120,7 @@ pub(crate) struct Smoke {
     pub(crate) captured: bool,
     /// Scratch text/pixel evidence for opt-in smoke modes with staged values.
     pub(crate) scratch_text: Option<String>,
+    pub(crate) source_fixture: Option<crate::source_smoke::FixtureServer>,
     pub(crate) scratch_pixels: Option<Vec<u8>>,
     bank_baseline: Option<Rect>,
     paused_program: Option<(u64, Vec<u8>, Rect)>,
@@ -159,12 +160,13 @@ impl Smoke {
     }
 }
 fn native_mode_name() -> String {
-    const MODES: [&str; 16] = [
+    const MODES: [&str; 17] = [
         "--ui-smoke",
         "--ui-smoke-reopen",
         "--ui-layout-smoke",
         "--ui-dialog-smoke",
         "--ui-add-smoke",
+        "--ui-source-smoke",
         "--ui-input-smoke",
         "--ui-input-smoke-reopen",
         "--ui-reference-smoke",
@@ -321,6 +323,9 @@ impl RustMixApp {
     }
 
     fn smoke_run(&mut self, ctx: &egui::Context, s: &mut Smoke) -> Result<()> {
+        if std::env::args().any(|arg| arg == "--ui-source-smoke") {
+            return self.smoke_sources(ctx, s);
+        }
         if std::env::args().any(|arg| arg == "--ui-add-smoke") {
             return self.smoke_add_input(ctx, s);
         }

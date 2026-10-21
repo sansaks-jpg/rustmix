@@ -7,6 +7,7 @@ mod audio_smoke;
 mod controls;
 mod dialogs;
 mod extended_output;
+mod extra_sources;
 mod inputs;
 mod media;
 #[cfg(test)]
@@ -21,6 +22,7 @@ mod reference_controls;
 mod reference_smoke;
 mod smoke;
 mod snapshot;
+mod source_smoke;
 mod video_controls;
 mod video_history;
 mod video_player;
@@ -650,6 +652,8 @@ pub struct RustMixApp {
     pub(crate) audio_ui: audio_controls::AudioUi,
     /// Local MP4 add-dialog draft; no decoder starts until the descriptor commits.
     pub(crate) video_ui: video_controls::VideoUi,
+    pub(crate) source_ui: extra_sources::SourceUi,
+    pub(crate) armed_sources: std::collections::HashSet<InputId>,
     /// One bounded decoder owner per committed video input.
     pub(crate) video_players: HashMap<InputId, video_controls::VideoSlot>,
     video_generation: u64,
@@ -727,6 +731,7 @@ impl RustMixApp {
                     | "--ui-layout-smoke"
                     | "--ui-dialog-smoke"
                     | "--ui-add-smoke"
+                    | "--ui-source-smoke"
                     | "--ui-input-smoke"
                     | "--ui-input-smoke-reopen"
                     | "--ui-reference-smoke"
@@ -923,6 +928,8 @@ impl RustMixApp {
             extended_output: extended_output::ExtendedOutput::default(),
             audio_ui: audio_controls::AudioUi::default(),
             video_ui: video_controls::VideoUi::default(),
+            source_ui: extra_sources::SourceUi::default(),
+            armed_sources: std::collections::HashSet::new(),
             video_players: HashMap::new(),
             video_generation: 0,
             confirm_new: false,
@@ -2320,6 +2327,7 @@ impl RustMixApp {
         self.poll_job(&ctx);
         self.poll_media();
         self.poll_audio(&ctx);
+        self.poll_extra_source();
         self.poll_video(&ctx);
         self.poll_extended_output(&ctx);
         self.shortcuts(&ctx);

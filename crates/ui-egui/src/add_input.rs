@@ -14,25 +14,22 @@ pub(super) fn unavailable_reason(tab: usize) -> Option<&'static str> {
         5 => Some("Network stream inputs are unavailable. No connection will be opened."),
         7 => Some("Instant Replay capture and storage are unavailable."),
         8 => Some("Image-sequence and stinger file inputs are unavailable."),
-        9 => Some("Photo-folder slideshows are unavailable. Use a single PNG image."),
         10 => Some("PowerPoint presentation inputs are unavailable."),
         14 => Some(
             "Title template inputs are unavailable. The Generators library includes an original lower-third sample.",
         ),
         16 => Some("Virtual-set inputs are unavailable. Studio pattern is a procedural generator."),
-        17 => Some("Web Browser inputs are unavailable. No page will be opened."),
         18 => Some("Video Call inputs are unavailable. No guest connection will be started."),
         19 => Some(
             "Zoom inputs are unavailable. No plugin is installed or downloaded by this dialog.",
         ),
         21 => Some("DVD playback inputs are unavailable."),
-        22 => Some("Camera and capture-card inputs are unavailable. No camera will be opened."),
         23 => Some(
             "NDI, OMT and desktop-capture inputs are unavailable. No device or network discovery will be started.",
         ),
         24 => Some("Video Delay capture and buffering are unavailable."),
         25 => Some("Telestrator inputs are unavailable. No web controller will be enabled."),
-        0 | 1 | 3 | 4 | 6 | 11 | 12 | 13 | 15 | VIDEO_TAB => None,
+        0 | 1 | 3 | 4 | 6 | 9 | 17 | 22 | 11 | 12 | 13 | 15 | VIDEO_TAB => None,
         _ => Some("This input category is unavailable."),
     }
 }
@@ -244,6 +241,7 @@ impl RustMixApp {
         self.add_error = None;
         self.cancel_audio_add();
         self.retire_video_category();
+        self.source_ui.retire();
         self.add_tab = tab;
         self.add_reveal = true;
         self.add_kind = kind;
@@ -280,6 +278,9 @@ impl RustMixApp {
         }
         if self.add_loading {
             return Some("Wait for the image check to finish.".into());
+        }
+        if matches!(self.add_tab, 9 | 17 | 22) && !self.extra_source_ready() {
+            return Some("Choose and check this source before adding.".into());
         }
         if self.add_tab == VIDEO_TAB && !self.video_add_ready() {
             return Some("Choose a video file and wait for its check to finish.".into());
@@ -364,6 +365,8 @@ impl RustMixApp {
             self.video_add_page(ui, ctx);
         } else if matches!(self.add_tab, 12 | 13) {
             self.audio_add_page(ui, ctx);
+        } else if matches!(self.add_tab, 9 | 17 | 22) {
+            self.extra_source_page(ui, ctx);
         } else if self.add_tab == 1 {
             self.png_add_page(ui, ctx);
         } else {
@@ -785,7 +788,7 @@ mod tests {
         app.theme(&ctx);
         let before = app.engine.project().clone();
         app.dispatch(Action::Add, &ctx);
-        for tab in [2, 5, 7, 8, 9, 10, 14, 16, 17, 18, 19, 21, 22, 23, 24, 25] {
+        for tab in [2, 5, 7, 8, 10, 14, 16, 18, 19, 21, 23, 24, 25] {
             app.select_add_category(tab);
             click(&mut app, &ctx, "dialog.add.confirm");
             assert!(app.automation.contains_key("dialog.add.unavailable"));
