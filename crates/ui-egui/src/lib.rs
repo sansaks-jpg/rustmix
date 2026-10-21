@@ -446,7 +446,7 @@ fn default_dock(audio_focus: bool) -> DockState<Panel> {
     let mut dock = DockState::new(vec![Panel::Inputs, Panel::Overlays]);
     dock.main_surface_mut().split_right(
         NodeIndex::root(),
-        if audio_focus { 0.59 } else { 0.76 },
+        if audio_focus { 0.59 } else { 0.85 },
         vec![Panel::Audio],
     );
     dock
@@ -2470,6 +2470,10 @@ impl TabViewer for Viewer<'_> {
         tab.title().into()
     }
     fn ui(&mut self, ui: &mut egui::Ui, tab: &mut Panel) {
+        self.app.automation.insert(
+            format!("workspace.panel.{tab:?}"),
+            ui.available_rect_before_wrap(),
+        );
         ui.push_id(*tab, |ui| match tab {
             Panel::Inputs => self.app.inputs(ui),
             Panel::Audio => self.app.audio(ui),

@@ -555,8 +555,11 @@ impl RustMixApp {
         let transport_h = 28.0;
         let canvas_avail_h = (available.y - transport_h - 4.0).max(40.0);
         let width = available.x.max(16.0).min(canvas_avail_h * 16.0 / 9.0);
+        // Keep the picture directly below its source header. A tall bank has
+        // spare workspace below the transport, not extra black above/below the
+        // picture. A height-constrained bank can still pillarbox a 16:9 image.
         let (letterbox, _) = ui.allocate_exact_size(
-            Vec2::new(available.x.max(width), canvas_avail_h),
+            Vec2::new(available.x.max(width), width * 9.0 / 16.0),
             Sense::hover(),
         );
         ui.painter()
@@ -2160,6 +2163,107 @@ mod processing_tests {
             }
             assert_eq!(app.engine.project().program, program);
             assert_eq!(app.engine.project().preview, preview);
+        }
+    }
+
+    #[test]
+    fn tall_workspace_keeps_pictures_at_the_header_and_transport_at_the_picture() {
+        let mut app = RustMixApp::headless();
+        let ctx = egui::Context::default();
+        app.theme(&ctx);
+        app.engine
+            .execute(Command::SetInputsPaused(true), 0)
+            .unwrap();
+        let project = app.engine.project().clone();
+        for size in [
+            [1600.0, 900.0],
+            [1917.0, 1168.0],
+            [1917.0, 1198.0],
+            [1920.0, 1400.0],
+            [1100.0, 700.0],
+            [1600.0, 900.0],
+        ] {
+            for _ in 0..4 {
+                workspace_frame(&mut app, &ctx, size);
+            }
+            let bank = *app.automation.get("monitor.bank.bounds").unwrap();
+            for name in ["preview", "program"] {
+                let header = *app
+                    .automation
+                    .get(&format!("monitor.{name}.header"))
+                    .unwrap();
+                let picture = *app.automation.get(&format!("monitor.{name}")).unwrap();
+                let transport = *app
+                    .automation
+                    .get(&format!("monitor.{name}.transport"))
+                    .unwrap();
+                assert!(
+                    (picture.top() - header.bottom()).abs() <= 4.0,
+                    "Picture floats below the header at {size:?}: {header:?}, {picture:?}"
+                );
+                assert!(
+                    (transport.top() - picture.bottom()).abs() <= 4.0,
+                    "Transport floats below the picture at {size:?}: {picture:?}, {transport:?}"
+                );
+                assert!((picture.width() / picture.height() - 16.0 / 9.0).abs() < 0.01);
+                assert!(bank.contains_rect(picture) && bank.contains_rect(transport));
+                if size[1] >= 1168.0 {
+                    assert!((picture.width() - header.width()).abs() <= 2.0);
+                    assert!(bank.bottom() - transport.bottom() >= 30.0);
+                }
+            }
+            assert_eq!(app.engine.project(), &project);
+        }
+    }
+
+    #[test]
+    fn production_workspace_prioritizes_inputs_with_a_visible_master_and_restorable_mixer() {
+        for size in [[1100.0, 700.0], [1600.0, 900.0], [1917.0, 1168.0]] {
+            let mut app = RustMixApp::headless();
+            let ctx = egui::Context::default();
+            app.theme(&ctx);
+            for _ in 0..4 {
+                workspace_frame(&mut app, &ctx, size);
+            }
+            let inputs = *app.automation.get("workspace.panel.Inputs").unwrap();
+            let mixer = *app.automation.get("workspace.panel.Audio").unwrap();
+            assert!(inputs.width() >= size[0] * 0.83);
+            for id in [
+                "audio.bus.0.strip",
+                "audio.rail.outputs",
+                "audio.rail.inputs",
+            ] {
+                let control = *app.automation.get(id).unwrap();
+                assert!(
+                    mixer.contains_rect(control),
+                    "Master/group rail clipped at {size:?}: {id}, {control:?}, {mixer:?}"
+                );
+            }
+            if size[0] >= 1900.0 {
+                let first = app.automation.get("preview.input.1").unwrap();
+                let sixth = app.automation.get("preview.input.6").unwrap();
+                assert!(
+                    (first.top() - sixth.top()).abs() <= 1.0,
+                    "Six source pictures must fit on the large production workspace"
+                );
+            }
+            let saved = serde_json::to_string(&app.dock).unwrap();
+            let state = app.engine.project().clone();
+            app.dispatch(Action::Workspace(true), &ctx);
+            for _ in 0..4 {
+                workspace_frame(&mut app, &ctx, size);
+            }
+            assert!(
+                app.automation.get("workspace.panel.Audio").unwrap().width() > mixer.width() * 2.0
+            );
+            assert_eq!(app.engine.project().program, state.program);
+            assert_eq!(app.engine.project().preview, state.preview);
+            app.dock = workspace::decode(&saved).unwrap();
+            for _ in 0..4 {
+                workspace_frame(&mut app, &ctx, size);
+            }
+            let restored = app.automation.get("workspace.panel.Audio").unwrap();
+            assert!((restored.width() - mixer.width()).abs() <= 1.0);
         }
     }
 

@@ -342,7 +342,12 @@ impl RustMixApp {
                     "artifacts/workspace-1100.png".into()
                 } else if s.stage == 50 {
                     "artifacts/overlay-unsaved-1600.png".into()
-                } else if s.stage == 54 {
+                } else if s.stage == 54 || s.stage == 57 {
+                    let (stem, requested) = if s.stage == 57 {
+                        ("workspace-reference-client", [1917, 1168])
+                    } else {
+                        ("workspace-reference", [1917, 1198])
+                    };
                     let expected = ctx.viewport_rect().size() * ctx.pixels_per_point();
                     if image.width() != expected.x.round() as usize
                         || image.height() != expected.y.round() as usize
@@ -352,15 +357,16 @@ impl RustMixApp {
                         ));
                     }
                     std::fs::write(
-                        "artifacts/workspace-reference-raster.json",
+                        format!("artifacts/{stem}-raster.json"),
                         serde_json::to_vec_pretty(&serde_json::json!({
-                            "requested_points": [1917,1198],
+                            "requested_points": requested,
                             "actual_points": [ctx.viewport_rect().width(),ctx.viewport_rect().height()],
                             "actual_pixels": [image.width(),image.height()],
                             "pixels_per_point": ctx.pixels_per_point(),
                         }))?,
                     )?;
-                    "artifacts/workspace-reference-1917x1198.png".into()
+                    let [requested_width, requested_height] = requested;
+                    format!("artifacts/{stem}-{requested_width}x{requested_height}.png")
                 } else if let Some((name, _, _)) = s
                     .stage
                     .checked_sub(20)
@@ -830,6 +836,34 @@ impl RustMixApp {
                 s.stage = 54;
             }
             54 if s.captured => {
+                s.stage = 55;
+            }
+            55 => {
+                ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(egui::vec2(1917.0, 1168.0)));
+                s.stage = 56;
+            }
+            56 => {
+                if (ctx.viewport_rect().size() - egui::vec2(1917.0, 1168.0)).length() > 1.0 {
+                    return Err(Error::Invalid(
+                        "Native workspace did not reach the reference client viewport".into(),
+                    ));
+                }
+                self.validate_monitor_geometry(ctx.viewport_rect().width())?;
+                std::fs::write(
+                    "artifacts/workspace-reference-client-elements.json",
+                    serde_json::to_vec_pretty(
+                        &self
+                            .automation
+                            .iter()
+                            .map(|(id, rect)| (id, format!("{rect:?}")))
+                            .collect::<HashMap<_, _>>(),
+                    )?,
+                )?;
+                ctx.send_viewport_cmd(egui::ViewportCommand::Screenshot(egui::UserData::default()));
+                s.captured = false;
+                s.stage = 57;
+            }
+            57 if s.captured => {
                 self.assert_smoke_state()?;
                 self.saved_revision = self.engine.project().revision;
                 ctx.send_viewport_cmd(egui::ViewportCommand::Close);
@@ -1561,6 +1595,23 @@ impl RustMixApp {
             return Err(Error::Invalid(
                 "Transition controls overlap the monitors".into(),
             ));
+        }
+        for (name, picture) in [("preview", preview), ("program", program)] {
+            let header = self
+                .automation
+                .get(&format!("monitor.{name}.header"))
+                .ok_or_else(|| Error::Invalid(format!("Missing {name} header")))?;
+            let transport = self
+                .automation
+                .get(&format!("monitor.{name}.transport"))
+                .ok_or_else(|| Error::Invalid(format!("Missing {name} transport")))?;
+            if (picture.top() - header.bottom()).abs() > 4.0
+                || (transport.top() - picture.bottom()).abs() > 4.0
+            {
+                return Err(Error::Invalid(format!(
+                    "{name} picture/transport floats inside the monitor bank: {header:?}, {picture:?}, {transport:?}"
+                )));
+            }
         }
         if !self.basic_mode {
             for index in 1..=4 {
