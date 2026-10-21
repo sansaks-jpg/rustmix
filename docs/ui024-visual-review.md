@@ -51,3 +51,15 @@ Replace both direct grid spacer rows with allocated empty cells; horizontal
 sub-layout spacing stays unchanged. Existing compact, staged Apply/Cancel and
 painted-layout regressions exercise the exact failing states. Build/native
 acceptance did not run; the subsequent exact-source result is still required.
+
+327ed47/run39536589420 passed check/Clippy and131 UI tests; the remaining
+painted-layout test rejects Preview/Output colour controls on different vertical
+centres. Reserve the complete colour row height before laying out either swatch,
+so the intervening taller label cannot shift only the second control. Keep the
+one-point alignment gate; add the actual rectangles to its failure message.
+
+The1917x1198 capture matches the supplied image raster, not its client area:
+Interface.png includes an approximately30px Windows title bar, whereas the GPU
+capture contains only the application client. A strict content comparison must
+account for that offset/use a1917x1168 client capture. Neither raster equality nor
+the short hosted tests proves full visual equivalence.

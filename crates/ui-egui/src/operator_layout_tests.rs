@@ -105,7 +105,10 @@ fn display_labels_are_right_aligned_and_colours_share_one_row() {
         }));
         let preview = *app.automation.get("dialog.settings.previewColor").unwrap();
         let program = *app.automation.get("dialog.settings.programColor").unwrap();
-        assert!((preview.center().y - program.center().y).abs() <= 1.0);
+        assert!(
+            (preview.center().y - program.center().y).abs() <= 1.0,
+            "Colour controls must share a centre at {size:?}: {preview:?} / {program:?}"
+        );
         assert!(preview.right() < program.left() && page.contains_rect(program));
         let confirm = *app.automation.get("dialog.settings.apply").unwrap();
         let cancel = *app.automation.get("dialog.settings.cancel").unwrap();

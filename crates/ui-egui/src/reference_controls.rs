@@ -194,8 +194,9 @@ impl RustMixApp {
                 ui.end_row();
                 let label = display_label(ui, "Preview Colour:", label_width);
                 self.automation.insert("dialog.settings.label.previewColor".into(), label);
-                ui.horizontal(|ui| {
-                    let swatch = (viewport.x * 30.0 / 1912.0).clamp(22.0, 30.0);
+                let swatch = (viewport.x * 30.0 / 1912.0).clamp(22.0, 30.0);
+                ui.allocate_ui_with_layout(egui::vec2(field_width.max(208.0),swatch.max(26.0)),
+                    egui::Layout::left_to_right(egui::Align::Center), |ui| {
                     let preview = ui.scope(|ui| {
                         ui.spacing_mut().interact_size = Vec2::splat(swatch);
                         ui.color_edit_button_srgb(&mut draft.preview_color)
