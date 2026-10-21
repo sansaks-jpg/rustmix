@@ -14,6 +14,7 @@ mod new_preset;
 #[cfg(test)]
 mod operator_layout_tests;
 mod operator_window;
+mod output_dialogs;
 mod output_smoke;
 mod panels;
 mod profile;
@@ -21,9 +22,12 @@ mod program;
 mod program_output;
 mod reference_controls;
 mod reference_smoke;
+mod settings_pages;
 mod smoke;
 mod snapshot;
 mod source_smoke;
+#[cfg(test)]
+mod ui_review;
 mod video_controls;
 mod video_history;
 mod video_player;
@@ -617,6 +621,7 @@ pub struct RustMixApp {
     pub(crate) rec_bytes: u64,
     pub(crate) streaming_setup: bool,
     pub(crate) stream_channel: usize,
+    stream_page: output_dialogs::StreamPage,
     pub(crate) stream_destination: usize,
     pub(crate) stream_url: String,
     pub(crate) stream_key: String,
@@ -624,16 +629,13 @@ pub struct RustMixApp {
     pub(crate) stream_quality: usize,
     pub(crate) stream_active: bool,
     pub(crate) stream_started_ms: u64,
-    pub(crate) stream_frames: u64,
     pub(crate) stream_kbps: u32,
     pub(crate) external_active: bool,
     pub(crate) multicorder_open: bool,
     pub(crate) mc_format: usize,
     pub(crate) mc_running: bool,
-    pub(crate) mc_started_ms: u64,
     pub(crate) mc_ndi_mov: bool,
     pub(crate) mc_show_unsupported: bool,
-    pub(crate) mc_folder: String,
     pub(crate) mc_checked: [bool; 12],
     pub(crate) playlist_open: bool,
     pub(crate) playlist_selected_id: u32,
@@ -901,27 +903,23 @@ impl RustMixApp {
             rec_frames: 0,
             rec_bytes: 0,
             streaming_setup: false,
-            stream_channel: 1,
+            stream_channel: 0,
+            stream_page: output_dialogs::StreamPage::Main,
             stream_destination: 0,
-            stream_url: "rtmp://a.rtmp.youtube.com/live2".into(),
+            stream_url: String::new(),
             stream_key: String::new(),
             stream_use_q1: true,
             stream_quality: 0,
             stream_active: false,
             stream_started_ms: 0,
-            stream_frames: 0,
             stream_kbps: 4500,
             external_active: false,
             multicorder_open: false,
             mc_format: 0,
             mc_running: false,
-            mc_started_ms: 0,
             mc_ndi_mov: false,
             mc_show_unsupported: false,
-            mc_folder: r"C:\Broadcast\MultiCorder".into(),
-            mc_checked: [
-                true, true, true, false, false, false, false, false, true, false, false, false,
-            ],
+            mc_checked: [false; 12],
             playlist_open: false,
             playlist_selected_id: 1,
             playlist_selected_avail: 0,
@@ -1996,8 +1994,11 @@ impl RustMixApp {
                 self.actions.push(Action::ToggleStreamSim);
             }
             caret_menu_button(ui, height, |ui| {
-                for ch in 1..=3 {
-                    if ui.button(format!("Destination {ch} Settings…")).clicked() {
+                for ch in 0..5 {
+                    if ui
+                        .button(format!("Destination {} Settings…", ch + 1))
+                        .clicked()
+                    {
                         self.stream_channel = ch;
                         self.actions.push(Action::StreamingSetup);
                         ui.close();

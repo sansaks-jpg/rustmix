@@ -1,5 +1,25 @@
 # Dependency and asset review
 
+2026-10-19 overlay caption review: the Program caption font in
+`crates/engine/src/overlay_text.rs` is an original 5x8 bitmap table authored for this repository
+(printable ASCII requesters/metadata only), so it adds no third-party font file, no font licence
+obligation and no new crate, lockfile entry or asset-attribution row. A scalable font rasterizer
+(such as a permissively licensed MIT/Apache font crate plus an OFL/Ubuntu-licensed font asset) is a
+possible future upgrade, but it would need its own dependency, licence and lockfile review before
+adoption; it is not present in this change.
+
+2026-10-19 video review: local MP4 decode uses the operating system's Windows Media Foundation
+components through the `windows` crate. RustMix does not add FFmpeg, GStreamer, libavcodec, x264/x265
+or any third-party codec SDK as a runtime dependency, and no codec binary is bundled by RustMix. The
+decoder is the existing audited FFI module in `crates/platform/src/media_foundation.rs`; the unsafe
+allowance remains scoped to the platform crate. FFmpeg is used only as an external developer fixture
+generator/oracle by `scripts/ci-video-fixture.ps1`; the pinned Gyan build is GPLv3, is never linked
+or invoked by the RustMix application, and the tool and its libraries are excluded from packages and
+evidence uploads. Only the generated original fixture and its provenance manifest are uploaded as evidence.
+The generated media is original project test content, not third-party footage. Codec/patent and
+distribution questions for the shipped Windows Media components (including which decoders a given
+Windows installation provides) still require release review; this paragraph is not a legal audit.
+
 2026-10-19 audio adapter review: CPAL 0.18.2 (Apache-2.0, Rust 1.85) and rtrb 0.4.0
 (MIT OR Apache-2.0, Rust 1.38) were checked through `cargo info` and downloaded registry sources.
 They fit workspace Rust 1.94. CPAL has empty default features and is Windows-targeted here;

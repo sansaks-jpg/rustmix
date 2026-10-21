@@ -1,11 +1,33 @@
 # Known gaps
 
+UI-035: existing-panel corrections are reviewed with headless egui captures and
+regression tests. Native Windows, GPU/DPI, encoders, devices and full reference
+equivalence remain separate gates. Reference-only companion tools are absent;
+unsupported configuration stays explicitly unavailable. See
+[scope and verification ledger](ui035-reference-uiux.md).
+
 UI-034 (2026-10-21): startup/New format selector, portrait monitoring, persisted
 scan and native Camera format selection are unverified source candidates.
 Browser keepalive discovery fix awaits hosted reproduction. Prior f6ecbdd run
 39603431352 failed Browser discovery and GPU teardown. No 60fps performance,
 full-HD/interlaced output, physical camera/audio or GPU recovery claim is made.
 See [current implementation/verification](ui034-add-input-and-new-preset.md).
+
+UI-032 source candidate (2026-10-21) addresses selected Add Input audit findings
+with isolated PNG drafts, separate forms, inspectable unavailable pages, explicit
+icons and OK readiness. **New runtime/visual acceptance is pending**; no finding
+is promoted to tested based on the old green run. Solid/transparent sources,
+template loaders/galleries, recent Image/WAV, device/network backends and physical
+DPI/accessibility qualification remain open. See [UI-032](ui032-add-input-changes.md).
+
+Add Input audit (2026-10-21): **whole-dialog reference correspondence is not
+accepted**. [Focused audit](add-input-uiux-audit.md) reviews all 33 supplied
+Add Input images, exact matching runtime source and hosted evidence. Six open
+findings cover PNG draft carryover into other categories, generic Image forms,
+Colour/Title semantics, missing/unreachable category pages, inconsistent OK
+readiness and ordinal-based icons. This is an audit, with no application fix or
+new runtime test. Existing selected Video/Cancel/descriptor acceptance remains
+bounded to its documented scope.
 
 UI-028 through UI-031 (2026-10-21): Video-first Input Select with genuine bounded
 recent files and validation; topmost Escape/popup/repeat safety; responsive
@@ -51,6 +73,51 @@ is not a proven GPU hang fix. Full UI equivalence remains open: Overlay Settings
 Settings proportions, Playlist controls, record/stream layout and disabled action affordance.
 See ADR 0020 and ui020-visual-review.md for exact evidence and remaining measurements.
 
+2026-10-19 · Program overlay captions (experimental; hosted unit/native acceptance pending for the
+current commit): enabled overlay titles and subtitles are now rasterized into the Program surface by
+the engine compositor, after the panel geometry and before fade-to-black, so the separate Program
+window, fullscreen output, GPU captures and future recorders show the same words as the operator
+monitor; the duplicated monitor-only `egui::Painter` captions were removed. Glyphs come from an
+original 5x8 bitmap font in `crates/engine/src/overlay_text.rs` (no third-party font, no new
+dependency or lockfile change), with 96-character lines, a 0.52w text edge, bounds-checked writes
+and blank advances for unknown characters. Remaining gaps: bitmap-only typography (no font choice,
+bold/italic, outline, shadow, background box, alpha ramp or animation), printable ASCII only, no
+ticker/data binding, no per-source overlay, stinger channels still composite no clip (G20), and the
+synthetic `Graphics` input's decorative text is still painted only by the operator monitor. Captions
+are composited into the experimental 640×360 CPU Program raster only; no GPU, hardware, encoder or
+physical-output qualification is implied. See
+[ADR 0019](adr/0019-overlay-captions-in-program-surface.md).
+
+2026-10-19 · local MP4 video source (experimental, hosted-accepted slice): the schema-8
+`VideoSource::File` descriptor, one bounded Media Foundation decoder owner thread per input,
+exact-PTS pacing, engine `VideoFeed`, off-thread Add Input probe and black external-media fallback
+are implemented. Hosted Windows
+[run 39273839106](https://github.com/sansaks-jpg/rustmix/actions/runs/39273839106) passed every
+step: probe 160×90 at 30/1, quadrant pixels in the 1600×900 Program capture, pause freeze and
+resume motion (4224 changed colour channels), GPU captures of source/Program/resumed views and
+byte-identical schema-8 save/reopen. Follow-up hardening (relink clearing, generation-keyed Program
+surfaces, probe-cancel retirement, honest operator-screenshot evidence, unreduced 30 fps ratio and
+root-viewport filtering) then passed hosted
+[run 39279752517](https://github.com/sansaks-jpg/rustmix/actions/runs/39279752517) (commit `695d2ef`,
+all steps green). Non-claims: MP4 video-only (the audio track is not decoded),
+no A/V synchronization, no cameras/capture cards/network/browser inputs, no GPU or hardware decode,
+no frame-accurate seek UI, and no native acceptance stage for relinking (a committed relink now
+clears the previous file's last decoded frame and is covered by a UI unit test). Only the generated 160×90 H.264
+baseline fixture is qualified; the Program raster remains the experimental 640×360 CPU composite
+and physical hardware is unqualified. See [ADR 0018](adr/0018-operator-local-mp4-video-source.md).
+
+2026-10-19 · audio path (experimental, hosted-accepted descriptor workflow): the fixed 48 kHz
+stereo block mixer, strict PCM16/float32 WAV decoder, typed WAV/microphone descriptors and Windows
+WASAPI adapter exist, with an explicitly started local monitoring session. Hosted Windows
+[run 39270445070](https://github.com/sansaks-jpg/rustmix/actions/runs/39270445070) passed every
+step: a generated one-second 44.1 kHz mono PCM16 WAV was validated through the real Add Input
+dialog, and `audio-validation.json` records `audio_monitoring_started: false`. The Program viewport
+and its deferred screenshot delivery were validated in the same run. Non-claims: no audio
+device/callback or physical hardware acceptance, no A/V synchronization, no compressed audio, no
+mix-minus hardware qualification, and the main mixer's animated meters remain simulations while
+the Audio I/O dialog reports actual Master block peak/RMS. See
+[ADR 0015](adr/0015-real-audio-and-independent-program-window.md).
+
 Task 1.3 continuation (2026-10-19): four external-output configuration slots and staged editing
 are implemented in source, with schema 6 and atomic source/config changes. New regression tests
 are prepared, not executed in this session. G05 remains open: configuration is not an SDI,
@@ -91,9 +158,9 @@ UI-009 audit (2026-10-18): the UI-008 GPU/output labels were not evidence of med
 | ID | Priority | Gap / next action |
 |---|---|---|
 | G01 | P0 for broadcast | Program is a native UI demo, without a dedicated real-time output scheduler. Introduce immutable frame metadata and an independent Program consumer before live claims. |
-| G02 | P0 for broadcast | No actual audio graph/device output. Add 48 kHz synthetic stereo samples, Master/Aux routing and impulse/mix-minus tests. |
+| G02 | P0 for broadcast | Audio is partially implemented: a fixed 48 kHz stereo block mixer with Master/Aux A/Aux B and guest returns, strict WAV decode, typed WAV/microphone descriptors and a Windows WASAPI adapter with an explicitly started monitoring session passed the native descriptor workflow in hosted run 39270445070. No audio device or callback is hardware-qualified, no A/V synchronization or mix-minus hardware test exists, and the main mixer's meters remain simulations. Next: physical device callback/underrun soak, resampling quality review and A/V clock alignment. |
 | G03 | P1 | No custom GPU compositor or CPU/GPU golden parity. Current CPU demo uploads to egui's wgpu surface. |
-| G04 | P1 | UI-010 bounded PNG ingest/persistence/relink/source edits passed hosted acceptance, including run39111788801. Local video decode, camera/device capture and network ingest remain absent. |
+| G04 | P1 | UI-010 bounded PNG ingest/persistence/relink/source edits passed hosted acceptance, including run39111788801. Local MP4 video decode now exists and is experimentally accepted in hosted run 39273839106 (generated 160×90 H.264 fixture only; video-only, no MP4 audio). Camera/device capture and network ingest remain absent. |
 | G05 | P1 | No encoders, recoverable recording or network streams. Controls remain disabled. |
 | G06 | P1 | Crash recovery is manual checkpoint/backup loading; abrupt power-loss durability and filesystem fault injection need dedicated tests. |
 | G07 | P2 | Validated custom key/modifier remapping is implemented and verified in UI-012. Full per-widget automation metadata, command JSON schemas and accessibility review remain incomplete. |

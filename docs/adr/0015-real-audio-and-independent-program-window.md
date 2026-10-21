@@ -1,6 +1,12 @@
 # ADR 0015: real sample audio and an independent Program window
 
-2026-10-19 · implementation in progress, not runtime acceptance.
+2026-10-19 · hosted native acceptance passed in [run 39270445070](https://github.com/sansaks-jpg/rustmix/actions/runs/39270445070)
+(commit `3ed91a6`, all steps green). The run validated the independent Program viewport with
+sequence-tagged deferred screenshots and the native audio descriptor/metadata workflow (generated
+one-second 44.1 kHz mono PCM16 WAV, `audio_monitoring_started: false`). Remaining non-claims: no
+audio device/callback or physical hardware acceptance, no physical extended-monitor/hotplug
+qualification, no A/V synchronization, no compressed audio, no mix-minus hardware test, and the main
+mixer's animated meters remain simulations.
 
 The operator needs actual audio samples and a Program-only output on an extended display.
 Simulated meters and fullscreen of the control interface cannot satisfy these tasks.

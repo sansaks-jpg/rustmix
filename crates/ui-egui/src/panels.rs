@@ -2005,19 +2005,40 @@ impl RustMixApp {
         self.remove_input_confirmation(ctx);
         if self.about {
             let mut open = true;
-            egui::Window::new("About RustMix")
-                .open(&mut open)
-                .collapsible(false)
-                .show(ctx, |ui| {
-                    ui.heading(RichText::new("RustMix 0.1").color(TEAL));
-                    ui.label("Independent Rust native offline switcher.\nCPU reference composition with wgpu display. Synthetic sources and PNG images; audio meters are simulated.");
-                    ui.separator();
-                    ui.collapsing("Session command log", |ui| {
-                        for line in &self.history {
-                            ui.label(line);
-                        }
-                    });
+            dialogs::operator_window(
+                ctx,
+                "About RustMix",
+                "dialog.about",
+                &mut open,
+                Vec2::new(620.0, 380.0),
+            )
+            .show(ctx, |ui| {
+                dialogs::light_form_frame(ui, 12, |ui| {
+                    let mut preferences = self.engine.project().preferences.clone();
+                    self.settings_detail_page(ui, SettingsPage::About, &mut preferences);
                 });
+                ui.collapsing("Session command log", |ui| {
+                    egui::ScrollArea::vertical()
+                        .max_height(100.0)
+                        .show(ui, |ui| {
+                            for line in self.history.iter().rev().take(32) {
+                                ui.label(line);
+                            }
+                        });
+                });
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    let close = ui.add_sized(
+                        [92.0, 29.0],
+                        egui::Button::new(RichText::new("Close").color(Color32::WHITE))
+                            .fill(CHIP_BG),
+                    );
+                    self.automation
+                        .insert("dialog.about.close".into(), close.rect);
+                    if close.clicked() {
+                        self.about = false;
+                    }
+                });
+            });
             if !open {
                 self.about = false;
             }

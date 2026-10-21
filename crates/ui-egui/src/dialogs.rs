@@ -11,7 +11,7 @@ const SIDEBAR: Color32 = Color32::from_rgb(14, 18, 24);
 const HEADER_DARK: Color32 = Color32::from_rgb(20, 26, 34);
 const FORM_BORDER: Color32 = Color32::from_rgb(190, 196, 203);
 
-fn form_visuals() -> egui::Visuals {
+pub(super) fn form_visuals() -> egui::Visuals {
     let mut visuals = egui::Visuals::light();
     visuals.override_text_color = Some(FORM_TEXT);
     visuals.widgets.noninteractive.bg_fill = FORM_LIGHT;
@@ -1121,14 +1121,20 @@ impl RustMixApp {
                             };
                             ui.label(format!("Current Tally State: {tally}"));
                         }
-                        _ => {
+                        InputPage::Position | InputPage::ColourAdjust | InputPage::ColourCorrection | InputPage::Effects => {
                             ui.label(
-                                RichText::new(format!("Input {:?} Controls", app.input_page))
+                                RichText::new(match app.input_page {
+                                    InputPage::Position => "Position",
+                                    InputPage::Effects => "Effects",
+                                    InputPage::ColourCorrection => "Colour Correction",
+                                    _ => "Colour Adjust",
+                                })
                                     .size(13.0)
                                     .strong()
                                     .color(FORM_TEXT),
                             );
                             let mut changed = false;
+                            if app.input_page == InputPage::Position {
                             changed |= ui
                                 .add(egui::Slider::new(&mut app.prop_zoom, 0.25..=4.0).text("Zoom"))
                                 .changed();
@@ -1139,11 +1145,12 @@ impl RustMixApp {
                                 )
                                 .changed();
                             changed |= ui
-                                .add(
-                                    egui::Slider::new(&mut app.prop_pan_y, -1.0..=1.0)
-                                        .text("Pan Y"),
-                                )
+                                .add(egui::Slider::new(&mut app.prop_pan_y, -1.0..=1.0).text("Pan Y"))
                                 .changed();
+                            } else if app.input_page == InputPage::Effects {
+                                changed |= ui.checkbox(&mut app.prop_mirror, "Mirror").changed();
+                                changed |= ui.checkbox(&mut app.prop_sharpen, "Sharpen").changed();
+                            } else {
                             changed |= ui
                                 .add(
                                     egui::Slider::new(&mut app.prop_lift, -1.0..=1.0)
@@ -1159,18 +1166,30 @@ impl RustMixApp {
                                         .text("Saturation"),
                                 )
                                 .changed();
-                            if ui.small_button("Reset Transform & Color").clicked() {
+                            }
+                            let reset = ui.small_button("Reset this page");
+                            app.automation.insert("dialog.properties.processing.reset".into(), reset.rect);
+                            if reset.clicked() {
+                                if app.input_page == InputPage::Position {
                                 app.prop_zoom = 1.0;
                                 app.prop_pan_x = 0.0;
                                 app.prop_pan_y = 0.0;
+                                } else if app.input_page == InputPage::Effects {
+                                    app.prop_mirror = false;
+                                    app.prop_sharpen = false;
+                                } else {
                                 app.prop_lift = 0.0;
                                 app.prop_gain = 1.0;
                                 app.prop_saturation = 1.0;
+                                }
                                 changed = true;
                             }
                             if changed {
                                 app.sync_fx_from_prop(id);
                             }
+                        }
+                        InputPage::Triggers | InputPage::TallyLights | InputPage::Ptz | InputPage::Advanced => {
+                            ui.label("Unavailable: this input has no backend for this page.");
                         }
                     });
                     ui.add_space(4.0);
@@ -1302,7 +1321,7 @@ impl RustMixApp {
                     ui.spacing_mut().item_spacing.y = 1.0;
                     for (page, label, key) in [
                         (SettingsPage::Display, "Display", "Display"),
-                        (SettingsPage::Outputs, "Outputs / NDI / OMT", "Outputs"),
+                        (SettingsPage::Outputs, "Outputs / NDI / OMT / SRT", "Outputs"),
                         (SettingsPage::Options, "Options", "Options"),
                         (SettingsPage::Appearance, "Performance", "Appearance"),
                         (SettingsPage::Categories, "Input Categories", "Categories"),
@@ -1460,19 +1479,7 @@ impl RustMixApp {
                                  External button stays unavailable.",
                             );
                         }
-                        _ => {
-                            ui.label(
-                                RichText::new(format!("{:?} Configuration", app.settings_page))
-                                    .size(13.0)
-                                    .strong()
-                                    .color(FORM_TEXT),
-                            );
-                            ui.label("Unavailable in this build. This page does not configure a backend.");
-                            ui.checkbox(
-                                &mut draft.shortcuts,
-                                "Enable single-key production shortcuts",
-                            );
-                        }
+                        page => app.settings_detail_page(ui, page, &mut draft),
                         }
                     });
                 },
@@ -2266,432 +2273,6 @@ impl RustMixApp {
         });
         if close_clicked || !open {
             self.recording_setup = false;
-        }
-    }
-
-    pub(crate) fn streaming_setup_dialog(&mut self, ctx: &egui::Context) {
-        if !self.streaming_setup {
-            return;
-        }
-        let mut open = self.streaming_setup;
-        let mut close_clicked = false;
-        operator_window(
-            ctx,
-            "Streaming Settings",
-            "dialog.streaming_setup",
-            &mut open,
-            Vec2::new(660.0, 490.0),
-        )
-        .show(ctx, |ui| {
-            ui.label("Unavailable: no encoder/output backend. Settings below are read-only and are not saved.");
-            egui::ScrollArea::vertical().max_height((ctx.viewport_rect().height()-300.0).clamp(180.0,450.0)).show(ui,|ui| {
-            ui.add_enabled_ui(false,|ui| {
-            ui.horizontal(|ui| {
-                ui.label("Channel");
-                for ch in 0..5 {
-                    let active = self.stream_channel == ch;
-                    if ui
-                        .add_sized(
-                            [30.0, 22.0],
-                            egui::Button::new(
-                                RichText::new((ch + 1).to_string()).color(Color32::WHITE),
-                            )
-                            .fill(if active { PROGRAM } else { CHIP_BG }),
-                        )
-                        .clicked()
-                    {
-                        self.stream_channel = ch;
-                    }
-                }
-                ui.add_space(16.0);
-                ui.label("Profile");
-                egui::ComboBox::from_id_salt("stream.profile")
-                    .width(150.0)
-                    .selected_text("Default")
-                    .show_ui(ui, |ui| {
-                        let _ = ui.selectable_label(true, "Default");
-                    });
-                let _ = ui.add_sized([54.0, 22.0], egui::Button::new(RichText::new("Add").color(Color32::WHITE)).fill(CHIP_BG));
-                let _ = ui.add_sized([58.0, 22.0], egui::Button::new(RichText::new("Delete").color(Color32::WHITE)).fill(CHIP_BG));
-            });
-            light_form_frame(ui, 12, |ui| {
-                ui.label(RichText::new("Stream").size(13.0).strong().color(FORM_TEXT));
-                egui::Grid::new("stream_setup_grid")
-                    .num_columns(3)
-                    .spacing([10.0, 6.0])
-                    .show(ui, |ui| {
-                        ui.label("Destination");
-                        egui::ComboBox::from_id_salt("stream.dest")
-                            .width(260.0)
-                            .selected_text(
-                                [
-                                    "Custom RTMP Server",
-                                    "YouTube Live",
-                                    "Twitch",
-                                    "Facebook Live",
-                                    "SRT Caller",
-                                ]
-                                .get(self.stream_destination)
-                                .copied()
-                                .unwrap_or("Custom RTMP Server"),
-                            )
-                            .show_ui(ui, |ui| {
-                                for (idx, lbl) in [
-                                    "Custom RTMP Server",
-                                    "YouTube Live",
-                                    "Twitch",
-                                    "Facebook Live",
-                                    "SRT Caller",
-                                ]
-                                .into_iter()
-                                .enumerate()
-                                {
-                                    ui.selectable_value(&mut self.stream_destination, idx, lbl);
-                                }
-                            });
-                        ui.label("");
-                        ui.end_row();
-
-                        ui.label("URL");
-                        ui.add_sized(
-                            [310.0, 22.0],
-                            egui::TextEdit::singleline(&mut self.stream_url),
-                        );
-                        ui.label("");
-                        ui.end_row();
-
-                        ui.label("Stream Key or Name");
-                        ui.add_sized(
-                            [310.0, 22.0],
-                            egui::TextEdit::singleline(&mut self.stream_key).password(true),
-                        );
-                        let start = ui
-                            .add_enabled(
-                                false,
-                                egui::Button::new(RichText::new(if self.stream_active {
-                                    format!("Stop {}", self.stream_channel + 1)
-                                } else {
-                                    format!("Start {}", self.stream_channel + 1)
-                                }).color(Color32::WHITE))
-                                .fill(CHIP_BG)
-                                .min_size(Vec2::new(78.0, 22.0)),
-                            )
-                            .on_disabled_hover_text("Unavailable: no streaming encoder or network backend");
-                        self.automation.insert("dialog.streaming.start".into(), start.rect);
-                        if start.clicked()
-                        {
-                            self.actions.push(Action::ToggleStreamSim);
-                        }
-                        ui.end_row();
-                    });
-                ui.checkbox(&mut self.stream_use_q1, "Use Stream 1 Quality");
-                ui.separator();
-                ui.label(
-                    RichText::new("Quality")
-                        .size(13.0)
-                        .strong()
-                        .color(FORM_TEXT),
-                );
-                egui::Grid::new("stream_quality_grid")
-                    .num_columns(2)
-                    .spacing([12.0, 6.0])
-                    .show(ui, |ui| {
-                        ui.label("Quality");
-                        egui::ComboBox::from_id_salt("stream.quality_preset")
-                            .width(280.0)
-                            .selected_text(
-                                [
-                                    "H264 720p 2.5mbps AAC 128kbps",
-                                    "H264 1080p 4.5mbps AAC 192kbps",
-                                    "H264 1080p 8mbps AAC 192kbps",
-                                ]
-                                .get(self.stream_quality)
-                                .copied()
-                                .unwrap_or("H264 720p 2.5mbps AAC 128kbps"),
-                            )
-                            .show_ui(ui, |ui| {
-                                for (idx, lbl) in [
-                                    "H264 720p 2.5mbps AAC 128kbps",
-                                    "H264 1080p 4.5mbps AAC 192kbps",
-                                    "H264 1080p 8mbps AAC 192kbps",
-                                ]
-                                .into_iter()
-                                .enumerate()
-                                {
-                                    ui.selectable_value(&mut self.stream_quality, idx, lbl);
-                                }
-                            });
-                        ui.end_row();
-
-                        ui.label("Application");
-                        egui::ComboBox::from_id_salt("stream.app")
-                            .width(180.0)
-                            .selected_text("FFMPEG")
-                            .show_ui(ui, |ui| {
-                                let _ = ui.selectable_label(true, "FFMPEG");
-                                let _ = ui.selectable_label(false, "FMLE");
-                            });
-                        ui.end_row();
-                    });
-                ui.label(
-                    RichText::new(
-                        "Encoder: H264, Format: 1280x720, Bit Rate: 2500 kbps, Keyframe Frequency: 2 seconds\nAudio: Master, Rate: 128 kbps",
-                    )
-                    .size(11.0)
-                    .color(FORM_TEXT),
-                );
-                ui.checkbox(&mut self.rec_hw_encoder, "Use Hardware Encoder");
-            });
-            ui.separator();
-            ui.horizontal(|ui| {
-                if self.stream_active {
-                    ui.colored_label(
-                        RED,
-                        format!(
-                            "LIVE · {} kbps · {} frames",
-                            self.stream_kbps, self.stream_frames
-                        ),
-                    );
-                } else {
-                    ui.label(RichText::new("Unavailable: no encoder / network backend").color(DIM));
-                }
-            });
-            });
-            });
-            // The footer stays interactive and outside the read-only,
-            // scrollable form region (ADR 0003: dialogs stay operator closable).
-            ui.with_layout(egui::Layout::right_to_left(Align::Center), |ui| {
-                let close = ui.add(
-                    egui::Button::new(RichText::new("Close").color(Color32::WHITE))
-                        .fill(CHIP_BG)
-                        .min_size(footer_size(ui, FooterRole::Confirm)),
-                );
-                self.automation
-                    .insert("dialog.streaming.close".into(), close.rect);
-                if close.clicked() {
-                    close_clicked = true;
-                }
-                let save = ui.add_enabled(false,
-                    egui::Button::new(
-                        RichText::new("Save and Close").color(Color32::WHITE).strong(),
-                    )
-                    .fill(CHIP_BG)
-                    .min_size(Vec2::new(112.0, 29.0)),
-                ).on_disabled_hover_text("Unavailable: no streaming settings can be saved without an encoder/output backend");
-                self.automation
-                    .insert("dialog.streaming.save".into(), save.rect);
-            });
-        });
-        if close_clicked || !open {
-            self.streaming_setup = false;
-        }
-    }
-
-    pub(crate) fn multicorder_dialog(&mut self, ctx: &egui::Context) {
-        if !self.multicorder_open {
-            return;
-        }
-        let mut open = self.multicorder_open;
-        let mut close_clicked = false;
-        operator_window(
-            ctx,
-            "MultiCorder",
-            "dialog.multicorder",
-            &mut open,
-            Vec2::new(690.0, 480.0),
-        )
-        .show(ctx, |ui| {
-            ui.label("Unavailable: no encoder/output backend. Settings below are read-only and are not saved.");
-            egui::ScrollArea::vertical().max_height((ctx.viewport_rect().height()-300.0).clamp(180.0,450.0)).show(ui,|ui| {
-            ui.add_enabled_ui(false,|ui| {
-            ui.columns(2, |cols| {
-                if let [left_col, right_col, ..] = cols {
-                    egui::Grid::new("mc_top_left")
-                        .num_columns(4)
-                        .spacing([8.0, 4.0])
-                        .show(left_col, |ui| {
-                            ui.label("Format");
-                            egui::ComboBox::from_id_salt("mc.format")
-                                .width(90.0)
-                                .selected_text(
-                                    ["AVI", "MKV", "MP4", "vMix AVI"]
-                                        .get(self.mc_format)
-                                        .copied()
-                                        .unwrap_or("AVI"),
-                                )
-                                .show_ui(ui, |ui| {
-                                    for (idx, lbl) in
-                                        ["AVI", "MKV", "MP4", "vMix AVI"].into_iter().enumerate()
-                                    {
-                                        ui.selectable_value(&mut self.mc_format, idx, lbl);
-                                    }
-                                });
-                            ui.label("Audio");
-                            egui::ComboBox::from_id_salt("mc.audio")
-                                .width(90.0)
-                                .selected_text("Input")
-                                .show_ui(ui, |ui| {
-                                    let _ = ui.selectable_label(true, "Input");
-                                    let _ = ui.selectable_label(false, "Master");
-                                });
-                            ui.end_row();
-
-                            ui.label("Codec");
-                            egui::ComboBox::from_id_salt("mc.codec")
-                                .width(90.0)
-                                .selected_text("MJPEG")
-                                .show_ui(ui, |ui| {
-                                    let _ = ui.selectable_label(true, "MJPEG");
-                                    let _ = ui.selectable_label(false, "H264");
-                                });
-                            ui.label("Quality");
-                            egui::ComboBox::from_id_salt("mc.quality")
-                                .width(90.0)
-                                .selected_text("50Mbit")
-                                .show_ui(ui, |ui| {
-                                    let _ = ui.selectable_label(true, "50Mbit");
-                                    let _ = ui.selectable_label(false, "100Mbit");
-                                });
-                            ui.end_row();
-                        });
-                    left_col.checkbox(
-                        &mut self.mc_ndi_mov,
-                        "Record NDI QuickTime MOV where available",
-                    );
-                    left_col.checkbox(&mut self.mc_show_unsupported, "Show unsupported inputs");
-
-                    right_col.horizontal(|ui| {
-                        egui::Frame::new()
-                            .fill(Color32::from_rgb(18, 23, 30))
-                            .corner_radius(4.0)
-                            .stroke(Stroke::new(1.0, FORM_BORDER))
-                            .inner_margin(10.0)
-                            .show(ui, |ui| {
-                                ui.set_min_size(Vec2::new(135.0, 44.0));
-                                ui.label(
-                                    RichText::new(if self.mc_running {
-                                        "Recording"
-                                    } else {
-                                        "Stopped"
-                                    })
-                                    .size(18.0)
-                                    .color(if self.mc_running { RED } else { Color32::WHITE }),
-                                );
-                            });
-                        let toggle = ui.add_enabled_ui(false, |ui| {
-                            ui.add_sized(
-                                [115.0, 56.0],
-                                egui::Button::new(
-                                    RichText::new(if self.mc_running { "Stop" } else { "Start" })
-                                        .size(18.0)
-                                        .color(Color32::WHITE),
-                                )
-                                .fill(CHIP_BG),
-                            )
-                        });
-                        self.automation
-                            .insert("dialog.multicorder.toggle".into(), toggle.inner.rect);
-                        if toggle.inner.clicked() {
-                            self.say(
-                                "Unavailable: MultiCorder has no recording backend".into(),
-                                true,
-                            );
-                        }
-                    });
-                }
-            });
-            ui.add_space(4.0);
-            let mc_elapsed_s = if self.mc_running {
-                self.now.saturating_sub(self.mc_started_ms) / 1000
-            } else {
-                0
-            };
-            let mc_frames = if self.mc_running {
-                (self.now.saturating_sub(self.mc_started_ms) * 30 / 1000).max(1)
-            } else {
-                0
-            };
-            light_form_frame(ui, 6, |ui| {
-                let content_width = (ui.available_width() - 48.0).max(280.0);
-                let widths = [0.26, 0.34, 0.16, 0.11, 0.13].map(|share| content_width * share);
-                egui::Grid::new("mc_inputs_table")
-                    .striped(true)
-                    .num_columns(5)
-                    .min_col_width(0.0)
-                    .spacing([12.0, 3.0])
-                    .show(ui, |ui| {
-                        for (col, width) in ["Input", "Folder", "Duration", "Frames", "Dropped"].into_iter().zip(widths) {
-                            ui.add_sized([width, 20.0], egui::Label::new(RichText::new(col).strong().color(FORM_TEXT)).truncate());
-                        }
-                        ui.end_row();
-                        let mut rows = vec![
-                            "Output 1".to_owned(),
-                            "Output 2".to_owned(),
-                            "Output 3".to_owned(),
-                            "Output 4".to_owned(),
-                        ];
-                        for input in &self.engine.project().inputs {
-                            rows.push(format!(
-                                "{}: {}",
-                                self.engine.project().input_number(input.id),
-                                input.name
-                            ));
-                        }
-                        for (idx, label) in rows.into_iter().take(10).enumerate() {
-                            let is_checked = self.mc_checked.get(idx).copied().unwrap_or(false);
-                            ui.allocate_ui_with_layout(Vec2::new(widths[0], 22.0), egui::Layout::left_to_right(Align::Center), |ui| {
-                                if let Some(checked) = self.mc_checked.get_mut(idx) {
-                                    ui.checkbox(checked, "");
-                                }
-                                let label = ui.add_sized([ui.available_width(), 20.0], egui::Label::new(&label).truncate()).on_hover_text(&label);
-                                self.automation.insert(format!("dialog.multicorder.input.{idx}"), label.rect);
-                            });
-                            let folder = ui.add_sized([widths[1], 22.0], egui::Label::new(&self.mc_folder).truncate()).on_hover_text(&self.mc_folder);
-                            self.automation.insert(format!("dialog.multicorder.folder.{idx}"), folder.rect);
-                            let duration = ui.add_sized([widths[2], 22.0], egui::Label::new(if self.mc_running && is_checked {
-                                format!("00:{:02}:{:02}", mc_elapsed_s / 60, mc_elapsed_s % 60)
-                            } else {
-                                "00:00:00".into()
-                            }).truncate());
-                            self.automation.insert(format!("dialog.multicorder.duration.{idx}"), duration.rect);
-                            ui.add_sized([widths[3], 22.0], egui::Label::new(if self.mc_running && is_checked {
-                                mc_frames.to_string()
-                            } else {
-                                "0".into()
-                            }).truncate());
-                            ui.add_sized([widths[4], 22.0], egui::Label::new("0").truncate());
-                            ui.end_row();
-                        }
-                    });
-            });
-            ui.separator();
-            ui.horizontal(|ui| {
-                ui.label("Folder");
-                ui.add_sized(
-                    [260.0, 22.0],
-                    egui::TextEdit::singleline(&mut self.mc_folder),
-                );
-                let _ = ui.add_sized([74.0, 22.0], egui::Button::new(RichText::new("Browse").color(Color32::WHITE)).fill(CHIP_BG));
-            });
-            });
-            });
-            // The footer stays interactive and outside the scrollable form
-            // region (ADR 0003: dialogs stay operator closable).
-            ui.with_layout(egui::Layout::right_to_left(Align::Center), |ui| {
-                let close = ui.add(
-                    egui::Button::new(RichText::new("Close").color(Color32::WHITE))
-                        .fill(CHIP_BG)
-                        .min_size(footer_size(ui, FooterRole::Confirm)),
-                );
-                self.automation
-                    .insert("dialog.multicorder.close".into(), close.rect);
-                if close.clicked() {
-                    close_clicked = true;
-                }
-            });
-        });
-        if close_clicked || !open {
-            self.multicorder_open = false;
         }
     }
 

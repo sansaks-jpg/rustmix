@@ -511,7 +511,10 @@ impl RustMixApp {
                                         );
                                         label_ui.add(
                                             egui::Label::new(RichText::new(path).color(FORM_TEXT))
-                                                .truncate(),
+                                                .truncate()
+                                                // The containing row owns file selection.
+                                                // A selectable child label steals its click.
+                                                .selectable(false),
                                         );
                                         response.widget_info(|| {
                                             egui::WidgetInfo::labeled(

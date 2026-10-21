@@ -1,10 +1,31 @@
 # UI milestone progress
 
+UI-035: existing-panel review, Streaming/MultiCorder navigation, topic-specific
+Settings and isolated Input Settings resets. Actual-egui headless captures and
+test results are recorded in [UI-035](ui035-reference-uiux.md). No application
+executable build; native/DPI/GPU and complete reference acceptance remain separate.
+
 UI-034 implementation candidate: [New Preset/Add Input record](ui034-add-input-and-new-preset.md).
 Startup/New modal, format and scan persistence, portrait monitoring, native Camera
 mode selection and Browser keepalive fix are prepared with regression/native gates.
 Hosted verification has not run. Prior f6ecbdd/run39603431352 failed discovery and
 GPU teardown. No test, full-resolution output or hardware acceptance is inherited.
+
+UI-032 Add Input source candidate: [changes and pending checks](ui032-add-input-changes.md).
+PNG/category isolation, explicit Image/generator/Colour/audio forms, unavailable
+category pages and semantic icons/OK readiness are implemented. Eight regressions
+and six mandatory native page captures are prepared. Local fmt/inventory/diff/
+script syntax pass; new hosted compile/tests/build/native and visual acceptance
+have not run. No parity, hardware, new backend or GPU-reliability claim.
+
+2026-10-21 Add Input-only audit: [report and category matrix](add-input-uiux-audit.md).
+All 33 supplied `vmix-photos` Add Input images were inspected. Current runtime
+source matches 56048cb; run39556368477/job119076958426 status and logs were read
+again (274 passing tests,150 UI), and three exact native Add/Video PNGs plus
+related metadata were reviewed. Dialog/Video structure and selected safe workflows
+have evidence; overall Add Input correspondence is rejected with six open UX
+findings, including cross-category PNG draft carryover. No application code,
+backend, fresh native run or physical-device acceptance was added.
 
 UI-028 through UI-031 (2026-10-21): Video-first Input Select with genuine bounded
 recent files and validation; topmost Escape/popup/repeat safety; responsive
@@ -53,6 +74,139 @@ toolbars and integration. Existing unrelated documentation changes were preserve
 acceptance limits are recorded in ADR 0020. Local formatting/repository/diff verification is allowed;
 new compilation, widget tests, native captures and visual acceptance are pending hosted Windows.
 The goal of full UI/UX and feature correspondence remains incomplete.
+
+## 2026-10-19 — Program overlay captions (hosted acceptance pending)
+
+Overlay channels carried a title and a subtitle, but only the operator's Program monitor painted
+them, so the separate Program window, fullscreen output, GPU captures and any future recorder showed
+a lower third with no words. This increment moves the captions into the composed picture.
+
+Built: `crates/engine/src/overlay_text.rs` holds an original 5x8 bitmap font for printable ASCII
+(U+0020..U+007E) plus the panel origin/size fractions shared with the compositor. Rendering needs no
+third-party font file, font crate or lockfile change; writes are bounds-checked through `get_mut`,
+lines are capped at 96 characters, text stops at the 0.52w edge and unknown characters advance blank,
+so a malformed caption cannot interrupt Program output. `render::program_from_sources` now applies
+source processing, the transition, the panel geometry, the caption lines and fade-to-black in that
+order, so FTB still covers the captions. The duplicated `egui::Painter` caption block in
+`panels.rs` was removed: the monitor shows exactly the composed Program raster. The live stage of
+`--ui-output-smoke` sets deterministic captions (`PROGRAM LIVE` / `CAPTION CHECK`), maps every
+title/subtitle ink pixel of the Program raster into the captured native Program viewport and requires
+brightness there, recording `caption_*_ink_pixels` / `caption_*_bright_pixels` in
+`program-output-live.json`; because the panel fill darkens its region, a bright pixel inside the
+panel can only be caption ink.
+
+Engine unit tests cover glyph coverage for printable ASCII, ink containment inside the panel
+rectangle for lower-left/lower-right/top-left, subtitle ink, fade-to-black covering the ink and
+disabled overlays leaving source pixels untouched. Hosted unit/native acceptance for this commit is
+**pending**; this entry will name the run when it is green. No hardware, GPU, encoder, typography
+(font choice, outline, shadow, animation, ticker, data binding) or per-source overlay claim is made,
+and the synthetic `Graphics` input's decorative text remains monitor-only. See
+[ADR 0019](adr/0019-overlay-captions-in-program-surface.md).
+
+## 2026-10-19 — real audio, independent Program viewport and local MP4 video (hosted acceptance)
+
+Both increments below were accepted on hosted Windows; neither is a production or hardware claim.
+
+### Audio path and Program viewport — run 39270445070
+
+[Run 39270445070](https://github.com/sansaks-jpg/rustmix/actions/runs/39270445070), commit
+`3ed91a6`, was **fully green (all 16 steps)** on `windows-2022` with Rust 1.94.1 — the first fully
+green hosted run since `39131760936`. It validated the deferred Program-viewport screenshot
+delivery and the native audio descriptor workflow.
+
+Built and integrated: the engine's fixed 48 kHz stereo block mixer with Master/Aux A/Aux B and
+bounded guest returns, click-safe gain ramps and peak/RMS/clipping/underrun counters
+(`engine::audio_engine`); the strict bounded PCM16/float32 RIFF/WAVE decoder (`engine::wav`); typed
+WAV/microphone descriptors in `InputConfig` (introduced in schema 7); the Windows WASAPI adapter
+through CPAL 0.18.2 and rtrb 0.4.0 with control-thread enumeration/open and lock-free PCM rings
+(`rustmix-platform::audio`); and the operator Audio I/O dialog, session worker and native
+`--ui-audio-smoke` in `ui-egui`. The independent Program-only native viewport
+(`program_output.rs` / `extended_output.rs`) presents the last validated Program texture; direct
+extended-display routing is implemented but was not physically exercised by this run. Its GPU
+acceptance now tags each requested readback with a monotonic sequence so a deferred or stale frame
+cannot satisfy a later stage.
+
+Native evidence from this run: `audio-validation.json` records a generated one-second mono PCM16
+RIFF/WAVE fixture of 44100 frames at 44100 Hz, `audio_monitoring_started: false`, and the evidence
+scope "native input descriptor and metadata workflow; no device/callback acceptance";
+`audio-workflow-ok.json` and `audio-workflow-reopen-ok.json` are byte-identical; the three audio
+screenshots (`audio-input.png`, `audio-io.png`, `audio-source.png`) and element geometry JSONs
+exist. `program-output-window.json` / `-live.json` / `-black.json` record native 960×540 viewports,
+`program_pixel_samples_verified: true` and `fullscreen_changes_main_window: false`. No audio device
+was opened and no physical extended display was qualified.
+
+### Local MP4 video source — run 39273839106
+
+[Run 39273839106](https://github.com/sansaks-jpg/rustmix/actions/runs/39273839106), accepted
+commit `1df8c47`, was **fully green (all 16 steps)** — the first fully green run that includes the
+new native MP4 acceptance `--ui-video-smoke` / `--ui-video-smoke-reopen`.
+
+Built and integrated: `engine::video_source`'s single-latest `VideoFeed` (immutable Arc frame,
+monotonic sequence, 100 ns PTS, generation identity, health states, nonblocking try-locks);
+`platform::media_foundation`'s audited synchronous Windows Media Foundation RGB32 decoder for local
+MP4; `ui-egui::video_player`'s one bounded owner decoder thread per input (maximum eight live
+workers, exact-PTS pacing, pause/loop/seek/restart, UI never decodes); `video_controls`' appended
+`Video file` Add Input category (index 20 of 21, off-thread probe validation before descriptor
+commit) and black fallback for external media; and `video_smoke`'s native acceptance.
+
+Evidence: `video-validation.json` records width 160, height 90, frame rate `30/1`, decoder "Windows
+Media Foundation RGB32 (platform worker)", `audio_decoded: false`, `device_opened: false`, scope
+"native descriptor and decoder negotiation; playback pixels follow". The 1600×900
+`video-program.png` shows the PGM monitor and the `8 Fixture video` tile presenting the decoded
+red/green/blue/white quadrants with the black moving square; `video-motion.json` records
+`paused_frame_frozen: true`, `resumed_frame_differs: true` and 4224 changed colour channels;
+`video-workflow-ok.json` and `video-reopen-ok.json` are byte-identical and persist the MP4 descriptor
+in schema 8. The probe assertion in `video_smoke.rs` rejects any raster other than 160×90 or any
+frame-rate ratio other than 30/1 (Media Foundation can report an unreduced 60/2), and the reopen
+process starts exactly one owner worker and re-verifies decoded Program pixels.
+
+### Failures corrected before these green runs
+
+- Deferred Program-viewport screenshots were not reaching the acceptance consumer; commit `46a90b7`
+  fixed delivery (mailbox + deferred-event harvesting) before run 39270445070.
+- Commit `4cd3199` rejected stale Program readbacks by tagging every request with a monotonic
+  sequence, draining obsolete mailbox entries and accepting only the matching capture. The same
+  change raised the internal native-smoke budget to 360 s and added per-stage 240-frame guards that
+  name the stuck stage. [Run 39272249323](https://github.com/sansaks-jpg/rustmix/actions/runs/39272249323)
+  was fully green with that fix.
+- Clippy rejected a nested video restart-generation guard; commit `1df8c47` collapsed the guard
+  without suppressing the lint. Test-only corrections fixed an `InputId` path in the external-media
+  reference test (`cd340fa`) and a `ColorImage` raster assertion in the Program capture mailbox test
+  (`3ed91a6`).
+
+### Video hardening after the accepted run (accepted in run 39279752517)
+
+A follow-up video review found defects that the accepted run did not exercise, fixed in commits
+`6dac7ad` and `695d2ef`. Hosted Windows
+[run 39279752517](https://github.com/sansaks-jpg/rustmix/actions/runs/39279752517) (commit `695d2ef`)
+passed **all steps**, including the unit/widget suites and the native audio, video and Program
+output smokes; the run also re-validated the earlier accepted behavior on top of these fixes.
+
+- Relinking a committed video descriptor left the previous file's last decoded frame on the Program
+  surface until the new owner worker published. `sync_input_cache` now resets the decoded-media cache
+  when the descriptor changes, covered by a UI unit test; there is no native relink stage yet.
+- Program surface caching keyed decoded rasters by an `Arc` address, which a later allocation could
+  reuse. A monotonic `InputFx::image_generation` now keys the surface and is bumped on every published
+  frame, with an engine-side renderer regression test.
+- `cancel_video_add` left a probe job and its token alive, so a late probe result could repopulate a
+  cancelled dialog; cancelling now drops the receiver and advances the token.
+- The video smoke's screenshot handler accepted captures from any viewport; it now requires the
+  operator root viewport, and the evidence JSON no longer claims `decoded_video_pixels` for operator
+  screenshots (decode claims live in `video-validation.json` / `video-motion.json`).
+- The probe assertion now accepts an unreduced 30 fps ratio (Media Foundation can report 60/2), the
+  workflow waits for the save revision, Input Settings labels a video source as local MP4 rather than
+  PNG, and Windows-only bounds no longer produce non-Windows dead-code warnings.
+
+### Explicit non-claims and cadence
+
+The hosted cadence sample still fails: 29.66 fps for target 50/1, 34.23 fps for 60000/1001 and
+40.40 fps for 60/1 at the 640×360 CPU procedural Program with seven inputs (248 / 285 / 334 frames
+produced, 170 / 214 / 162 skipped; `within_sample_target` false for all three). This is not
+full-HD, hardware, audio or output qualification. There is no audio device/callback acceptance,
+A/V synchronization, mix-minus hardware qualification, compressed audio, camera/capture-card/network
+input, GPU or hardware decode, recording/streaming encoder, physical extended-monitor qualification
+or production readiness. MP4 support is video-only and only the generated 160×90 baseline fixture is
+qualified. See ADRs 0015 and 0018.
 
 ## Task 1.3 continuation — four external-output configuration slots (2026-10-19)
 

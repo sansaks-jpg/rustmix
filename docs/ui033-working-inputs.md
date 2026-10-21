@@ -35,3 +35,25 @@ project roundtrip and all GPU drain gates. Physical camera/audio hardware,
 shutdown endurance and real-world browser latency remain outside hosted proof.
 Local permitted checks: formatting, metadata/dependency inventory, script syntax
 and diff inspection only. No local Rust compilation, tests, build or app launch.
+
+## Verification ledger
+
+- f178755 / run39598705556: formatting, inventory, locked workspace check and
+  warnings-as-errors Clippy pass. 283 tests pass,2 fail (158UI pass,2 fail).
+  Failures are old expectations: Photos was unavailable, decoder errors cleared
+  all pixels. Release/native did not run. Assertions were updated to require the
+  real Photos form with unvalidated OK disabled, and exact retained pixels plus
+  explicit failure status. A red held-frame tile warning was added.
+- a190375 / run39602452707: all285 tests pass, build/native pending.
+- 8fa671b / run39602671522: stopped sources invalidate monitor pixels; superseded
+  by20ea0b6 and cancellation requested. It is not accepted verification evidence.
+- 20ea0b6 / run39603068866: source labels corrected, local-only photo descriptors
+  strengthened, Browser restart reloads its persistent page; exact checks pending.
+
+- a190375 native source stage3 failed: canonical Windows photo paths retained
+  the verbatim-disk prefix and were rejected as non-local. No acceptance claimed;
+  later native processes were not run. f6ecbdd adds disk-prefix normalization,
+  rejects verbatim network/device identities, and adds a real mixed PNG/JPEG/BMP
+  folder plus corrupt-file regression. No assertion or native gate was removed.
+-20ea0b6 was superseded after this reproducible path failure; cancellation
+  requested rather than spending another native run on the same known defect.

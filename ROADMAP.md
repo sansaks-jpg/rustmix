@@ -1,10 +1,27 @@
 # Roadmap
 
+UI-035: existing-panel workflow alignment against `vmix-photos`, reviewed through
+actual egui paint without building the application executable. See
+[UI-035](docs/ui035-reference-uiux.md). Native/DPI/GPU and unavailable backend
+qualification remain separate follow-up gates.
+
 UI-034: implement Add Input refinements and the requested startup/New format
 selector. Source complete; next is authorized exact-revision hosted checks,
 mandatory preset/source/native captures and inspection. Physical camera/audio,
 full-resolution/interlaced output and resource/cadence qualification remain open.
 See [UI-034](docs/ui034-add-input-and-new-preset.md).
+
+UI-032 Add Input fixes are implemented as an unverified source candidate:
+draft isolation, dedicated forms, truthful categories/icons and OK readiness.
+Next: exact-revision hosted compile/tests/build, six required native captures
+and screenshot review. Missing media/device backends and full form equivalence
+remain outside this candidate. See [UI-032](docs/ui032-add-input-changes.md).
+
+2026-10-21 Add Input audit: [focused findings and acceptance gates](docs/add-input-uiux-audit.md).
+Next within this scope: prevent a validated PNG draft from being committed under
+another source category (ADD-UX-01), then separate Image/Colour/Title forms and
+correct readiness/catalog/icon semantics. Audit only; no fixes implemented or
+new native acceptance claimed.
 
 UI-028 through UI-031 (2026-10-21): Video-first Input Select with genuine bounded
 recent files and validation; topmost Escape/popup/repeat safety; responsive
@@ -42,10 +59,42 @@ See ADRs0028-0031 and UI-028/029/030/031 reviews for exact scope and every faile
   truthful preview, then refine remaining Settings/Playlist/record/stream form differences. Full
   parity and production acceptance remain open. See docs/ui020-visual-review.md and ADR 0020.
 
+- M5 progress, not complete (2026-10-19): Program overlay captions are rasterized into the Program
+  surface by the engine compositor (original 5x8 bitmap font for printable ASCII, no new dependency),
+  after the panel geometry and before fade-to-black, and the duplicated monitor-only caption painter
+  was removed so the monitor, Program window, fullscreen output and captures show the same words.
+  `--ui-output-smoke`'s live stage now verifies caption ink in the captured native Program viewport
+  and records the counts. Hosted acceptance is pending for this commit. Remaining open: bitmap-only
+  typography (no font choice, outline, shadow, animation, ticker or data binding), ASCII-only glyphs,
+  no per-source overlay, stinger clip rendering (G20), and the synthetic `Graphics` input's
+  decorative text still being monitor-only. See ADR 0019.
+
+- M2 progress, not complete (2026-10-19): local MP4 video source implemented and hosted-accepted —
+  schema-8 `VideoSource::File` descriptors, Windows Media Foundation RGB32 decode on one bounded
+  owner thread per input, exact-PTS pacing, engine `VideoFeed`, off-thread Add Input probe
+  validation, black fallback for external media, and native `--ui-video-smoke` /
+  `--ui-video-smoke-reopen`. Hosted Windows
+  [run 39273839106](https://github.com/sansaks-jpg/rustmix/actions/runs/39273839106) (commit
+  `1df8c47`) passed every step, including probe format 160×90 at 30/1, quadrant Program pixels,
+  pause-freeze/resume-motion evidence and byte-identical save/reopen. Camera/device capture,
+  network ingest, MP4 audio, GPU/hardware decode and broad codec compatibility remain open;
+  recording/streaming (M4) and a custom GPU compositor (M1) are still unimplemented.
+  See ADR 0018.
+
+- M3 progress, not complete (2026-10-19): real audio path implemented and hosted-accepted for its
+  descriptor/metadata workflow — fixed 48 kHz stereo block mixer with Master/Aux A/Aux B and guest
+  returns, click-safe gain ramps, strict PCM16/float32 WAV decode, typed WAV/microphone descriptors,
+  the Windows WASAPI adapter through CPAL and an explicitly started monitoring session. Hosted
+  Windows [run 39270445070](https://github.com/sansaks-jpg/rustmix/actions/runs/39270445070)
+  (commit `3ed91a6`) passed every step; native acceptance never opened an audio device. Physical
+  device callback/hardware qualification, mix-minus hardware tests, resampling/quality review and
+  A/V synchronization remain open. See ADR 0015.
+
 - Task 1.3 continuation (2026-10-19): finish the existing four-slot external-output configuration
   slice, atomic source/config Apply, preserved drafts, schema-6 migration and validation tests.
   Source implementation only; new hosted build/test/native acceptance pending. No hardware or
-  network output backend. Next broadcast blockers remain G01 Program delivery and G02 real audio.
+  network output backend. Next broadcast blockers remain Program clock/scheduler delivery (G01) and
+  the remaining audio device/A-V-sync work (G02).
 
 - Task 1.1 port (reference → rustmix): sixteen-channel overlay bank — eight title-panel channels
   and eight stinger channels (configured input, cut point, display-underneath) — with schema 5 and
@@ -73,7 +122,7 @@ See ADRs0028-0031 and UI-028/029/030/031 reviews for exact scope and every faile
 - UI-009: stable bounded monitor bank, horizontal T-Bar, independent headless source transport, consistent processed Program surfaces and truthful output/processing status — tested on hosted Windows: 32 tests plus native screenshot/save/reopen acceptance in [run 39089212707](https://github.com/sansaks-jpg/rustmix/actions/runs/39089212707). Complete vMix feature parity and production engine qualification remain separate uncompleted milestones.
 
 - M0/UI-001: three-package workspace, headless commands, rational rates, synthetic media, project IO and hosted Windows CI — implemented, verification tracked in docs/ui-progress.md.
-- M1/UI-001: native interactive synthetic switcher, CPU monitor composition, dockable panels, simulated audio controls and overlay UI — experimental; custom GPU compositor remains open.
+- M1/UI-001: native interactive synthetic switcher, CPU monitor composition, dockable panels, simulated audio controls and overlay UI — experimental; custom GPU compositor remains open. (Later increments add a real audio path and local MP4 video; see the M2/M3 progress entries above.)
 - UI-002: observed broadcast-style placement, native system typography, compact input controls and atomic direct takes — experimental prototype verified by hosted tests, native smoke and screenshot review; see docs/ui-progress.md.
 - UI-003: sidebar-based source selector, input properties/audio/status, staged settings and denser monitor/input layout — experimentally verified by the hosted widget/native workflow; hardware qualification remains open.
 - UI-004: bounded sidebar dialogs with fixed confirmation controls, independent generator samples, monitor properties access, readable input filters/offline state and unified removal confirmation — hosted compilation, widget geometry and native dialog captures passed; physical DPI/accessibility qualification remains open.
@@ -85,6 +134,6 @@ See ADRs0028-0031 and UI-028/029/030/031 reviews for exact scope and every faile
 
 Later milestones in AGENTS.md are plans, not shipped capabilities.
 
-- M2/UI-010: persisted still-image input lifecycle, staged effects, insertion order, duplication, relink and bounded PNG workers implemented. Hosted functional acceptance passed, including the current native PNG save/reopen workflow. File video/capture and hardware qualification remain open.
+- M2/UI-010: persisted still-image input lifecycle, staged effects, insertion order, duplication, relink and bounded PNG workers implemented. Hosted functional acceptance passed, including the current native PNG save/reopen workflow. Local MP4 file video is implemented and hosted-accepted (see M2 progress above); camera/capture-device hardware and physical qualification remain open.
 
 - UI-011: bounded independent RGBA Program producer, rational deadlines, cached surfaces, reduced preview updates and process-memory/cadence evidence — functional worker tests and hosted measurements completed; cadence targets failed. 1080p60/hardware broadcast qualification remains open.

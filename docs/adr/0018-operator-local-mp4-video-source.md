@@ -1,6 +1,18 @@
 # ADR 0018: operator-addable local MP4 video source
 
-2026-10-19 · source implementation; hosted native acceptance pending for this change.
+2026-10-19 · hosted native acceptance passed in [run 39273839106](https://github.com/sansaks-jpg/rustmix/actions/runs/39273839106)
+(commit `1df8c47`; all 16 hosted steps green). `--ui-video-smoke` /
+`--ui-video-smoke-reopen` produced `video-validation.json` (160×90, 30/1, Windows Media Foundation
+RGB32, no audio/device), 1600×900 `video-source.png` / `video-program.png` / `video-resumed.png`
+with the decoded quadrant fixture, `video-motion.json` (`paused_frame_frozen: true`,
+`resumed_frame_differs: true`, 4224 changed channels) and byte-identical `video-workflow-ok.json` /
+`video-reopen-ok.json` persisting schema 8. Follow-up hardening passed hosted
+[run 39279752517](https://github.com/sansaks-jpg/rustmix/actions/runs/39279752517) (commit `695d2ef`,
+all steps green): relinking clears the previous file's decoded frame, Program surfaces are keyed by a
+raster generation instead of an `Arc` address, a cancelled Add dialog retires its probe, operator
+screenshots are tagged with their viewport and no longer claim decoded pixels, the probe accepts an
+unreduced 30 fps ratio, and the save stage waits for the committed revision. The non-claims below
+remain in force.
 
 The owner's delivery plan requires real video inputs before recording or streaming can be honest.
 The engine already had a typed `VideoSource::File` descriptor (schema 8) and a bounded
@@ -42,8 +54,9 @@ Decision:
 
 Non-claims: this first slice is Windows Media Foundation MP4 video only. It does not decode MP4
 audio, does not synchronize A/V, does not provide cameras, capture cards, network or browser
-inputs, GPU decode, hardware acceleration, frame-accurate seek UI, relinking without removal, or
-sustained/endurance measurement. The Program raster remains the experimental 640×360 CPU
+inputs, GPU decode, hardware acceleration, frame-accurate seek UI, a native relink acceptance stage
+(relinking a committed descriptor now clears the previous file's decoded frame and is covered by a
+UI unit test), or sustained/endurance measurement. The Program raster remains the experimental 640×360 CPU
 composite; hosted acceptance does not qualify physical hardware, codec compatibility beyond the
 generated fixture, or broadcast readiness. Codec/patent and distribution questions for shipped
 Windows Media components still require release review.

@@ -6,6 +6,32 @@ constructs two muted black safety inputs without I/O. Schema 10 migrates older
 scan/camera defaults. Prepared tests cover atomic invalid input, persistence and
 legacy migration; hosted execution pending. Interlaced output is not implemented.
 
+2026-10-19 overlay caption candidate: `overlay_text` rasterizes enabled overlay titles and
+subtitles into the Program surface. It carries an original 5x8 bitmap font for printable ASCII (no
+third-party font file and no new dependency), exposes the panel fractions shared with the
+compositor, and is applied by `render::program_from_sources` after the panel geometry and before
+fade-to-black. Writes are bounds-checked, lines are capped at 96 characters, the text edge is 0.52w
+and unknown characters advance blank, so a malformed caption cannot interrupt Program output. Engine
+unit tests cover glyph coverage, ink containment for all three panel positions, subtitle ink,
+caption ink being covered by fade-to-black and disabled overlays leaving source pixels untouched.
+Hosted unit/native acceptance is pending for this commit. Non-claims: bitmap-only typography, ASCII
+glyphs only, no font choice/outline/shadow/animation/ticker/data binding, no per-source overlay, and
+only the experimental 640×360 CPU Program raster is covered.
+
+2026-10-19 audio/video candidate accepted on hosted Windows: schema 8 keeps typed local-media
+descriptors. `audio_engine` is a bounded, sample-based fixed 48 kHz stereo mixer (256-frame blocks,
+Master/Aux A/Aux B, guest returns, click-safe gain ramps, peak/RMS/clipping/underrun counters) with
+no device ownership; `wav` strictly decodes bounded PCM16/float32 RIFF/WAVE data and retains its
+source rate so playback must resample explicitly. `input::AudioSource` persists WAV/microphone
+descriptors (schema 7, carried into schema 8). `video_source` defines the `VideoFeed` contract: one
+replaceable immutable Arc RGBA frame, monotonic sequence, 100 ns PTS/duration, generation identity,
+health states and nonblocking try-locked snapshots/publication. `input::VideoSource::File` is
+descriptor data only. The headless reference generator returns black for every external-media input,
+so a missing decoded frame can never masquerade as a procedural source. The engine opens no audio
+device, decodes no video and does not synchronize audio with video; hosted acceptance covers the
+native audio descriptor workflow (run 39270445070) and local MP4 decode through UI/platform workers
+(run 39273839106).
+
 Task 1.3 source candidate: schema 6 adds four independent external-output configuration
 slots (`outputs`). `output.route.set` and `output.external.configure` update individual
 fields; `output.external.apply` validates and publishes a complete slot atomically in
@@ -45,7 +71,7 @@ in hosted Windows run 39111788801 (`a01f498`); no full reference/hardware qualif
 
 Headless synthetic UI domain. `Engine::execute` validates typed commands; `tick` advances pinned transitions using supplied monotonic milliseconds. Project/model, procedural CPU rendering, deterministic simulated meters and bounded atomic project IO are modules with no UI dependencies.
 
-Engine tests run on GitHub Actions. No real audio, media decoding, hardware, GPU types or output encoders are exposed.
+Engine tests run on GitHub Actions. The engine exposes no hardware, GPU types or output encoders; it does not open audio/video devices or files. Local MP4 decoding belongs to the platform/UI workers, and real audio rendering is driven by the UI session.
 
 `playback` owns independent monotonic clocks for each procedural source through `input.pause`, `input.restart`, `input.loop` and `inputs.pause`. Global source pause preserves local pause states and timed transitions continue. `render::program_from_sources` composites validated processed surfaces, then overlays and FTB. Source transports are not decoder support and are not persisted in project files.
 

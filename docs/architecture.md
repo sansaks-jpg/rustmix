@@ -1,10 +1,23 @@
 # Workspace architecture
 
+UI-035 keeps destination/format inspection and topic-specific settings in
+`ui-egui::output_dialogs` / `settings_pages`. Engine mutations retain the existing
+typed command boundary. Test-only software capture consumes actual egui meshes
+and textures and exposes no production renderer or external API. See
+[ADR 0035](adr/0035-reference-uiux-output-and-settings.md).
+
 UI-034 adds the headless video-format/new-session constructor, schema-10 scan
 and exact camera descriptors, UI-only New Preset drafts and bounded native mode
 discovery. Program surfaces/monitor/snapshot orientation changes retain the same
 pixel budget. Browser control reads length-delimited HTTP with two process-owner
 permits. No dependency or layer change. See [ADR 0034](adr/0034-new-preset-and-native-input-formats.md).
+
+UI-032 Add Input candidate: `ui-egui::add_input` owns source-page presentation,
+explicit category/icon mapping, incompatible draft retirement and engine
+precondition/readiness queries. PNG workers only publish a draft; only explicit
+validated OK commits through AddInputAt. `add_smoke` is an opt-in hosted capture
+workflow. No engine/platform/dependency/schema boundary changes. New hosted
+acceptance is pending; see ADR0032 and [UI-032](ui032-add-input-changes.md).
 
 UI-028 through UI-031 (2026-10-21): Video-first Input Select with genuine bounded
 recent files and validation; topmost Escape/popup/repeat safety; responsive
@@ -33,12 +46,39 @@ are presentation concerns; input/audio/category mutations continue through typed
 No crate, dependency, project-schema or platform-backend change is introduced. Hosted acceptance
 of this source candidate remains pending. See ADR 0020.
 
-2026-10-19 continuation: schema 7 adds typed audio-only WAV/microphone descriptors. Portable
-`engine::audio_engine` renders actual fixed 48 kHz stereo blocks with Master/A/B and guest returns;
-`engine::wav` validates PCM16/float32 RIFF data. `rustmix-platform` encapsulates Windows WASAPI
-streams and bounded PCM rings. The new `ui-egui::program_output` presents the validated Program
-texture in a separate native viewport. These candidates need their own hosted runtime acceptance;
-none establishes a complete recording/streaming backend, AV synchronization or device qualification.
+2026-10-19 overlay caption continuation: `engine::overlay_text` owns the Program caption raster. It
+holds an original 5x8 bitmap font (printable ASCII, no third-party font file or new dependency) and
+the panel origin/size fractions shared with the compositor. `render::program_from_sources` applies
+source processing, the transition, the overlay panel geometry, the enabled caption lines and then
+fade-to-black, in that order, so every Program consumer sees the same picture; the operator monitor
+no longer paints its own copy of the captions. Writes are bounds-checked, lines are capped at 96
+characters and the text edge is 0.52w, so a malformed caption degrades instead of interrupting
+output. Held under [ADR 0019](adr/0019-overlay-captions-in-program-surface.md); hosted acceptance is
+pending for this commit. Remaining gaps: bitmap-only typography, ASCII-only glyphs, no animation or
+data binding, no per-source overlay, and the synthetic `Graphics` input's decorative text still
+being monitor-only.
+
+2026-10-19 local video continuation: schema 8 persists the `VideoSource::File` descriptor.
+`engine::video_source` owns a single-latest `VideoFeed` per source: one immutable Arc RGBA frame,
+monotonic sequence, signed 100 ns source PTS, generation identity, health states and nonblocking
+try-lock publication. `ui-egui::video_player` owns one bounded decoder thread per committed input
+(global maximum eight live owner workers); the synchronous `!Send` Windows Media Foundation
+`VideoFile` is created, read, seeked and dropped only on that thread, and frames are published at
+exact PTS into the feed. The UI thread never decodes: `poll_video` snapshots feeds and copies the
+newest `Arc` pixel buffer into the existing decoded-media (`custom_rgba`) cache, so the existing
+effects pipeline and the fixed 640×360 CPU Program composite need no separate video path. Add Input
+validates the chosen MP4 on a bounded probe worker and commits the descriptor only after the probe;
+external-media inputs without a frame render black rather than a procedural fallback. Held under
+[ADR 0018](adr/0018-operator-local-mp4-video-source.md) and accepted in hosted run 39273839106.
+
+2026-10-19 audio continuation: schema 7 introduced typed audio-only WAV/microphone descriptors and
+schema 8 carries them forward. Portable `engine::audio_engine` renders actual fixed 48 kHz stereo
+blocks with Master/A/B and guest returns; `engine::wav` validates PCM16/float32 RIFF data.
+`rustmix-platform::audio` encapsulates Windows WASAPI streams and bounded PCM rings behind an
+explicitly started monitoring session. `ui-egui::program_output` presents the validated Program
+texture in a separate native viewport with sequence-tagged screenshot acceptance. Descriptor and
+Program-viewport workflows passed hosted run 39270445070; no audio device, physical display, A/V
+synchronization or production output was qualified.
 
 Task 1.3 continuation (2026-10-19): `engine::output` owns four bounded external-output
 configuration records and stable input references. Source and configuration commit through one
@@ -64,4 +104,7 @@ See [UI architecture](ui-architecture.md) and [ADR 0001](adr/0001-native-demo-ui
 All code forbids unsafe. Runtime core paths use fallible validation, checked IDs/revisions, bounded dimensions/files/inputs and explicit errors. Dependencies contain their own unsafe/FFI internally; this is not a claim that the entire dependency tree is unsafe-free.
 
 This is an operator prototype with a bounded RGBA Program producer, not a qualified broadcast
-clock. There is no recording worker, hardware source worker or actual audio/video synchronization.
+clock. Audio processing (48 kHz mixer, WAV/microphone descriptors and the WASAPI adapter) and local
+video processing (Media Foundation decode into `VideoFeed`) now exist, but there is no A/V
+synchronization, recording/encoder worker, hardware source worker or production output
+qualification.
