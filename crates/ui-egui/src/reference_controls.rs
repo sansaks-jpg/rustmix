@@ -282,7 +282,9 @@ impl RustMixApp {
                 self.automation.insert("dialog.settings.aspectRatio".into(), aspect.response.rect);
                 aspect.response.on_disabled_hover_text("Only 16:9 project canvases are supported.");
                 ui.end_row();
-                ui.add_space(12.0); ui.add_space(12.0); ui.end_row();
+                ui.allocate_space(egui::vec2(0.0,12.0));
+                ui.allocate_space(egui::vec2(0.0,12.0));
+                ui.end_row();
                 display_label(ui, "Fullscreen:", label_width);
                 ui.horizontal(|ui| {
                     let width = ((field_width - 4.0) * 0.5).max(86.0);
@@ -310,7 +312,9 @@ impl RustMixApp {
                 display_label(ui, "Actual Program:", label_width);
                 ui.label("640×360 CPU reference");
                 ui.end_row();
-                ui.add_space(20.0); ui.add_space(20.0); ui.end_row();
+                ui.allocate_space(egui::vec2(0.0,20.0));
+                ui.allocate_space(egui::vec2(0.0,20.0));
+                ui.end_row();
                 display_label(ui, "Input Size:", label_width);
                 let input_size = ui.add_enabled(false, egui::Button::new("Automatic · 16:9 thumbnails")
                     .min_size(egui::vec2(field_width,22.0)))

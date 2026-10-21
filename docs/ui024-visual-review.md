@@ -43,3 +43,11 @@ test-target compilation rejected a new contrast test passing a Vec2 to the
 existing caret helper's scalar-height argument. Correct the test call to 24.0;
 the production helper and warnings-as-errors policy stay unchanged. No Rust test
 or native acceptance ran in this failure.
+
+2026-10-21 continuation: 56ae940/run39462559391 passed check and Clippy but
+failed eight Settings tests (124 UI tests passed). Each failure was egui's
+`add_space makes no sense in a grid layout` assertion in the new Display details.
+Replace both direct grid spacer rows with allocated empty cells; horizontal
+sub-layout spacing stays unchanged. Existing compact, staged Apply/Cancel and
+painted-layout regressions exercise the exact failing states. Build/native
+acceptance did not run; the subsequent exact-source result is still required.
