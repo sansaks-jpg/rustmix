@@ -1567,7 +1567,7 @@ impl Engine {
                     clock.set_paused(false);
                 }
             }
-            Command::RunStinger(_) => {
+            Command::TriggerStinger(_) => {
                 if let Some(clock) = self.playback.get_mut(&self.project.preview) {
                     clock.set_paused(false);
                 }
