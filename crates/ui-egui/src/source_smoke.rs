@@ -86,6 +86,14 @@ impl RustMixApp {
         match s.stage {
             0 => {
                 std::fs::create_dir_all("artifacts/source-photos")?;
+                // The real-source workflow is a functional gate, not a
+                // full-size UI gate. A compact viewport keeps the hosted WARP
+                // queue short enough to drain at exit.
+                ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(egui::vec2(1280.0, 720.0)));
+                let mut preferences = self.engine.project().preferences.clone();
+                preferences.width = 1280;
+                preferences.height = 720;
+                self.execute(Command::SetPreferences(preferences));
                 for (file, color) in [
                     ("a.png", [25, 165, 70]),
                     ("b.jpg", [175, 30, 60]),

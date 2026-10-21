@@ -147,6 +147,24 @@ foreach ($sample in $cadence.samples) {
     if ($sample.frames_produced -le 0 -or -not $sample.moving_pixels) { throw 'No real moving Program frames in profile' }
     if (-not $sample.within_sample_target) { Write-Warning "Program cadence target was not met on the hosted runner: $($sample | ConvertTo-Json -Compress)" }
 }
+if (-not (Test-Path -LiteralPath artifacts/program-hd-bench.json)) { throw 'Missing full-HD compose measurement' }
+$bench = Get-Content -LiteralPath artifacts/program-hd-bench.json -Raw | ConvertFrom-Json
+if ($bench.program_size.Count -ne 2 -or $bench.program_size[0] -ne 1920 -or $bench.program_size[1] -ne 1080) {
+    throw 'Full-HD compose measurement did not use a 1920x1080 Program raster'
+}
+if ($bench.monitor_size.Count -ne 2 -or $bench.monitor_size[0] -ne 640 -or $bench.monitor_size[1] -ne 360) {
+    throw 'Full-HD compose measurement did not produce the 640x360 monitor preview'
+}
+if ($bench.iterations -lt 120) { throw 'Full-HD compose measurement has too few iterations' }
+foreach ($scene in @('cut','fade','overlay')) {
+    $stats = $bench."${scene}_ms"
+    if ($null -eq $stats -or $stats.p95 -le 0 -or $stats.p50 -le 0) {
+        throw "Full-HD $scene measurement is missing"
+    }
+    if (-not $bench."${scene}_within_60fps") {
+        Write-Warning "Full-HD $scene p95 $($stats.p95) ms exceeds the 16.67 ms 60 fps budget on the hosted runner"
+    }
+}
 Get-CimInstance Win32_Processor | Select-Object Name,NumberOfCores,NumberOfLogicalProcessors | ConvertTo-Json | Out-File artifacts/runner-cpu.json
 Get-CimInstance Win32_VideoController | Select-Object Name,DriverVersion | ConvertTo-Json | Out-File artifacts/runner-graphics.json
 "Windows runner: $([System.Environment]::OSVersion.VersionString)" | Out-File artifacts/platform.txt

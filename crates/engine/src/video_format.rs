@@ -130,6 +130,29 @@ impl VideoStandard {
             [640, 360]
         }
     }
+    /// Full-resolution processing target: full HD in the project orientation.
+    /// Larger canvases are fitted down; smaller ones are never upscaled.
+    pub fn program_size(self) -> [u32; 2] {
+        const MAX_WIDE: (u32, u32) = (1920, 1080);
+        const MAX_TALL: (u32, u32) = (1080, 1920);
+        let (max_w, max_h) = if self.height > self.width {
+            MAX_TALL
+        } else {
+            MAX_WIDE
+        };
+        if self.width <= max_w && self.height <= max_h {
+            return [self.width, self.height];
+        }
+        let wide = u64::from(self.width) * u64::from(max_h);
+        let tall = u64::from(self.height) * u64::from(max_w);
+        if wide >= tall {
+            let height = u64::from(self.height) * u64::from(max_w) / u64::from(self.width);
+            [max_w, u32::try_from(height.max(2)).unwrap_or(max_h)]
+        } else {
+            let width = u64::from(self.width) * u64::from(max_h) / u64::from(self.height);
+            [u32::try_from(width.max(2)).unwrap_or(max_w), max_h]
+        }
+    }
 }
 pub fn rate_options() -> Vec<(Rate, ScanMode)> {
     let progressive = [

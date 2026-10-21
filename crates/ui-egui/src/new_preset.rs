@@ -200,6 +200,8 @@ impl RustMixApp {
                 self.program_pixels = None;
                 self.program_texture = None;
                 self.last_program_rgba.clear();
+                self.last_program_full = Arc::new(Vec::new());
+                self.program_full_size = [0, 0];
                 self.program_renderer = program::ProgramRenderer::default();
                 self.submit_program();
                 self.theme(ctx);

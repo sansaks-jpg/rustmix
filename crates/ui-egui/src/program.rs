@@ -35,6 +35,7 @@ pub(crate) struct VideoStats {
     pub fps: f64,
     pub render_ms: f64,
     pub cached_bytes: usize,
+    pub program_bytes: usize,
 }
 pub(crate) struct ProgramFrame {
     pub generation: u64,
@@ -42,7 +43,11 @@ pub(crate) struct ProgramFrame {
     pub timing: FrameTiming,
     pub produced_ns: u64,
     pub rate: Rate,
+    /// Operator-monitor raster uploaded to egui.
     pub pixels: Pixels,
+    /// Full-resolution Program surface retained for the video backend/outputs.
+    pub full_pixels: Pixels,
+    pub program_size: [u32; 2],
     pub stats: VideoStats,
 }
 pub(crate) struct ProgramWorker {
@@ -88,13 +93,20 @@ impl ProgramWorker {
                     snapshot.engine.tick(now_ns / 1_000_000);
                     let start = Instant::now();
                     let mut repaint = true;
-                    match renderer.render(&snapshot.engine, &snapshot.sources) {
-                        Ok(pixels) => {
+                    let program_size = snapshot
+                        .engine
+                        .project()
+                        .preferences
+                        .video_standard()
+                        .program_size();
+                    match renderer.render_full(&snapshot.engine, &snapshot.sources) {
+                        Ok((full_pixels, pixels)) => {
                             stats.rendered = stats.rendered.saturating_add(1);
                             sample_frames = sample_frames.saturating_add(1);
                             stats.skipped = clock.skipped();
                             stats.render_ms = start.elapsed().as_secs_f64() * 1000.0;
                             stats.cached_bytes = renderer.cached_bytes();
+                            stats.program_bytes = full_pixels.len() * 4;
                             if sample_start.elapsed() >= Duration::from_secs(1) {
                                 stats.fps =
                                     sample_frames as f64 / sample_start.elapsed().as_secs_f64();
@@ -113,6 +125,8 @@ impl ProgramWorker {
                                     .unwrap_or(u64::MAX),
                                 rate,
                                 pixels,
+                                full_pixels,
+                                program_size,
                                 stats,
                             }));
                         }
@@ -172,6 +186,7 @@ struct Surface {
 }
 #[derive(PartialEq)]
 struct CompositeKey {
+    size: [u32; 2],
     from: u64,
     to: u64,
     transition: Option<(TransitionKind, u32)>,
@@ -183,6 +198,7 @@ pub(crate) struct ProgramRenderer {
     surfaces: HashMap<InputId, Surface>,
     generation: u64,
     composite: Option<(CompositeKey, Pixels)>,
+    monitor_cache: Option<(Pixels, Pixels)>,
 }
 impl ProgramRenderer {
     fn surface(
@@ -190,6 +206,7 @@ impl ProgramRenderer {
         id: InputId,
         engine: &Engine,
         sources: &HashMap<InputId, InputFx>,
+        size: [u32; 2],
         visiting: &mut Vec<InputId>,
         active: &mut Vec<InputId>,
     ) -> Result<(Pixels, u64)> {
@@ -205,14 +222,14 @@ impl ProgramRenderer {
         let pip = input
             .config
             .pip_source
-            .map(|id| self.surface(id, engine, sources, visiting, active))
+            .map(|id| self.surface(id, engine, sources, size, visiting, active))
             .transpose()?;
         let _ = visiting.pop();
         let ms = engine.playback(id).map_or(0, |p| p.position_ms());
         let mut fx = sources.get(&id).cloned().unwrap_or_default();
         fx.config = input.config.clone();
         let key = SourceKey {
-            size: engine.project().preferences.video_standard().monitor_size(),
+            size,
             kind: input.kind,
             color: input.color,
             online: input.online,
@@ -250,15 +267,43 @@ impl ProgramRenderer {
             );
             return Ok((pixels, generation));
         }
-        let [w, h] = key.size;
+        let [w, h] = size;
+        let custom = fx.custom_rgba.clone();
+        let identity = panels::identity_processing(&fx, pip.is_some());
+        // A decoded frame already at Program resolution needs no copy or scale.
+        if input.online
+            && fx.video_source.is_some()
+            && custom
+                .as_ref()
+                .is_some_and(|(cw, ch, _)| *cw == w && *ch == h)
+            && identity
+        {
+            let pixels = custom
+                .as_ref()
+                .map(|(_, _, pixels)| Arc::clone(pixels))
+                .ok_or_else(|| Error::Invalid("Video frame cache is missing".into()))?;
+            self.generation = self.generation.wrapping_add(1);
+            self.surfaces.insert(
+                id,
+                Surface {
+                    key,
+                    pixels: Arc::clone(&pixels),
+                    generation: self.generation,
+                },
+            );
+            return Ok((pixels, self.generation));
+        }
         let old = self.surfaces.remove(&id);
         let mut raw = old
             .and_then(|s| Arc::try_unwrap(s.pixels).ok())
             .unwrap_or_default();
-        render::source_into(input, w, h, ms, &mut raw)?;
-        let pixels = if input.online
-            && (!panels::identity_processing(&fx, pip.is_some()) || fx.custom_rgba.is_some())
-        {
+        if !input.online || custom.is_none() {
+            render::source_into(input, w, h, ms, &mut raw)?;
+        } else {
+            // Media pixels replace the procedural base entirely.
+            raw.clear();
+        }
+        let pixels = if input.online && (!identity || custom.is_some()) {
             panels::process_source_pixels(&raw, w, h, &fx, pip.as_ref().map(|(p, _)| p.as_slice()))
         } else {
             raw
@@ -275,10 +320,48 @@ impl ProgramRenderer {
         );
         Ok((pixels, self.generation))
     }
+    /// Operator-monitor Program surface, used by the headless UI fallback.
     pub fn render(
         &mut self,
         engine: &Engine,
         sources: &HashMap<InputId, InputFx>,
+    ) -> Result<Pixels> {
+        let size = engine.project().preferences.video_standard().monitor_size();
+        self.render_at(engine, sources, size)
+    }
+    /// Full-resolution Program plus its bounded operator-monitor preview.
+    pub fn render_full(
+        &mut self,
+        engine: &Engine,
+        sources: &HashMap<InputId, InputFx>,
+    ) -> Result<(Pixels, Pixels)> {
+        let format = engine.project().preferences.video_standard();
+        let full_size = format.program_size();
+        let monitor_size = format.monitor_size();
+        let full = self.render_at(engine, sources, full_size)?;
+        if full_size == monitor_size {
+            return Ok((Arc::clone(&full), full));
+        }
+        if let Some((cached_full, cached_monitor)) = &self.monitor_cache
+            && Arc::ptr_eq(cached_full, &full)
+        {
+            return Ok((full, Arc::clone(cached_monitor)));
+        }
+        let monitor = Arc::new(render::downscale(
+            &full,
+            full_size[0],
+            full_size[1],
+            monitor_size[0],
+            monitor_size[1],
+        )?);
+        self.monitor_cache = Some((Arc::clone(&full), Arc::clone(&monitor)));
+        Ok((full, monitor))
+    }
+    fn render_at(
+        &mut self,
+        engine: &Engine,
+        sources: &HashMap<InputId, InputFx>,
+        size: [u32; 2],
     ) -> Result<Pixels> {
         let project = engine.project();
         let transition = engine.transition();
@@ -287,11 +370,12 @@ impl ProgramRenderer {
             transition.map_or(project.program, |t| t.from),
             engine,
             sources,
+            size,
             &mut Vec::new(),
             &mut active,
         )?;
         let target = transition
-            .map(|t| self.surface(t.to, engine, sources, &mut Vec::new(), &mut active))
+            .map(|t| self.surface(t.to, engine, sources, size, &mut Vec::new(), &mut active))
             .transpose()?;
         self.surfaces.retain(|id, _| active.contains(id));
         if transition.is_none()
@@ -302,6 +386,7 @@ impl ProgramRenderer {
             return Ok(from);
         }
         let key = CompositeKey {
+            size,
             from: from_generation,
             to: target.as_ref().map_or(0, |(_, g)| *g),
             transition: transition.map(|t| (t.kind, t.progress.to_bits())),
@@ -313,13 +398,12 @@ impl ProgramRenderer {
         {
             return Ok(Arc::clone(pixels));
         }
-        let [w, h] = project.preferences.video_standard().monitor_size();
         let pixels = Arc::new(render::program_from_sources(
             project,
             transition,
             engine.black_level(),
-            w,
-            h,
+            size[0],
+            size[1],
             &from,
             target.as_ref().map(|(p, _)| p.as_slice()),
         )?);
@@ -332,6 +416,7 @@ impl ProgramRenderer {
             .map(|s| s.pixels.len() * 4)
             .sum::<usize>()
             + self.composite.as_ref().map_or(0, |(_, p)| p.len() * 4)
+            + self.monitor_cache.as_ref().map_or(0, |(_, p)| p.len() * 4)
     }
 }
 
@@ -342,6 +427,12 @@ mod tests {
     #[test]
     fn playlist_advances_without_ui_and_reports_the_control_generation() {
         let mut engine = Engine::default();
+        let mut preferences = engine.project().preferences.clone();
+        preferences.width = 1280;
+        preferences.height = 720;
+        engine
+            .execute(Command::SetPreferences(preferences), 0)
+            .unwrap();
         engine.execute(Command::TakeInput(InputId(6)), 0).unwrap();
         let mut list = engine.project().playlists.first().cloned().unwrap();
         list.items = [InputId(6), InputId(4)]
@@ -463,6 +554,8 @@ mod tests {
     fn producer_continues_without_a_ui_consumer_and_shuts_down() {
         let mut engine = Engine::default();
         let mut p = engine.project().preferences.clone();
+        p.width = 1280;
+        p.height = 720;
         p.rate = Rate::new(60, 1).unwrap();
         engine.execute(Command::SetPreferences(p), 0).unwrap();
         engine.execute(Command::TakeInput(InputId(6)), 0).unwrap();
@@ -475,12 +568,114 @@ mod tests {
             Instant::now(),
             None,
         );
-        std::thread::sleep(Duration::from_millis(180));
+        std::thread::sleep(Duration::from_millis(500));
         let frame = worker.take().unwrap().unwrap();
         assert!(frame.stats.rendered >= 2);
         assert!(frame.timing.index >= 1);
         assert_eq!(frame.rate, Rate::new(60, 1).unwrap());
         assert_eq!(frame.pixels.len(), 640 * 360);
+        assert_eq!(frame.full_pixels.len(), 1280 * 720);
+        assert_eq!(frame.program_size, [1280, 720]);
+        assert!(frame.stats.program_bytes >= 1280 * 720 * 4);
         drop(worker);
+    }
+    fn video_source_engine(
+        project_width: u32,
+        project_height: u32,
+        source_width: u32,
+        source_height: u32,
+    ) -> (Engine, InputConfig, Arc<Vec<[u8; 4]>>) {
+        let mut engine = Engine::default();
+        let mut preferences = engine.project().preferences.clone();
+        preferences.width = project_width;
+        preferences.height = project_height;
+        preferences.rate = Rate::new(60, 1).unwrap();
+        engine
+            .execute(Command::SetPreferences(preferences), 0)
+            .unwrap();
+        engine.execute(Command::TakeInput(InputId(6)), 0).unwrap();
+        let config = InputConfig {
+            video_source: Some(VideoSource::Browser {
+                url: "http://127.0.0.1/".into(),
+                width: source_width,
+                height: source_height,
+            }),
+            ..Default::default()
+        };
+        let mut input = engine.project().input(InputId(6)).cloned().unwrap();
+        input.config = config.clone();
+        engine
+            .execute(Command::ApplyInput { input, audio: None }, 0)
+            .unwrap();
+        (
+            engine,
+            config,
+            Arc::new(vec![
+                [12, 34, 56, 255];
+                (source_width * source_height) as usize
+            ]),
+        )
+    }
+    #[test]
+    fn native_1080p_video_frame_is_reused_and_downscaled_for_the_monitor() {
+        let (engine, config, frame) = video_source_engine(1920, 1080, 1920, 1080);
+        let mut renderer = ProgramRenderer::default();
+        let mut sources = HashMap::new();
+        sources.insert(
+            InputId(6),
+            InputFx {
+                config,
+                custom_rgba: Some((1920, 1080, Arc::clone(&frame))),
+                image_generation: 1,
+                ..InputFx::default()
+            },
+        );
+        let (full, monitor) = renderer.render_full(&engine, &sources).unwrap();
+        assert_eq!(full.len(), 1920 * 1080);
+        assert_eq!(monitor.len(), 640 * 360);
+        assert!(
+            Arc::ptr_eq(&full, &frame),
+            "a native 1080p frame must not be copied or rescaled"
+        );
+        assert_eq!(monitor.first(), Some(&[12, 34, 56, 255]));
+    }
+    #[test]
+    fn decoded_720p_frame_scales_into_a_full_hd_program() {
+        let (engine, config, frame) = video_source_engine(1920, 1080, 1280, 720);
+        let mut renderer = ProgramRenderer::default();
+        let mut sources = HashMap::new();
+        sources.insert(
+            InputId(6),
+            InputFx {
+                config,
+                custom_rgba: Some((1280, 720, Arc::clone(&frame))),
+                image_generation: 1,
+                ..InputFx::default()
+            },
+        );
+        let (full, monitor) = renderer.render_full(&engine, &sources).unwrap();
+        assert_eq!(full.len(), 1920 * 1080);
+        assert_eq!(full.first(), Some(&[12, 34, 56, 255]));
+        assert_eq!(monitor.first(), Some(&[12, 34, 56, 255]));
+    }
+    #[test]
+    fn portrait_full_hd_program_keeps_its_orientation_in_the_monitor() {
+        let (engine, config, frame) = video_source_engine(1080, 1920, 1080, 1920);
+        let mut renderer = ProgramRenderer::default();
+        let mut sources = HashMap::new();
+        sources.insert(
+            InputId(6),
+            InputFx {
+                config,
+                custom_rgba: Some((1080, 1920, Arc::clone(&frame))),
+                image_generation: 1,
+                ..InputFx::default()
+            },
+        );
+        let (full, monitor) = renderer.render_full(&engine, &sources).unwrap();
+        assert_eq!(full.len(), 1080 * 1920);
+        assert_eq!(monitor.len(), 360 * 640);
+        assert!(Arc::ptr_eq(&full, &frame));
+        assert_eq!(monitor.first(), Some(&[12, 34, 56, 255]));
     }
 }

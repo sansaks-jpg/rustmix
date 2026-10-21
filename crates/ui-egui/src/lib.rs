@@ -530,6 +530,9 @@ pub struct RustMixApp {
     thumbnail_pixels: HashMap<InputId, Vec<[u8; 4]>>,
     pub(crate) program_texture: Option<egui::TextureHandle>,
     pub(crate) last_program_rgba: Vec<u8>,
+    /// Latest full-resolution Program surface for output/measurement consumers.
+    pub(crate) last_program_full: Arc<Vec<[u8; 4]>>,
+    pub(crate) program_full_size: [u32; 2],
     program_worker: Option<program::ProgramWorker>,
     program_generation: u64,
     program_presented_generation: Option<u64>,
@@ -816,6 +819,8 @@ impl RustMixApp {
             thumbnail_pixels: HashMap::new(),
             program_texture: None,
             last_program_rgba: Vec::new(),
+            last_program_full: Arc::new(Vec::new()),
+            program_full_size: [0, 0],
             program_worker: None,
             program_generation: 0,
             program_presented_generation: None,
@@ -2530,13 +2535,21 @@ impl eframe::App for RustMixApp {
         self.stop_video_players();
         self.stop_audio_for_project_change();
         self.program_worker = None;
+        // Release UI texture owners before the final drain so their deferred
+        // frees cannot keep a submission pending past the shutdown wait.
+        self.textures.clear();
+        self.thumbnail_pixels.clear();
+        self.program_texture = None;
+        self.properties_texture = None;
+        self.add_preview = None;
+        self.overlay_preview = None;
         // Diagnostics must not retain a queue owner beyond the existing drain.
         self.smoke_gpu_queue = None;
         if let Some(device) = self.gpu_device.take() {
             let result = device
                 .poll(eframe::wgpu::PollType::Wait {
                     submission_index: None,
-                    timeout: Some(Duration::from_secs(10)),
+                    timeout: Some(Duration::from_secs(20)),
                 })
                 .and_then(|_| {
                     // WaitSucceeded confirms the wait, not queue emptiness. Sample

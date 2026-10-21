@@ -281,6 +281,8 @@ impl RustMixApp {
                     self.video_timing = Some((frame.timing, frame.rate));
                     self.video_produced_ns = frame.produced_ns;
                     self.generation_ms = frame.stats.render_ms as f32;
+                    self.last_program_full = Arc::clone(&frame.full_pixels);
+                    self.program_full_size = frame.program_size;
                     self.upload_program(ctx, frame.pixels);
                     self.program_presented_generation = Some(frame.generation);
                 }

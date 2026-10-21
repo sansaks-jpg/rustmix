@@ -19,6 +19,9 @@ fn blank_presets_apply_every_canvas_fractional_and_scan_format_without_demo_medi
                 [640, 360]
             };
             assert_eq!(format.monitor_size(), expected_monitor);
+            let program = format.program_size();
+            assert!(program[0] <= 1920 && program[1] <= 1920);
+            assert!(u64::from(program[0]) * u64::from(program[1]) <= 1920 * 1080);
             let engine = Engine::new_preset(format, 1234).unwrap();
             let project = engine.project();
             assert_eq!(
@@ -58,6 +61,28 @@ fn full_hd_presets_accept_25_and_60_progressive_frames_per_second() {
             "{numerator}/{denominator}"
         );
         assert_eq!(format.monitor_size(), [640, 360]);
+    }
+}
+
+#[test]
+fn full_hd_program_size_keeps_landscape_and_portrait_within_the_pixel_budget() {
+    let format = |width, height| VideoStandard {
+        width,
+        height,
+        rate: Rate::new(60, 1).unwrap(),
+        scan: ScanMode::Progressive,
+    };
+    for ((width, height), expected) in [
+        ((1280, 720), [1280, 720]),
+        ((1920, 1080), [1920, 1080]),
+        ((1080, 1920), [1080, 1920]),
+        ((720, 1280), [720, 1280]),
+        ((2560, 1440), [1920, 1080]),
+        ((1440, 2560), [1080, 1920]),
+        ((3840, 2160), [1920, 1080]),
+        ((2160, 3840), [1080, 1920]),
+    ] {
+        assert_eq!(format(width, height).program_size(), expected);
     }
 }
 

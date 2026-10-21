@@ -106,8 +106,10 @@ fn pixel(input: &InputState, x: u32, y: u32, w: u32, h: u32, ms: u64) -> [u8; 4]
     }
 }
 fn dimensions(w: u32, h: u32) -> Result<usize> {
-    if w == 0 || h == 0 || w > 1920 || h > 1080 {
-        return Err(invalid("Demo render dimensions must fit 1920 × 1080"));
+    if w == 0 || h == 0 || w > 1920 || h > 1920 || u64::from(w) * u64::from(h) > 1920 * 1080 {
+        return Err(invalid(
+            "Program render dimensions must fit a full-HD pixel budget",
+        ));
     }
     w.checked_mul(h)
         .and_then(|v| usize::try_from(v).ok())
@@ -134,6 +136,79 @@ pub fn source_into(
         }
     }
     Ok(())
+}
+
+/// Two-pass box filter from a full-resolution Program frame to the operator
+/// monitor. Ranges and contiguous row slices avoid per-sample division.
+pub fn downscale(src: &[[u8; 4]], sw: u32, sh: u32, dw: u32, dh: u32) -> Result<Vec<[u8; 4]>> {
+    let source_size = dimensions(sw, sh)?;
+    let target_size = dimensions(dw, dh)?;
+    if src.len() != source_size {
+        return Err(invalid("Downscale source length does not match its raster"));
+    }
+    if (sw, sh) == (dw, dh) {
+        return Ok(src.to_vec());
+    }
+    let mut x_ranges = Vec::with_capacity(dw as usize);
+    let mut x_inverse = Vec::with_capacity(dw as usize);
+    for dx in 0..dw {
+        let x0 = dx * sw / dw;
+        let x1 = ((dx + 1) * sw / dw).max(x0 + 1).min(sw);
+        x_ranges.push((x0, x1));
+        x_inverse.push(reciprocal(x1.saturating_sub(x0).max(1)));
+    }
+    let mut y_ranges = Vec::with_capacity(dh as usize);
+    let mut y_inverse = Vec::with_capacity(dh as usize);
+    for dy in 0..dh {
+        let y0 = dy * sh / dh;
+        let y1 = ((dy + 1) * sh / dh).max(y0 + 1).min(sh);
+        y_ranges.push((y0, y1));
+        y_inverse.push(reciprocal(y1.saturating_sub(y0).max(1)));
+    }
+    let mut row_sums = vec![[0_u32; 4]; dw as usize];
+    let mut out = Vec::with_capacity(target_size);
+    for (dy, &(y0, y1)) in y_ranges.iter().enumerate() {
+        let inverse_y = y_inverse.get(dy).copied().unwrap_or(1 << 32);
+        row_sums.fill([0_u32; 4]);
+        for y in y0..y1 {
+            let start = (y as usize)
+                .checked_mul(sw as usize)
+                .ok_or_else(|| invalid("Downscale row offset exceeds its raster"))?;
+            let end = start
+                .checked_add(sw as usize)
+                .ok_or_else(|| invalid("Downscale row end exceeds its raster"))?;
+            let row = src
+                .get(start..end)
+                .ok_or_else(|| invalid("Downscale source row is missing"))?;
+            for (dx, &(x0, x1)) in x_ranges.iter().enumerate() {
+                let segment = row
+                    .get(x0 as usize..x1 as usize)
+                    .ok_or_else(|| invalid("Downscale source column is missing"))?;
+                let sums = row_sums
+                    .get_mut(dx)
+                    .ok_or_else(|| invalid("Downscale row accumulator is missing"))?;
+                for pixel in segment {
+                    let [red, green, blue, alpha] = *pixel;
+                    let [sr, sg, sb, sa] = sums;
+                    *sr = sr.saturating_add(u32::from(red));
+                    *sg = sg.saturating_add(u32::from(green));
+                    *sb = sb.saturating_add(u32::from(blue));
+                    *sa = sa.saturating_add(u32::from(alpha));
+                }
+            }
+        }
+        for (dx, sums) in row_sums.iter().enumerate() {
+            let inverse_x = x_inverse.get(dx).copied().unwrap_or(1 << 32);
+            let [red, green, blue, alpha] = *sums;
+            out.push([
+                scaled_average(scaled_average(red, inverse_x), inverse_y) as u8,
+                scaled_average(scaled_average(green, inverse_x), inverse_y) as u8,
+                scaled_average(scaled_average(blue, inverse_x), inverse_y) as u8,
+                scaled_average(scaled_average(alpha, inverse_x), inverse_y) as u8,
+            ]);
+        }
+    }
+    Ok(out)
 }
 pub fn blend(a: [u8; 4], b: [u8; 4], p: f32) -> [u8; 4] {
     let p = if p.is_finite() {
@@ -164,6 +239,45 @@ pub fn program(
     program_from_sources(p, t, black, w, h, &from, target.as_deref())
 }
 
+/// Paint only the enabled title-panel rectangles. The previous per-pixel loop
+/// checked every overlay on every pixel, which dominated full-HD composition.
+fn paint_overlay_panels(out: &mut [[u8; 4]], w: u32, h: u32, overlays: &[crate::OverlayState]) {
+    for (index, overlay) in overlays.iter().enumerate() {
+        if !overlay.enabled {
+            continue;
+        }
+        let (left, top) = overlay_text::panel_fractions(index, overlay.position);
+        let x0 = ((left * w as f32).floor() as i64).clamp(0, i64::from(w)) as u32;
+        let x1 = (((left + overlay_text::PANEL_WIDTH) * w as f32).ceil() as i64)
+            .clamp(0, i64::from(w)) as u32;
+        let y0 = ((top * h as f32).floor() as i64).clamp(0, i64::from(h)) as u32;
+        let y1 = (((top + overlay_text::PANEL_HEIGHT) * h as f32).ceil() as i64)
+            .clamp(0, i64::from(h)) as u32;
+        for y in y0..y1 {
+            for x in x0..x1 {
+                let u = x as f32 / w as f32;
+                let v = y as f32 / h as f32;
+                if u >= left
+                    && u < left + overlay_text::PANEL_WIDTH
+                    && v >= top
+                    && v < top + overlay_text::PANEL_HEIGHT
+                {
+                    let offset = (y as usize)
+                        .saturating_mul(w as usize)
+                        .saturating_add(x as usize);
+                    if let Some(pixel) = out.get_mut(offset) {
+                        *pixel = if u < left + 0.008 {
+                            [39, 192, 207, 255]
+                        } else {
+                            blend(*pixel, [14, 29, 42, 255], 0.94)
+                        };
+                    }
+                }
+            }
+        }
+    }
+}
+
 /// Composite already processed sources, with independent source clocks/effects.
 /// Titles/backgrounds and fade-to-black are applied after source processing.
 pub fn program_from_sources(
@@ -185,8 +299,30 @@ pub fn program_from_sources(
     {
         return Err(invalid("Invalid source surface or compositor state"));
     }
-    if t.is_none() && black == 0.0 && !p.overlays.standard.iter().any(|o| o.enabled) {
-        return Ok(from.to_vec());
+    if t.is_none() {
+        let mut out = from.to_vec();
+        finish_program(&mut out, p, w, h, black);
+        return Ok(out);
+    }
+    if let Some(t) = t
+        && t.kind == TransitionKind::Cut
+    {
+        let surface = if t.progress >= 1.0 {
+            target.ok_or_else(|| invalid("Target surface missing"))?
+        } else {
+            from
+        };
+        let mut out = surface.to_vec();
+        finish_program(&mut out, p, w, h, black);
+        return Ok(out);
+    }
+    if let Some(t) = t
+        && t.kind == TransitionKind::Fade
+    {
+        let to = target.ok_or_else(|| invalid("Target surface missing"))?;
+        let mut out = fade_surfaces(from, to, t.progress);
+        finish_program(&mut out, p, w, h, black);
+        return Ok(out);
     }
     let mut out = Vec::with_capacity(size);
     for y in 0..h {
@@ -292,41 +428,101 @@ pub fn program_from_sources(
                     }
                 };
             }
-            for (i, o) in p.overlays.standard.iter().enumerate() {
-                if o.enabled {
-                    let u = x as f32 / w as f32;
-                    let v = y as f32 / h as f32;
-                    let (left, top) = overlay_text::panel_fractions(i, o.position);
-                    if u >= left
-                        && u < left + overlay_text::PANEL_WIDTH
-                        && v >= top
-                        && v < top + overlay_text::PANEL_HEIGHT
-                    {
-                        color = if u < left + 0.008 {
-                            [39, 192, 207, 255]
-                        } else {
-                            blend(color, [14, 29, 42, 255], 0.94)
-                        };
-                    }
-                }
-            }
             out.push(color);
         }
     }
+    finish_program(&mut out, p, w, h, black);
+    Ok(out)
+}
+
+fn finish_program(out: &mut [[u8; 4]], p: &ProjectState, w: u32, h: u32, black: f32) {
+    paint_overlay_panels(out, w, h, &p.overlays.standard);
     // Captions belong to the overlay layer: they are rasterized after the panel
     // geometry and before any fade-to-black so Program output, the native window
     // and future recorders all show the same picture as the operator monitor.
-    overlay_text::draw_captions(&mut out, w, h, &p.overlays.standard);
+    overlay_text::draw_captions(out, w, h, &p.overlays.standard);
     if black > 0.0 {
-        for pixel in &mut out {
-            *pixel = blend(*pixel, [0, 0, 0, 255], black);
+        fade_to_black(out, black);
+    }
+}
+
+#[inline]
+fn reciprocal(count: u32) -> u64 {
+    (1_u64 << 32) / u64::from(count.max(1))
+}
+
+#[inline]
+fn scaled_average(value: u32, reciprocal: u64) -> u32 {
+    ((u64::from(value) * reciprocal + (1_u64 << 31)) >> 32) as u32
+}
+
+#[inline]
+fn fade_channel(a: u8, b: u8, keep: u32, alpha: u32) -> u8 {
+    ((u32::from(a) * keep + u32::from(b) * alpha + 127) / 255) as u8
+}
+
+fn fade_table(keep: u32, alpha: u32) -> [u8; 65536] {
+    let mut table = [0_u8; 65536];
+    for a in 0..=255_u8 {
+        for b in 0..=255_u8 {
+            let index = usize::from(a) * 256 + usize::from(b);
+            if let Some(cell) = table.get_mut(index) {
+                *cell = fade_channel(a, b, keep, alpha);
+            }
         }
     }
-    Ok(out)
+    table
+}
+
+#[inline]
+fn table_lookup(table: &[u8; 65536], a: u8, b: u8) -> u8 {
+    table
+        .get(usize::from(a) * 256 + usize::from(b))
+        .copied()
+        .unwrap_or(0)
+}
+
+fn fade_to_black(out: &mut [[u8; 4]], black: f32) {
+    let alpha = (black.clamp(0.0, 1.0) * 255.0).round() as u32;
+    let keep = 255_u32.saturating_sub(alpha);
+    let mut table = [0_u8; 256];
+    for (a, cell) in table.iter_mut().enumerate() {
+        *cell = fade_channel(u8::try_from(a).unwrap_or(0), 0, keep, alpha);
+    }
+    for pixel in out {
+        let [red, green, blue, _] = *pixel;
+        let lookup = |value: u8| table.get(usize::from(value)).copied().unwrap_or(0);
+        *pixel = [lookup(red), lookup(green), lookup(blue), 255];
+    }
+}
+
+fn fade_surfaces(from: &[[u8; 4]], to: &[[u8; 4]], progress: f32) -> Vec<[u8; 4]> {
+    if progress <= 0.0 {
+        return from.to_vec();
+    }
+    if progress >= 1.0 {
+        return to.to_vec();
+    }
+    let alpha = (progress * 255.0).round() as u32;
+    let keep = 255_u32.saturating_sub(alpha);
+    let table = fade_table(keep, alpha);
+    let mut out = vec![[0_u8; 4]; from.len().min(to.len())];
+    for (destination, (a, b)) in out.iter_mut().zip(from.iter().zip(to)) {
+        let [ar, ag, ab, _] = *a;
+        let [br, bg, bb, _] = *b;
+        *destination = [
+            table_lookup(&table, ar, br),
+            table_lookup(&table, ag, bg),
+            table_lookup(&table, ab, bb),
+            255,
+        ];
+    }
+    out
 }
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used)]
     use super::*;
     #[test]
     fn external_media_inputs_render_black_in_the_reference_generator() {
@@ -497,5 +693,27 @@ mod tests {
                 "{position:?}: fade-to-black must cover caption ink"
             );
         }
+    }
+
+    #[test]
+    fn full_hd_downscale_preserves_colour_and_bounds_its_inputs() {
+        let source = [[40, 120, 200, 255]; 32 * 18];
+        let scaled = downscale(&source, 32, 18, 16, 9).unwrap();
+        assert_eq!(scaled.len(), 16 * 9);
+        assert!(scaled.iter().all(|pixel| *pixel == [40, 120, 200, 255]));
+        let portrait = downscale(&source, 32, 18, 9, 16).unwrap();
+        assert_eq!(portrait.len(), 9 * 16);
+        assert!(downscale(&source, 32, 18, 16, 9).is_ok());
+        assert!(downscale(&source[..10], 32, 18, 16, 9).is_err());
+        assert!(downscale(&source, 0, 18, 16, 9).is_err());
+        assert_eq!(downscale(&source, 32, 18, 32, 18).unwrap(), source.to_vec());
+    }
+
+    #[test]
+    fn program_bytes_fit_full_hd_in_either_orientation() {
+        assert!(dimensions(1920, 1080).is_ok());
+        assert!(dimensions(1080, 1920).is_ok());
+        assert!(dimensions(3840, 2160).is_err());
+        assert!(dimensions(1920, 1081).is_err());
     }
 }

@@ -2138,6 +2138,10 @@ mod tests {
         let ctx = egui::Context::default();
         app.theme(&ctx);
         let size = [1600.0, 900.0];
+        let mut preferences = app.engine.project().preferences.clone();
+        preferences.width = 1280;
+        preferences.height = 720;
+        app.execute(Command::SetPreferences(preferences));
         app.program_worker = Some(program::ProgramWorker::spawn(
             program::Snapshot {
                 generation: 0,
