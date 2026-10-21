@@ -33,3 +33,14 @@ Previous source f6ecbdd/run 39603431352 is a failed baseline: Browser discovery
 timeout and wgpu teardown panic. Its Photos screenshot is old-source evidence,
 not acceptance of UI-034. Physical hardware, extended tests and full production
 readiness remain pending. See [ADR 0034](adr/0034-new-preset-and-native-input-formats.md).
+
+## Verification ledger
+
+- d7d1854/run39608302127: formatting/inventory pass; workspace compilation fails
+  because the Display details helper referenced a draft outside its scope.
+  Pass that staged draft explicitly; no test or native acceptance claimed.
+- All branch heads are now ancestors of main at merge29525c5. Four historical
+  engine commits are patch-equivalent to integrated commits (`git cherry`: all
+  four `-`); the history merge preserves the complete current source tree.
+  Pre-existing uncommitted work in the main checkout and historical worktrees
+  remains untouched. Further implementation/testing proceeds on main.

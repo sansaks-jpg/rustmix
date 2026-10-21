@@ -246,10 +246,10 @@ impl RustMixApp {
             });
         if compact {
             ui.collapsing("More display settings", |ui| {
-                self.display_details(ui, label_width, field_width, false);
+                self.display_details(ui, draft, label_width, field_width, false);
             });
         } else {
-            self.display_details(ui, label_width, field_width, true);
+            self.display_details(ui, draft, label_width, field_width, true);
         }
     }
 
@@ -267,6 +267,7 @@ impl RustMixApp {
     fn display_details(
         &mut self,
         ui: &mut egui::Ui,
+        draft: &Preferences,
         label_width: f32,
         field_width: f32,
         include_name: bool,
