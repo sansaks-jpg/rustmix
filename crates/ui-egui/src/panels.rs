@@ -1283,6 +1283,15 @@ impl RustMixApp {
                                                         egui::FontId::proportional(11.0), color);
                                                     self.automation.insert(format!("input.{}.media-status", input.id.0), response.rect);
                                                 }
+                                                if let Some(fx)=self.input_fx.get(&input.id)
+                                                    && fx.custom_rgba.is_some()
+                                                    && let Some(error)=&fx.image_error {
+                                                    let warning=egui::Rect::from_min_size(response.rect.left_bottom()-egui::vec2(0.0,19.0),egui::vec2(response.rect.width(),19.0));
+                                                    ui.painter().rect_filled(warning,0.0,Color32::from_rgb(125,20,20));
+                                                    ui.painter().text(warning.center(),egui::Align2::CENTER_CENTER,"SOURCE FAILED · FRAME HELD",egui::FontId::proportional(10.0),Color32::WHITE);
+                                                    response.clone().on_hover_text(error);
+                                                    self.automation.insert(format!("input.{}.frozen",input.id.0),warning);
+                                                }
                                                 if response.clicked() {
                                                     self.actions.push(Action::Engine(
                                                         Command::SelectPreview(input.id),

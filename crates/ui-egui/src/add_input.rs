@@ -901,7 +901,9 @@ mod tests {
             app.add_tab, 9,
             "Tab then Enter selects the Photos row following Image"
         );
-        assert!(app.automation.contains_key("dialog.add.unavailable"));
+        assert!(app.automation.contains_key("dialog.add.photos.folder"));
+        assert!(!app.automation.contains_key("dialog.add.unavailable"));
+        assert!(app.add_disabled_reason().is_some());
         assert_eq!(*app.engine.project(), before);
     }
 }

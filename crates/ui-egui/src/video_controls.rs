@@ -876,7 +876,7 @@ mod tests {
     }
 
     #[test]
-    fn presenting_a_decoder_error_clears_the_frame_and_is_visible_to_the_tile() {
+    fn presenting_a_decoder_error_preserves_last_frame_and_exposes_failure() {
         let mut input_fx = HashMap::new();
         input_fx.insert(
             InputId(8),
@@ -888,7 +888,13 @@ mod tests {
         );
         present_video_error(&mut input_fx, InputId(8), "decoder lost");
         let fx = input_fx.get(&InputId(8)).expect("cache entry retained");
-        assert!(fx.custom_rgba.is_none() && !fx.image_pending);
+        assert!(!fx.image_pending);
+        assert_eq!(
+            fx.custom_rgba
+                .as_ref()
+                .map(|(w, h, p)| (*w, *h, p.as_slice())),
+            Some((2, 2, vec![[10, 20, 30, 255]; 4].as_slice()))
+        );
         assert_eq!(fx.image_error.as_deref(), Some("decoder lost"));
     }
 
