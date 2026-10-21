@@ -3633,7 +3633,7 @@ mod tests {
         app.image_picker = Some(rx);
         app.add_loading = true;
         let token = app.add_token;
-        click(&mut app, &ctx, "dialog.add.kind.Geometry", [1600.0, 900.0]);
+        click(&mut app, &ctx, "dialog.add.kind.Grid", [1600.0, 900.0]);
         assert_eq!(app.add_kind, kind);
         click(&mut app, &ctx, "dialog.add.cancel", [1600.0, 900.0]);
         tx.send(media::PickerDone {

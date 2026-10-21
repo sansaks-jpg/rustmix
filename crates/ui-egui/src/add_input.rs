@@ -563,7 +563,7 @@ mod tests {
                 events,
                 ..Default::default()
             },
-            |_| app.add_input_dialog(ctx),
+            |ui| app.frame_ui(ui),
         );
     }
 
@@ -618,7 +618,16 @@ mod tests {
 
     fn edit(app: &mut RustMixApp, ctx: &egui::Context, id: &str, text: &str) {
         click(app, ctx, id);
-        key(app, ctx, egui::Key::A, egui::Modifiers::CTRL);
+        key(
+            app,
+            ctx,
+            egui::Key::A,
+            egui::Modifiers {
+                ctrl: true,
+                command: true,
+                ..egui::Modifiers::NONE
+            },
+        );
         frame(
             app,
             ctx,

@@ -131,6 +131,9 @@ fn sidebar_row(
                 label,
             )
         });
+        if response.clicked() {
+            response.request_focus();
+        }
         if response.has_focus() {
             ui.painter().rect_stroke(
                 rect.shrink(1.0),
