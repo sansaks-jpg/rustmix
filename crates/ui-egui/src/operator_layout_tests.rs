@@ -184,6 +184,75 @@ fn unfilled_vector_controls_paint_readable_glyphs_in_both_themes() {
 }
 
 #[test]
+fn dark_filled_dialog_exits_keep_white_text_in_light_theme_and_cancel_safely() {
+    for (action, id, label) in [
+        (Action::Add, "dialog.add.cancel", "Cancel"),
+        (
+            Action::Properties(InputId(3)),
+            "dialog.properties.cancel",
+            "Cancel",
+        ),
+        (Action::Settings, "dialog.settings.cancel", "Cancel"),
+        (
+            Action::OverlaySettings(0),
+            "dialog.overlay.cancel",
+            "Cancel",
+        ),
+        (
+            Action::ExternalSettings(1),
+            "dialog.external.cancel",
+            "Cancel",
+        ),
+        (Action::RecordingSetup, "dialog.recording.cancel", "Cancel"),
+        (Action::StreamingSetup, "dialog.streaming.close", "Close"),
+        (Action::MultiCorder, "dialog.multicorder.close", "Close"),
+        (Action::ShortcutsWindow, "dialog.shortcuts.close", "Close"),
+    ] {
+        let mut app = RustMixApp::headless();
+        let ctx = egui::Context::default();
+        app.theme(&ctx);
+        app.dispatch(Action::Settings, &ctx);
+        app.settings_draft.as_mut().unwrap().ui_theme = UiTheme::Light;
+        click(&mut app, &ctx, "dialog.settings.apply");
+        let before = app.engine.project().clone();
+        app.dispatch(action, &ctx);
+        for _ in 0..4 {
+            let _ = paint(&mut app, &ctx, Vec2::new(1600.0, 900.0));
+        }
+        let output = paint(&mut app, &ctx, Vec2::new(1600.0, 900.0));
+        let area = *app.automation.get(id).unwrap();
+        let text = output
+            .shapes
+            .iter()
+            .find_map(|shape| match &shape.shape {
+                egui::Shape::Text(text)
+                    if text.galley.job.text == label
+                        && area.expand(2.0).contains_rect(text.visual_bounding_rect()) =>
+                {
+                    Some(text)
+                }
+                _ => None,
+            })
+            .expect("actual painted exit label");
+        assert!(!text.galley.job.sections.is_empty());
+        assert!(
+            text.galley
+                .job
+                .sections
+                .iter()
+                .all(|section| section.format.color == Color32::WHITE),
+            "Dark-filled {id} must retain a readable label in Light theme"
+        );
+        click(&mut app, &ctx, id);
+        assert_eq!(
+            *app.engine.project(),
+            before,
+            "Closing {id} must cancel without live mutations"
+        );
+    }
+}
+
+#[test]
 fn painted_monitor_titles_start_beside_left_inset_and_take_labels_are_centered() {
     for size in [
         Vec2::new(1100.0, 700.0),

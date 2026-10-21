@@ -1,8 +1,10 @@
 # UI-024 dialog captions and Display form review
 
-2026-10-20. Candidate source: 16f42da. Hosted acceptance is pending in
-[run 39461892507](https://github.com/sansaks-jpg/rustmix/actions/runs/39461892507).
-Do not treat prepared tests, this document or a CI launch as a passing result.
+2026-10-21. Current source: f0b0ea4. All hosted workflow steps pass in
+[run 39537127873](https://github.com/sansaks-jpg/rustmix/actions/runs/39537127873),
+including the complete native workflow and packaging. Exact-image inspection is
+still pending while its evidence archive downloads. Earlier failed candidates are
+retained below; a green short workflow does not prove full UI equivalence.
 
 The supplied Settings.png was inspected beside the accepted UI-023
 settings-1600.png. The reference uses a small left caption, a light title surface,
@@ -63,3 +65,21 @@ Interface.png includes an approximately30px Windows title bar, whereas the GPU
 capture contains only the application client. A strict content comparison must
 account for that offset/use a1917x1168 client capture. Neither raster equality nor
 the short hosted tests proves full visual equivalence.
+
+The exact f0b0ea4 run passes256 tests across17 suites, including132 UI tests,
+with no ignored or filtered tests, plus locked workspace check, warnings-as-errors
+Clippy, release build and the complete native workflow/package. The native step
+took99s (03:13:38..03:15:17 UTC), compared with675s in the accepted UI-023 run;
+that observation establishes no causal performance fix. Its short Program
+samples still miss50/59.94/60fps:39.7989/46.7101/35.4245fps at640x360, with
+82/106/197 skipped frames. UI sample rates are15.294/14.910/14.621fps. These are
+visible diagnostic warnings, not a production or endurance qualification.
+
+The downloaded f0b0ea4 Settings/Recording/Overlay/Add/Properties/Streaming/
+MultiCorder/Playlist/Shortcuts screenshots, dirty overlay, Light theme and External
+capture were inspected. Captions and fixed footers fit; the paired colours align.
+The Light External capture exposes an additional defect: Cancel's default dark
+text is nearly invisible on its explicit charcoal fill. Give literal charcoal
+buttons an explicit white label and regress real Light-theme footer rendering
+plus cancel safety across all nine affected dialogs. This follow-up needs a new
+exact-source run; f0b0ea4's green result cannot qualify it in advance.

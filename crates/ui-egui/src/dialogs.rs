@@ -694,7 +694,7 @@ impl RustMixApp {
                 }
                 ui.with_layout(egui::Layout::right_to_left(Align::Center), |ui| {
                     let cancel = ui.add(
-                        egui::Button::new("Cancel")
+                        egui::Button::new(RichText::new("Cancel").color(Color32::WHITE))
                             .fill(CHIP_BG)
                             .min_size(footer_size(ui, FooterRole::Cancel)),
                     );
@@ -1333,7 +1333,7 @@ impl RustMixApp {
                 }
                 ui.with_layout(egui::Layout::right_to_left(Align::Center), |ui| {
                     let cancel = ui.add(
-                        egui::Button::new("Cancel")
+                        egui::Button::new(RichText::new("Cancel").color(Color32::WHITE))
                             .fill(CHIP_BG)
                             .min_size(footer_size(ui, FooterRole::Cancel)),
                     );
@@ -1578,7 +1578,7 @@ impl RustMixApp {
                 ui.label("Changes apply only with OK.");
                 ui.with_layout(egui::Layout::right_to_left(Align::Center), |ui| {
                     let cancel = ui.add(
-                        egui::Button::new("Cancel")
+                        egui::Button::new(RichText::new("Cancel").color(Color32::WHITE))
                             .fill(CHIP_BG)
                             .min_size(footer_size(ui, FooterRole::Cancel)),
                     );
@@ -1787,7 +1787,7 @@ impl RustMixApp {
             ui.separator();
             ui.horizontal(|ui| {
                 ui.with_layout(egui::Layout::right_to_left(Align::Center), |ui| {
-                    let cancel = ui.add_sized(footer_size(ui, FooterRole::Cancel), egui::Button::new("Cancel").fill(CHIP_BG));
+                    let cancel = ui.add_sized(footer_size(ui, FooterRole::Cancel), egui::Button::new(RichText::new("Cancel").color(Color32::WHITE)).fill(CHIP_BG));
                     self.automation.insert("dialog.overlay.cancel".into(), cancel.rect);
                     cancel_clicked = cancel.clicked();
                     let apply = ui.add_enabled(valid_draft && pending.is_none(), egui::Button::new(RichText::new("OK").color(Color32::WHITE).strong()).fill(CHIP_BG).min_size(footer_size(ui, FooterRole::Confirm)));
@@ -2098,7 +2098,7 @@ impl RustMixApp {
             ui.horizontal(|ui| {
                 ui.with_layout(egui::Layout::right_to_left(Align::Center), |ui| {
                     let cancel = ui.add(
-                        egui::Button::new("Cancel")
+                        egui::Button::new(RichText::new("Cancel").color(Color32::WHITE))
                             .fill(CHIP_BG)
                             .min_size(footer_size(ui, FooterRole::Cancel)),
                     );
@@ -2336,7 +2336,8 @@ impl RustMixApp {
                 ui.with_layout(egui::Layout::right_to_left(Align::Center), |ui| {
                     let cancel = ui.add_sized(
                         footer_size(ui, FooterRole::Cancel),
-                        egui::Button::new("Cancel").fill(CHIP_BG),
+                        egui::Button::new(RichText::new("Cancel").color(Color32::WHITE))
+                            .fill(CHIP_BG),
                     );
                     self.automation
                         .insert("dialog.recording.cancel".into(), cancel.rect);
@@ -2406,8 +2407,8 @@ impl RustMixApp {
                     .show_ui(ui, |ui| {
                         let _ = ui.selectable_label(true, "Default");
                     });
-                let _ = ui.add_sized([54.0, 22.0], egui::Button::new("Add").fill(CHIP_BG));
-                let _ = ui.add_sized([58.0, 22.0], egui::Button::new("Delete").fill(CHIP_BG));
+                let _ = ui.add_sized([54.0, 22.0], egui::Button::new(RichText::new("Add").color(Color32::WHITE)).fill(CHIP_BG));
+                let _ = ui.add_sized([58.0, 22.0], egui::Button::new(RichText::new("Delete").color(Color32::WHITE)).fill(CHIP_BG));
             });
             light_form_frame(ui, 12, |ui| {
                 ui.label(RichText::new("Stream").size(13.0).strong().color(FORM_TEXT));
@@ -2557,7 +2558,7 @@ impl RustMixApp {
             // scrollable form region (ADR 0003: dialogs stay operator closable).
             ui.with_layout(egui::Layout::right_to_left(Align::Center), |ui| {
                 let close = ui.add(
-                    egui::Button::new("Close")
+                    egui::Button::new(RichText::new("Close").color(Color32::WHITE))
                         .fill(CHIP_BG)
                         .min_size(footer_size(ui, FooterRole::Confirm)),
                 );
@@ -2775,7 +2776,7 @@ impl RustMixApp {
                     [260.0, 22.0],
                     egui::TextEdit::singleline(&mut self.mc_folder),
                 );
-                let _ = ui.add_sized([74.0, 22.0], egui::Button::new("Browse").fill(CHIP_BG));
+                let _ = ui.add_sized([74.0, 22.0], egui::Button::new(RichText::new("Browse").color(Color32::WHITE)).fill(CHIP_BG));
             });
             });
             });
@@ -2783,7 +2784,7 @@ impl RustMixApp {
             // region (ADR 0003: dialogs stay operator closable).
             ui.with_layout(egui::Layout::right_to_left(Align::Center), |ui| {
                 let close = ui.add(
-                    egui::Button::new("Close")
+                    egui::Button::new(RichText::new("Close").color(Color32::WHITE))
                         .fill(CHIP_BG)
                         .min_size(footer_size(ui, FooterRole::Confirm)),
                 );
@@ -2870,14 +2871,14 @@ impl RustMixApp {
             ui.separator();
             ui.horizontal(|ui| {
                 if ui
-                    .add_sized([78.0, 29.0], egui::Button::new("Add").fill(CHIP_BG))
+                    .add_sized([78.0, 29.0], egui::Button::new(RichText::new("Add").color(Color32::WHITE)).fill(CHIP_BG))
                     .clicked()
                 {
                     self.shortcuts_open = false;
                     self.actions.push(Action::SettingsAt(SettingsPage::Shortcuts));
                 }
                 if ui
-                    .add_sized([84.0, 29.0], egui::Button::new("Settings").fill(CHIP_BG))
+                    .add_sized([84.0, 29.0], egui::Button::new(RichText::new("Settings").color(Color32::WHITE)).fill(CHIP_BG))
                     .clicked()
                 {
                     self.shortcuts_open = false;
@@ -2885,7 +2886,7 @@ impl RustMixApp {
                 }
                 ui.with_layout(egui::Layout::right_to_left(Align::Center), |ui| {
                     let close = ui.add(
-                        egui::Button::new("Close")
+                        egui::Button::new(RichText::new("Close").color(Color32::WHITE))
                             .fill(CHIP_BG)
                             .min_size(footer_size(ui, FooterRole::Confirm)),
                     );
