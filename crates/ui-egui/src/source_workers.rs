@@ -246,7 +246,6 @@ fn discover_pages(
     const DEADLINE: Duration = Duration::from_secs(30);
     let start = Instant::now();
     let mut attempts = 0_u32;
-    let mut last_error = "Browser page discovery did not complete".to_owned();
     loop {
         if stop.load(Ordering::Acquire) {
             return Err("Browser start cancelled".to_owned());
@@ -260,22 +259,22 @@ fn discover_pages(
             return Err("Browser exited during startup".into());
         }
         attempts = attempts.saturating_add(1);
-        match tcp(port) {
+        let error = match tcp(port) {
             Ok(mut socket) => {
                 if socket.write_all(&discovery_request(port)).is_err() {
-                    last_error = "Browser page discovery failed".into();
+                    "Browser page discovery failed".to_owned()
                 } else {
                     match discovery_body(&mut socket) {
                         Ok(body) => return Ok(body),
-                        Err(error) if retry_discovery(&error) => last_error = error,
+                        Err(error) if retry_discovery(&error) => error,
                         Err(error) => return Err(error),
                     }
                 }
             }
-            Err(error) => last_error = error,
-        }
+            Err(error) => error,
+        };
         if start.elapsed() >= DEADLINE {
-            return Err(format!("{last_error} after {attempts} attempt(s)"));
+            return Err(format!("{error} after {attempts} attempt(s)"));
         }
         thread::sleep(Duration::from_millis(100));
     }

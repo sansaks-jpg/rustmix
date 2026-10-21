@@ -358,14 +358,14 @@ mod tests {
     #[test]
     fn fixture_pixels_finds_a_letterboxed_portrait_page_inside_program() {
         let mut pixels = vec![0_u8; 640 * 360 * 4];
-        for y in 0..360 {
-            for x in 220..420 {
-                let offset = (y * 640 + x) * 4;
-                pixels[offset..offset + 4].copy_from_slice(&[25, 165, 70, 255]);
+        for (index, pixel) in pixels.chunks_exact_mut(4).enumerate() {
+            if (220..420).contains(&(index % 640)) {
+                pixel.copy_from_slice(&[25, 165, 70, 255]);
             }
         }
         assert!(fixture_pixels(&pixels));
-        assert!(!fixture_pixels(&vec![0_u8; 640 * 360 * 4]));
+        let black = vec![0_u8; 640 * 360 * 4];
+        assert!(!fixture_pixels(&black));
         let mut sparse = vec![0_u8; 640 * 360 * 4];
         for offset in (0..sparse.len()).take(1000).step_by(4) {
             sparse[offset..offset + 3].copy_from_slice(&[175, 30, 60]);
