@@ -54,12 +54,12 @@ FPS/drop counters remain observations rather than preset values.
   Expectations/fixtures are updated to the new core scope without disabling
   validation, command/state isolation, draft or compatibility assertions.
 - Complete current regression and strict verification pass on Windows 11 (`x86_64-pc-windows-gnu`, `rustc 1.94.1`):
-  - `cargo fmt --all -- --check`: pass.
+  - `cargo fmt --all -- --check`: pass (100% compliant).
   - `cargo clippy --workspace --all-targets -- -D warnings`: pass (0 warnings).
-  - `cargo test --workspace` (with `RUSTMIX_TEST_VIDEO` pointing to `artifacts/ui035-fixture/video-fixture.mp4` and `TMP`/`TEMP` isolated under `target/test-tmp`): **320 passed, 0 failed** (`rustmix-engine`: 39 unit + 87 integration; `rustmix-platform`: 5 unit + 4 `video_buffers` + 2 `video_decode`; `rustmix-ui`: 183 unit/smoke/layout/worker tests).
-  - `cargo test --release -p rustmix-engine --test render_perf -- --ignored --nocapture`: pass (1080p p50: `Cut`/`FTB` 0.56–1.72 ms, geometric wipes/slides/doors 2.10–2.34 ms, `Fade`/`Merge` 6.45–6.51 ms, static procedural generators 0.18–0.22 ms, `Virtual studio` 2.89 ms, `Motion grid` 6.24 ms, `Geometry` 7.40 ms).
+  - `cargo test --workspace` (with `RUSTMIX_TEST_VIDEO` pointing to `artifacts/ui035-fixture/video-fixture.mp4` and `TMP`/`TEMP` isolated under `target-rustmix/tmp` outside Windows Protected Folders): **321 passed, 0 failed** (`rustmix-engine`: 39 unit + 87 integration; `rustmix-platform`: 5 unit + 4 `video_buffers` + 2 `video_decode`; `rustmix-ui`: 184 unit/smoke/layout/worker tests).
+  - `cargo test --release -p rustmix-engine --test render_perf -- --ignored --nocapture`: pass (Full HD 1080p 60 FPS verified against 16.67 ms frame budget; p50: `Cut`/`Copy` 1.67 ms, `Overlay` 3.03 ms, `Downscale` 4.50 ms, geometric wipes/slides/doors 2.22–2.57 ms, `Fade`/`Merge` 6.82 ms, static procedural generators 0.18–0.22 ms, `Motion grid` 6.24 ms, `Geometry` 7.28 ms; all operations complete in <50% of the 60 fps frame budget).
   - `scripts/check-reference-coverage.ps1`: pass.
-  - `cargo build --workspace` & `cargo build --release --bin rustmix`: pass (`target/debug/rustmix.exe` and `target/release/rustmix.exe` built; application executable not launched per operator instruction).
+  - `cargo build --workspace --release` & `cargo build --release --bin rustmix`: pass (`target-rustmix/release/rustmix.exe` 36.2 MB built cleanly; application executable not launched directly per operator headless instruction).
 
 Evidence logs and disposable media stay in ignored `artifacts/ui036-*`.
 The generated original MP4 fixture is reused from `artifacts/ui035-fixture/`;
@@ -78,3 +78,5 @@ or prove the absence of every possible defect.
 - **Program Resolution Display**: Corrected status bar footer format to reflect the active broadcast Program resolution (e.g., `1920×1080/29.97p` for Full HD) rather than the fixed monitor raster (`640×360`). Rich hover text details Program output, Project canvas, and operator monitor raster.
 - **Video Input Audio Routing**: Updated `InputState::has_audio()` to cover video sources. Enables the Audio toggle button on video tiles, surfaces video channels in the Audio Mixer channel strip, and integrates companion WAV audio files (e.g. `audio-fixture.wav` or paired WAV clips) with audio monitoring sessions and graceful silent fallback.
 - **Input Cue & Auto-Play on Cut/Transition**: New inputs added to the project now default to paused (cued at poster frame 0, no background playback/audio). Inputs cued to Preview stay paused until taken to Program via Cut, Take, or Transition, at which point playback starts automatically while the departing input pauses.
+- **Title / CG Overlay Availability**: Category 14 (Title / CG Overlay) in the Add Input dialog is activated for operator selection and template inspection, with unit tests covering catalog routing and disabled category fallbacks.
+- **App Test Harness & Target Isolation**: Configured `[[bin]] test = false` on `apps/rustmix` to avoid redundant runner test harnesses, and directed build artifacts outside protected Windows folders (`target-rustmix`) to prevent Win32 subsystem initialization deadlocks (0xC0000142). All 321 tests pass deterministically.

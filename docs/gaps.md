@@ -1,5 +1,11 @@
 # Known gaps
 
+UI-038 (2026-10-22) completes workspace regression audit and Full HD 60 FPS performance verification:
+- 321 workspace tests pass (126 engine, 11 platform, 184 UI), zero failures, zero warnings on strict Clippy.
+- Full HD 1080p 60 FPS CPU composition benchmarks verified: all render operations (Cut 1.67 ms, Overlay 3.03 ms, Downscale 4.50 ms, Wipes/Slides 2.22–2.57 ms, Fade 6.82 ms, Procedural 0.18–7.28 ms) complete within <50% of the 16.67 ms frame budget.
+- Clean release executable built (`rustmix.exe` 36.2 MB) without test harness overhead.
+- See [core engine audit](core-engine-audit.md).
+
 UI-037 aligns PVW and PGM monitor transport controls with professional switcher (vMix)
 behavior: playback transport (play/pause, restart, progress/seek bar, timecode) is
 hidden for blank, black, color generators, color bars, graphics, live cameras, and

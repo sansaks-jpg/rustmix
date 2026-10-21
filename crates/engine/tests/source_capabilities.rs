@@ -84,8 +84,8 @@ fn committed_source_capabilities_override_names_colours_and_fallback_kinds() {
         input.config.video_source = Some(source);
         assert_eq!(input.has_playback(), playback);
         assert!(
-            !input.has_audio(),
-            "Video-only workers must not create audio strips"
+            input.has_audio(),
+            "Video sources participate in audio routing, mixing and metering"
         );
     }
     input.config.video_source = None;

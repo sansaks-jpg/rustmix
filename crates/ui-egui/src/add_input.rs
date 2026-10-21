@@ -676,7 +676,7 @@ mod tests {
         let path = directory.path().join("original.png");
         fixture(&path, [170, 30, 50, 255]);
         let original_file = std::fs::read(&path).unwrap();
-        for target in [0, 11, 14] {
+        for target in [0, 11, 24] {
             let mut app = RustMixApp::headless();
             let ctx = egui::Context::default();
             app.theme(&ctx);
@@ -688,8 +688,8 @@ mod tests {
             wait_image(&mut app);
             assert!(app.add_image.is_some());
             assert!(app.add_disabled_reason().is_none());
-            if target == 14 {
-                assert!(!app.automation.contains_key("dialog.add.category.14"));
+            if target == 24 {
+                assert!(!app.automation.contains_key("dialog.add.category.24"));
                 // Compatibility validation remains exercised for hidden legacy drafts.
                 app.select_add_category(target);
             } else {
@@ -697,7 +697,7 @@ mod tests {
             }
             assert_eq!(app.add_tab, target);
             assert!(app.add_image.is_none() && app.add_png_path.is_empty());
-            if target == 14 {
+            if target == 24 {
                 click(&mut app, &ctx, "dialog.add.confirm");
                 assert!(app.add_open);
                 assert!(!app.request_add_input());
@@ -806,7 +806,7 @@ mod tests {
         app.theme(&ctx);
         let before = app.engine.project().clone();
         app.dispatch(Action::Add, &ctx);
-        for tab in [2, 5, 7, 8, 10, 14, 16, 18, 19, 21, 23, 24, 25] {
+        for tab in [2, 5, 7, 8, 10, 16, 18, 19, 21, 23, 24, 25] {
             app.select_add_category(tab);
             click(&mut app, &ctx, "dialog.add.confirm");
             assert!(app.automation.contains_key("dialog.add.unavailable"));
@@ -829,7 +829,8 @@ mod tests {
             for (tab, field) in [
                 (1, "dialog.add.png.path"),
                 (11, "dialog.add.name"),
-                (14, "dialog.add.unavailable"),
+                (14, "dialog.add.title.lower_third"),
+                (24, "dialog.add.unavailable"),
                 (0, "dialog.add.name"),
                 (12, "dialog.add.audio.path"),
                 (13, "dialog.add.audio.capture"),

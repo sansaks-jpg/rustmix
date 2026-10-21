@@ -1867,15 +1867,31 @@ impl RustMixApp {
                 .automation
                 .get(&format!("monitor.{name}.header"))
                 .ok_or_else(|| Error::Invalid(format!("Missing {name} header")))?;
-            let transport = self
-                .automation
-                .get(&format!("monitor.{name}.transport"))
-                .ok_or_else(|| Error::Invalid(format!("Missing {name} transport")))?;
-            if (picture.top() - header.bottom()).abs() > 4.0
-                || (transport.top() - picture.bottom()).abs() > 4.0
-            {
+            let input_id = if name == "preview" {
+                self.engine.project().preview
+            } else {
+                self.engine.project().program
+            };
+            let show_transport = self
+                .engine
+                .project()
+                .input(input_id)
+                .is_some_and(|i| self.has_transport_controls(i));
+            if show_transport {
+                let transport = self
+                    .automation
+                    .get(&format!("monitor.{name}.transport"))
+                    .ok_or_else(|| Error::Invalid(format!("Missing {name} transport")))?;
+                if (picture.top() - header.bottom()).abs() > 4.0
+                    || (transport.top() - picture.bottom()).abs() > 4.0
+                {
+                    return Err(Error::Invalid(format!(
+                        "{name} picture/transport floats inside the monitor bank: {header:?}, {picture:?}, {transport:?}"
+                    )));
+                }
+            } else if (picture.top() - header.bottom()).abs() > 4.0 {
                 return Err(Error::Invalid(format!(
-                    "{name} picture/transport floats inside the monitor bank: {header:?}, {picture:?}, {transport:?}"
+                    "{name} picture floats below header: {header:?}, {picture:?}"
                 )));
             }
         }
@@ -2906,6 +2922,9 @@ mod tests {
             frame(&mut app, &ctx, vec![], size);
         }
         let id = app.engine.project().preview;
+        assert!(app.engine.playback(id).unwrap().paused());
+        click(&mut app, &ctx, "monitor.preview.play", size);
+        assert!(!app.engine.playback(id).unwrap().paused());
         click(&mut app, &ctx, "monitor.preview.play", size);
         assert!(app.engine.playback(id).unwrap().paused());
         let paused = app.engine.playback(id).unwrap().position_ms();

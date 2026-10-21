@@ -733,7 +733,9 @@ mod native {
             if self.camera {
                 Ok(())
             } else {
-                self.file.seek_100ns(position).map_err(|error| error.to_string())
+                self.file
+                    .seek_100ns(position)
+                    .map_err(|error| error.to_string())
             }
         }
     }

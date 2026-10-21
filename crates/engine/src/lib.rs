@@ -1535,15 +1535,13 @@ impl Engine {
         self.playback
             .retain(|id, _| self.project.input(*id).is_some());
         for input in &self.project.inputs {
-            self.playback
-                .entry(input.id)
-                .or_insert_with(|| {
-                    let mut clock = playback::PlaybackClock::new(now.max(self.last_ms));
-                    if input.id != self.project.program {
-                        clock.set_paused(true);
-                    }
-                    clock
-                });
+            self.playback.entry(input.id).or_insert_with(|| {
+                let mut clock = playback::PlaybackClock::new(now.max(self.last_ms));
+                if input.id != self.project.program {
+                    clock.set_paused(true);
+                }
+                clock
+            });
         }
         match transport {
             Command::Cut => {

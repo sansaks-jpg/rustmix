@@ -890,6 +890,9 @@ mod tests {
         engine
             .execute(Command::UpdateInput(input.clone()), 0)
             .unwrap();
+        engine
+            .execute(Command::SetInputPaused(InputId(4), false), 0)
+            .unwrap();
         let mut worker = Worker::new(engine.clone()).unwrap();
         worker.sources[0].fill(&mut 0).unwrap();
         input.audio.gain_db = -6.0;

@@ -172,18 +172,24 @@ fn toggle_overlay_targets_and_toggles_preview_input() {
     assert_eq!(e.project().preview, InputId(2));
     assert!(!e.project().overlays.standard[0].enabled);
 
-    let cmd = e.shortcut_command(&ShortcutAction::ToggleOverlay(0)).unwrap();
+    let cmd = e
+        .shortcut_command(&ShortcutAction::ToggleOverlay(0))
+        .unwrap();
     e.execute(cmd, 0).unwrap();
     let o = &e.project().overlays.standard[0];
     assert!(o.enabled);
     assert_eq!(o.title, "Camera B");
 
-    let cmd = e.shortcut_command(&ShortcutAction::ToggleOverlay(0)).unwrap();
+    let cmd = e
+        .shortcut_command(&ShortcutAction::ToggleOverlay(0))
+        .unwrap();
     e.execute(cmd, 0).unwrap();
     assert!(!e.project().overlays.standard[0].enabled);
 
     e.execute(Command::SelectPreview(InputId(3)), 0).unwrap();
-    let cmd = e.shortcut_command(&ShortcutAction::ToggleOverlay(0)).unwrap();
+    let cmd = e
+        .shortcut_command(&ShortcutAction::ToggleOverlay(0))
+        .unwrap();
     e.execute(cmd, 0).unwrap();
     let o = &e.project().overlays.standard[0];
     assert!(o.enabled);

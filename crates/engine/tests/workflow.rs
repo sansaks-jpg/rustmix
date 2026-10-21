@@ -193,6 +193,8 @@ fn direct_take_is_explicit_atomic_and_rejects_busy_or_missing_input() {
 #[test]
 fn source_transport_is_independent_and_does_not_pause_transitions() {
     let mut e = Engine::default();
+    e.execute(Command::SetInputPaused(InputId(2), false), 0)
+        .unwrap();
     e.tick(1250);
     e.execute(Command::SetInputPaused(InputId(1), true), 1250)
         .unwrap();
@@ -213,6 +215,10 @@ fn source_transport_is_independent_and_does_not_pause_transitions() {
     assert_eq!(e.project().program, InputId(2));
     assert_eq!(e.playback(InputId(1)).unwrap().position_ms(), 1450);
     e.execute(Command::SetInputsPaused(false), 8000).unwrap();
+    e.execute(Command::SetInputPaused(InputId(1), false), 8000)
+        .unwrap();
+    e.execute(Command::SetInputPaused(InputId(2), true), 8000)
+        .unwrap();
     e.tick(8100);
     assert_eq!(e.playback(InputId(1)).unwrap().position_ms(), 1550);
     assert_eq!(e.playback(InputId(2)).unwrap().position_ms(), 3000);
@@ -228,6 +234,8 @@ fn source_transport_is_independent_and_does_not_pause_transitions() {
 #[test]
 fn loop_off_holds_last_frame_and_new_inputs_have_their_own_origin() {
     let mut e = Engine::default();
+    e.execute(Command::SetInputPaused(InputId(2), false), 0)
+        .unwrap();
     e.execute(Command::SetInputLoop(InputId(1), false), 0)
         .unwrap();
     e.tick(65_000);
@@ -242,6 +250,8 @@ fn loop_off_holds_last_frame_and_new_inputs_have_their_own_origin() {
     )
     .unwrap();
     let id = e.project().inputs.last().unwrap().id;
+    e.execute(Command::SetInputPaused(id, false), 65_000)
+        .unwrap();
     e.tick(65_200);
     assert_eq!(e.playback(id).unwrap().position_ms(), 200);
     e.execute(Command::RemoveInput(id), 65_200).unwrap();

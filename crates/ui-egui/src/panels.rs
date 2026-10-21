@@ -526,11 +526,7 @@ impl RustMixApp {
             if let Some((pos, dur)) = self.audio_ui.source_position(input.id) {
                 return (pos, dur);
             }
-            let pos = self
-                .engine
-                .playback(input.id)
-                .map_or(0, |clock| clock.position_ms());
-            return (pos, self.audio_duration_ms(input.id));
+            return (0, self.audio_duration_ms(input.id));
         }
         if input.config.video_source.is_some() {
             return (
@@ -862,16 +858,15 @@ impl RustMixApp {
                         let mut active_frac = prog_frac;
                         if (bar_response.clicked() || bar_response.dragged())
                             && duration.is_some_and(|d| d > 0)
+                            && let Some(mouse_pos) = bar_response.interact_pointer_pos()
                         {
-                            if let Some(mouse_pos) = bar_response.interact_pointer_pos() {
-                                let frac = ((mouse_pos.x - track_rect.left())
-                                    / track_rect.width().max(1.0))
-                                .clamp(0.0, 1.0);
-                                active_frac = frac;
-                                if let Some(dur) = duration {
-                                    let target_ms = (frac * (dur as f32)).round() as u64;
-                                    self.seek_source(id, target_ms);
-                                }
+                            let frac = ((mouse_pos.x - track_rect.left())
+                                / track_rect.width().max(1.0))
+                            .clamp(0.0, 1.0);
+                            active_frac = frac;
+                            if let Some(dur) = duration {
+                                let target_ms = (frac * (dur as f32)).round() as u64;
+                                self.seek_source(id, target_ms);
                             }
                         }
 
@@ -2813,12 +2808,9 @@ mod processing_tests {
                 workspace_frame(&mut app, &ctx, [1600.0, 900.0]);
             }
             for name in ["preview", "program"] {
-                assert_eq!(
-                    app.automation
-                        .get(&format!("monitor.{name}.progress"))
-                        .unwrap()
-                        .width(),
-                    0.0
+                assert!(
+                    !app.automation
+                        .contains_key(&format!("monitor.{name}.progress"))
                 );
             }
             assert!(!app.automation.contains_key("audio.rail.inputs"));

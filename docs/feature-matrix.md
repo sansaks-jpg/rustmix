@@ -2,6 +2,7 @@
 
 | Feature | Status | Scope | Test evidence | Platform | Hardware tested | Known limitations | Last verified date | Owner/task ID |
 |---|---|---|---|---|---|---|---|---|
+| Workspace Verification & Full HD 60 FPS Performance | Tested & benchmarked | Full regression suite (321 tests), 0 warnings strict Clippy, release build, Full HD 60 fps render performance (<7.5 ms p50 vs 16.67 ms budget) | [Core audit](core-engine-audit.md); 126 engine tests, 11 platform tests, 184 UI tests pass; render_perf 1080p release test pass | Windows 11 x64 GNU / Rust 1.94.1 | AMD Ryzen 5 / MinGW GCC 16.1.0; CPU renderer | Hardware GPU composition/encode and physical SDI/NDI devices remain separate future milestones | 2026-10-22 | UI-038 / Full Audit |
 | Existing-panel reference UI/UX | Experimental; headless review | Streaming destination/status navigation, MultiCorder format/table presentation, topic-specific Settings, processing draft/reset isolation, shared About window | [UI-035 verification ledger](ui035-reference-uiux.md); actual egui click/paint regression and software PNG/geometry review | Owner laptop Windows x64 GNU / Rust 1.94.1 | No capture/audio/output device opened | No native GPU/DPI or full feature/pixel parity claim; encoder configuration/start/save unavailable; baseline filesystem test failures recorded separately | 2026-10-21 | UI-035 / ADR 0035 / Codex |
 
 | Feature | Status | Scope | Test evidence | Platform | Hardware tested | Known limitations | Last verified date | Owner/task ID |
