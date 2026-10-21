@@ -27,3 +27,13 @@ popup/repeat/modifier/project assertions. Build/native acceptance did not run.
 Formatting, diff and repository/reference guards passed locally. No local Rust
 compile/tests/build/native launch. Full reference UI/workflow, physical keyboard,
 DPI, hardware/endurance and intermittent hosted GPU reliability remain open.
+
+82b6cec/run39546775770 passes check/Clippy,269 tests across17 suites (145 UI,
+none ignored/filtered), release build, all13 native processes and packaging.
+This includes focused path editing, real held-repeat/release input, popup-first
+handling, topmost-only closure and the actual native Escape/video workflow.
+Native step05:00:46..05:11:39 UTC, approximately653s. Its short Program samples
+still miss50/59.94/60fps:34.8641/36.1553/37.2998fps, skipped122/196/185; UI samples
+1.8434/1.8089/1.8390fps at640x360. Do not claim a causal GPU fix or production
+performance qualification from this green run. UI-030 separately addresses the
+retained default-width gap observed in the UI-028 native comparison.

@@ -140,9 +140,10 @@ impl Smoke {
     }
 }
 fn native_mode_name() -> String {
-    const MODES: [&str; 13] = [
+    const MODES: [&str; 14] = [
         "--ui-smoke",
         "--ui-smoke-reopen",
+        "--ui-layout-smoke",
         "--ui-input-smoke",
         "--ui-input-smoke-reopen",
         "--ui-reference-smoke",
@@ -319,6 +320,9 @@ impl RustMixApp {
         if std::env::args().any(|s| s == "--ui-input-smoke" || s == "--ui-input-smoke-reopen") {
             return self.smoke_inputs(ctx, s);
         }
+        if std::env::args().any(|arg| arg == "--ui-layout-smoke") {
+            return self.smoke_reference_layout(ctx, s);
+        }
         let reopen = std::env::args().any(|s| s == "--ui-smoke-reopen");
         // Includes 60 idle + 35 paused native frames and 27 dialog stages on
         // hosted software graphics. Measured 2026-10-18: 329 frames in 240s
@@ -342,31 +346,6 @@ impl RustMixApp {
                     "artifacts/workspace-1100.png".into()
                 } else if s.stage == 50 {
                     "artifacts/overlay-unsaved-1600.png".into()
-                } else if matches!(s.stage, 54 | 57 | 60) {
-                    let (stem, requested) = match s.stage {
-                        54 => ("workspace-reference", [1917, 1198]),
-                        57 => ("workspace-reference-client", [1917, 1168]),
-                        _ => ("add-input-reference", [1917, 1168]),
-                    };
-                    let expected = ctx.viewport_rect().size() * ctx.pixels_per_point();
-                    if image.width() != expected.x.round() as usize
-                        || image.height() != expected.y.round() as usize
-                    {
-                        return Err(Error::Invalid(
-                            "Reference workspace screenshot has the wrong raster".into(),
-                        ));
-                    }
-                    std::fs::write(
-                        format!("artifacts/{stem}-raster.json"),
-                        serde_json::to_vec_pretty(&serde_json::json!({
-                            "requested_points": requested,
-                            "actual_points": [ctx.viewport_rect().width(),ctx.viewport_rect().height()],
-                            "actual_pixels": [image.width(),image.height()],
-                            "pixels_per_point": ctx.pixels_per_point(),
-                        }))?,
-                    )?;
-                    let [requested_width, requested_height] = requested;
-                    format!("artifacts/{stem}-{requested_width}x{requested_height}.png")
                 } else if let Some((name, _, _)) = s
                     .stage
                     .checked_sub(20)
@@ -807,6 +786,109 @@ impl RustMixApp {
                 }
                 self.validate_basic_state(s)?;
                 self.assert_smoke_state()?;
+                self.saved_revision = self.engine.project().revision;
+                ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+            }
+
+            _ => {}
+        }
+        Ok(())
+    }
+
+    /// Large reference readbacks have their own process and trace. The main
+    /// switcher workflow keeps every original state/picture check and deadline.
+    fn smoke_reference_layout(&mut self, ctx: &egui::Context, s: &mut Smoke) -> Result<()> {
+        if self.start.elapsed() > Duration::from_secs(540) {
+            return Err(Error::Invalid(format!(
+                "Native reference layout timed out at stage {} after {} frames",
+                s.stage, s.frames
+            )));
+        }
+        for event in ctx.input(|input| input.events.clone()) {
+            if let egui::Event::Screenshot {
+                viewport_id, image, ..
+            } = event
+                && viewport_id == egui::ViewportId::ROOT
+            {
+                let (stem, requested) = match s.stage {
+                    54 => ("workspace-reference", [1917, 1198]),
+                    57 => ("workspace-reference-client", [1917, 1168]),
+                    60 => ("add-input-reference", [1917, 1168]),
+                    _ => {
+                        return Err(Error::Invalid(
+                            "Unexpected reference layout screenshot".into(),
+                        ));
+                    }
+                };
+                let expected = ctx.viewport_rect().size() * ctx.pixels_per_point();
+                if image.width() != expected.x.round() as usize
+                    || image.height() != expected.y.round() as usize
+                {
+                    return Err(Error::Invalid(
+                        "Reference workspace screenshot has the wrong raster".into(),
+                    ));
+                }
+                std::fs::write(
+                    format!("artifacts/{stem}-raster.json"),
+                    serde_json::to_vec_pretty(&serde_json::json!({
+                        "requested_points": requested,
+                        "actual_points": [ctx.viewport_rect().width(),ctx.viewport_rect().height()],
+                        "actual_pixels": [image.width(),image.height()],
+                        "pixels_per_point": ctx.pixels_per_point(),
+                    }))?,
+                )?;
+                let [width, height] = requested;
+                let bytes: Vec<u8> = image
+                    .pixels
+                    .iter()
+                    .flat_map(|pixel| pixel.to_array())
+                    .collect();
+                image::save_buffer(
+                    format!("artifacts/{stem}-{width}x{height}.png"),
+                    &bytes,
+                    image.width() as u32,
+                    image.height() as u32,
+                    image::ColorType::Rgba8,
+                )
+                .map_err(|error| Error::Invalid(error.to_string()))?;
+                s.captured = true;
+            }
+        }
+        if s.wait < 4 || self.job.is_some() {
+            return Ok(());
+        }
+        match s.stage {
+            0 => {
+                ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(egui::vec2(1600.0, 900.0)));
+                s.stage = 19;
+            }
+            19 => {
+                if (ctx.viewport_rect().size() - egui::vec2(1600.0, 900.0)).length() > 1.0 {
+                    return Err(Error::Invalid(
+                        "Reference layout did not start at 1600x900".into(),
+                    ));
+                }
+                if self.program_presented_generation != Some(self.program_generation) {
+                    return Ok(());
+                }
+                self.assert_smoke_state()?;
+                let project = self.engine.project();
+                s.basic_state = Some((project.program, project.preview, project.revision));
+                self.dispatch(Action::Add, ctx);
+                s.stage = 20;
+            }
+            20 => {
+                self.validate_dialog_geometry(ctx, "dialog.add")?;
+                self.native_click(s, "dialog.add.cancel")?;
+                s.stage = 21;
+            }
+            21 => {
+                if self.add_open {
+                    return Err(Error::Invalid(
+                        "Initial reference Input Select Cancel did not close".into(),
+                    ));
+                }
+                self.validate_basic_state(s)?;
                 s.stage = 52;
             }
             52 => {
@@ -935,7 +1017,15 @@ impl RustMixApp {
                 ctx.send_viewport_cmd(egui::ViewportCommand::Close);
             }
 
-            _ => {}
+            54 | 57 | 60 => {} // A readback must arrive before advancing its stage.
+            _ => {
+                return Err(Error::Invalid(
+                    "Unknown native reference layout stage".into(),
+                ));
+            }
+        }
+        if s.stage >= 52 {
+            self.validate_basic_state(s)?;
         }
         Ok(())
     }
@@ -1843,6 +1933,35 @@ mod tests {
     }
 
     use super::*;
+
+    #[test]
+    fn reference_layout_waits_for_each_gpu_readback_without_advancing_or_accepting_unknown_stages()
+    {
+        let mut app = RustMixApp::headless();
+        let ctx = egui::Context::default();
+        let before = app.engine.project().clone();
+        let mut state = Smoke {
+            wait: 5,
+            basic_state: Some((before.program, before.preview, before.revision)),
+            ..Default::default()
+        };
+        for stage in [54, 57, 60] {
+            state.stage = stage;
+            let _ = ctx.run_ui(egui::RawInput::default(), |ui| {
+                app.smoke_reference_layout(ui.ctx(), &mut state).unwrap();
+            });
+            assert_eq!(
+                state.stage, stage,
+                "A missing readback cannot satisfy capture"
+            );
+            assert!(!state.captured);
+            assert_eq!(*app.engine.project(), before);
+        }
+        state.stage = 999;
+        let _ = ctx.run_ui(egui::RawInput::default(), |ui| {
+            assert!(app.smoke_reference_layout(ui.ctx(), &mut state).is_err());
+        });
+    }
 
     #[test]
     fn png_reopen_waits_for_the_new_generation_then_enforces_state_acceptance() {

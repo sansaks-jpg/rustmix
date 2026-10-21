@@ -721,6 +721,7 @@ impl RustMixApp {
                 s.as_str(),
                 "--ui-smoke"
                     | "--ui-smoke-reopen"
+                    | "--ui-layout-smoke"
                     | "--ui-input-smoke"
                     | "--ui-input-smoke-reopen"
                     | "--ui-reference-smoke"

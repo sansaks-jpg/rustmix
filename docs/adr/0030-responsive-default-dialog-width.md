@@ -25,3 +25,14 @@ project/Program/Preview, retained footer/chrome bounds. Existing native Input
 Select capture at1917x1168 checks its intended width proportion as well as the
 file row/list/footer geometry. Keep all current native and GPU drain gates.
 Light theme remains deprioritized; compilation/tests/native run on hosted CI only.
+
+Verification scheduling amendment:98bf2eb/run39548053929 passed all270 tests
+(146 UI), check/Clippy/build, but main native timed out after645 frames atstage56.
+Its trace shows delayed readback/resize delivery; GPU drain passed and stderr was
+empty. No new width capture was produced, so native width acceptance remains open.
+Move the three mandatory large reference captures into an independent opt-in
+native process loading the main workflow's saved project. Prime Input Select at
+1600, then check1917, Cancel and restoration. Keep every screenshot, geometry,
+state/revision, queue/drain and deadline check mandatory. Main keeps all switcher,
+pause, stability, draft and original dialog captures. Both processes keep540s
+deadlines/600s external limits; no test failure is waived or GPU fix inferred.

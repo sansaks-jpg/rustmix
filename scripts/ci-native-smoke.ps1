@@ -69,7 +69,7 @@ function Invoke-NativeSmoke([string[]]$SmokeArguments) {
     if (Test-Path artifacts/smoke-error.txt) { throw (Get-Content artifacts/smoke-error.txt -Raw) }
 }
 Invoke-NativeSmoke @('--ui-smoke')
-foreach ($file in @('smoke-ok.json','workspace-1100.png','workspace-1600.png','workspace-1920.png','workspace-reference-1917x1198.png','workspace-reference-raster.json','workspace-reference-elements.json','workspace-reference-client-1917x1168.png','workspace-reference-client-raster.json','workspace-reference-client-elements.json','add-input-reference-1917x1168.png','add-input-reference-raster.json','add-input-reference-elements.json','workspace-reference-restore.json','smoke.rustmix.json','ui-elements.json','layout-stability.json','pause-transport.json','paused-program.png')) {
+foreach ($file in @('smoke-ok.json','workspace-1100.png','workspace-1600.png','workspace-1920.png','smoke.rustmix.json','ui-elements.json','layout-stability.json','pause-transport.json','paused-program.png')) {
     if (-not (Test-Path (Join-Path artifacts $file))) { throw "Missing native evidence: $file" }
 }
 foreach ($dialog in @('overlay-unsaved-1600','add-input-1600','input-properties-1600','settings-1600','overlay-settings-1600','recording-setup-1600','streaming-setup-1600','multicorder-1600','playlist-1600','shortcuts-1600')) {
@@ -77,6 +77,11 @@ foreach ($dialog in @('overlay-unsaved-1600','add-input-1600','input-properties-
         $evidence = Join-Path artifacts ($dialog + $suffix)
         if (-not (Test-Path -LiteralPath $evidence)) { throw "Missing dialog evidence: $evidence" }
     }
+}
+# Independent bounded workflow: no capture/state/drain gate is optional.
+Invoke-NativeSmoke @('--ui-layout-smoke','artifacts/smoke.rustmix.json')
+foreach ($file in @('workspace-reference-1917x1198.png','workspace-reference-raster.json','workspace-reference-elements.json','workspace-reference-client-1917x1168.png','workspace-reference-client-raster.json','workspace-reference-client-elements.json','add-input-reference-1917x1168.png','add-input-reference-raster.json','add-input-reference-elements.json','workspace-reference-restore.json')) {
+    if (-not (Test-Path (Join-Path artifacts $file))) { throw "Missing reference layout evidence: $file" }
 }
 Invoke-NativeSmoke @('--ui-smoke-reopen','artifacts/smoke.rustmix.json')
 if (-not (Test-Path artifacts/reopen-ok.json)) { throw 'Reopen did not validate the saved production' }
