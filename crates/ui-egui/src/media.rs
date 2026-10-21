@@ -74,7 +74,6 @@ pub(crate) fn decode_png(path: &Path) -> std::result::Result<DecodedPng, String>
 #[derive(Clone)]
 pub(crate) enum MediaTarget {
     AddPreview { token: u64 },
-    Add { position: usize, token: u64 },
     Properties { id: InputId, token: u64 },
     Restore { id: InputId, path: String },
 }

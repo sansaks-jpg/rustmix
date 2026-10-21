@@ -86,6 +86,15 @@ foreach ($file in @('workspace-reference-1917x1198.png','workspace-reference-ras
 }
 Invoke-NativeSmoke @('--ui-smoke-reopen','artifacts/smoke.rustmix.json')
 if (-not (Test-Path artifacts/reopen-ok.json)) { throw 'Reopen did not validate the saved production' }
+# Add Input has its own bounded offline process and mandatory screenshot evidence.
+Invoke-NativeSmoke @('--ui-add-smoke')
+foreach ($page in @('add-image','add-colour','add-title-unavailable','add-audio','add-microphone','add-generators')) {
+    foreach ($suffix in @('.png','-elements.json')) {
+        $evidence = Join-Path artifacts ($page + $suffix)
+        if (-not (Test-Path -LiteralPath $evidence)) { throw "Missing Add Input evidence: $evidence" }
+    }
+}
+if (-not (Test-Path -LiteralPath artifacts/add-input-workflow-ok.json)) { throw 'Add Input did not validate unchanged project/output state' }
 Invoke-NativeSmoke @('--ui-input-smoke')
 Invoke-NativeSmoke @('--ui-input-smoke-reopen','artifacts/inputs.rustmix.json')
 foreach ($file in @('input-fixture.png','input-workflow.png','input-properties.png','input-playlist.png','input-keyboard.png','input-basic.png','input-reopened.png','input-smoke-ok.json','input-reopen-ok.json','inputs.rustmix.json')) {

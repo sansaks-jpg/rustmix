@@ -1,4 +1,7 @@
 //! Operator dialogs modeled after the reference workflows in `rustmix-reference`.
+use super::add_input::{
+    CATEGORY_ORDER, SourceIcon, draw_source_icon, generator_category, source_icon,
+};
 pub(super) use super::operator_window::operator_window;
 use super::operator_window::{FooterRole, footer_size};
 use super::*;
@@ -105,7 +108,7 @@ fn sidebar_row(
     active: bool,
     label: &str,
     row_height: f32,
-    icon_index: Option<usize>,
+    icon: Option<SourceIcon>,
 ) -> egui::Response {
     ui.push_id(label, |ui| {
         let (rect, response) = ui.allocate_exact_size(
@@ -120,75 +123,28 @@ fn sidebar_row(
             SIDEBAR
         };
         ui.painter().rect_filled(rect, 1.0, bg);
-        let text_x = if let Some(idx) = icon_index {
-            let icon_rect = egui::Rect::from_center_size(
-                egui::pos2(rect.left() + 12.0, rect.center().y),
-                Vec2::new(12.0, 12.0),
+        response.widget_info(|| {
+            egui::WidgetInfo::selected(
+                egui::WidgetType::SelectableLabel,
+                ui.is_enabled(),
+                active,
+                label,
+            )
+        });
+        if response.has_focus() {
+            ui.painter().rect_stroke(
+                rect.shrink(1.0),
+                1.0,
+                Stroke::new(1.0, Color32::WHITE),
+                egui::StrokeKind::Inside,
             );
-            let stroke = Stroke::new(1.2, Color32::WHITE);
-            match idx % 6 {
-                0 => {
-                    ui.painter()
-                        .rect_stroke(icon_rect, 1.0, stroke, egui::StrokeKind::Inside);
-                    ui.painter()
-                        .hline(icon_rect.x_range(), icon_rect.top() + 3.0, stroke);
-                }
-                1 => {
-                    ui.painter().circle_stroke(icon_rect.center(), 5.0, stroke);
-                    ui.painter()
-                        .circle_filled(icon_rect.center(), 1.5, Color32::WHITE);
-                }
-                2 => {
-                    for y in [
-                        icon_rect.top() + 2.0,
-                        icon_rect.center().y,
-                        icon_rect.bottom() - 2.0,
-                    ] {
-                        ui.painter().hline(icon_rect.x_range(), y, stroke);
-                    }
-                }
-                3 => {
-                    let body = egui::Rect::from_min_max(
-                        icon_rect.min,
-                        egui::pos2(icon_rect.right() - 3.0, icon_rect.bottom()),
-                    );
-                    ui.painter()
-                        .rect_stroke(body, 1.0, stroke, egui::StrokeKind::Inside);
-                    ui.painter().line_segment(
-                        [
-                            egui::pos2(body.right(), body.center().y),
-                            egui::pos2(icon_rect.right(), icon_rect.top() + 2.0),
-                        ],
-                        stroke,
-                    );
-                    ui.painter().line_segment(
-                        [
-                            egui::pos2(body.right(), body.center().y),
-                            egui::pos2(icon_rect.right(), icon_rect.bottom() - 2.0),
-                        ],
-                        stroke,
-                    );
-                }
-                4 => {
-                    ui.painter()
-                        .hline(icon_rect.x_range(), icon_rect.top() + 2.0, stroke);
-                    ui.painter().vline(
-                        icon_rect.center().x,
-                        (icon_rect.top() + 2.0)..=icon_rect.bottom(),
-                        stroke,
-                    );
-                }
-                _ => {
-                    for (bar_i, frac) in [0.45_f32, 0.9, 0.65].into_iter().enumerate() {
-                        let x = icon_rect.left() + 1.0 + bar_i as f32 * 3.6;
-                        let bar = egui::Rect::from_min_max(
-                            egui::pos2(x, icon_rect.bottom() - icon_rect.height() * frac),
-                            egui::pos2(x + 2.2, icon_rect.bottom()),
-                        );
-                        ui.painter().rect_filled(bar, 0.0, Color32::WHITE);
-                    }
-                }
-            }
+        }
+        let text_x = if let Some(icon) = icon {
+            let icon_rect = Rect::from_min_size(
+                egui::pos2(rect.left() + 6.0, rect.center().y - 6.0),
+                Vec2::splat(12.0),
+            );
+            draw_source_icon(ui.painter(), icon_rect, icon, Color32::WHITE);
             rect.left() + 24.0
         } else {
             rect.left() + 8.0
@@ -207,11 +163,11 @@ fn sidebar_row(
     .inner
 }
 
-const ADD_CATEGORIES: [(&str, InputKind, &str); 21] = [
+pub(super) const ADD_CATEGORIES: [(&str, InputKind, &str); 26] = [
     (
-        "Generators / PNG",
+        "Generators",
         InputKind::Grid,
-        "Choose a procedural source or PNG image.",
+        "Choose an original procedural generator.",
     ),
     (
         "PNG Image",
@@ -234,7 +190,7 @@ const ADD_CATEGORIES: [(&str, InputKind, &str); 21] = [
         "Procedural studio pattern; no network capture is opened.",
     ),
     (
-        "SRT",
+        "Stream / SRT",
         InputKind::Grid,
         "Configure SRT Listener / Caller input stream.",
     ),
@@ -279,14 +235,14 @@ const ADD_CATEGORIES: [(&str, InputKind, &str); 21] = [
         "Configure a microphone for explicitly started local monitoring.",
     ),
     (
-        "Title / XAML",
+        "Title",
         InputKind::Graphics,
-        "Select a Title / Lower Third template.",
+        "Title templates are unavailable. Use Generators for a procedural lower-third sample.",
     ),
     (
-        "GT",
+        "Countdown",
         InputKind::Countdown,
-        "Select a GT animated graphic or timer.",
+        "Original procedural countdown generator.",
     ),
     (
         "Virtual Set",
@@ -313,6 +269,27 @@ const ADD_CATEGORIES: [(&str, InputKind, &str); 21] = [
         InputKind::Color,
         "Select a local MP4 video file (video only, Windows Media Foundation).",
     ),
+    ("DVD", InputKind::Color, "DVD input is unavailable."),
+    (
+        "Camera",
+        InputKind::Geometry,
+        "Camera input is unavailable.",
+    ),
+    (
+        "NDI / OMT / Desktop Capture",
+        InputKind::Studio,
+        "Network and desktop capture are unavailable.",
+    ),
+    (
+        "Video Delay",
+        InputKind::Color,
+        "Video delay is unavailable.",
+    ),
+    (
+        "Telestrator",
+        InputKind::Graphics,
+        "Telestrator is unavailable.",
+    ),
 ];
 
 /// Add-dialog category index for the local MP4 video-file source. Appended so
@@ -320,7 +297,7 @@ const ADD_CATEGORIES: [(&str, InputKind, &str); 21] = [
 pub(crate) const VIDEO_TAB: usize = 20;
 const VIDEO_TAB_LABEL: &str = "Video file";
 
-const GENERATOR_SAMPLES: [(&str, InputKind); 7] = [
+pub(super) const GENERATOR_SAMPLES: [(&str, InputKind); 7] = [
     ("Motion grid", InputKind::Grid),
     ("Moving shapes", InputKind::Geometry),
     ("Reference bars", InputKind::Bars),
@@ -444,7 +421,7 @@ impl RustMixApp {
 
     fn prepare_add_preview(&mut self, ctx: &egui::Context) {
         if let Some(fx) = &self.add_image
-            && fx.media_path.as_deref() == Some(self.add_name.as_str())
+            && fx.media_path.as_deref() == Some(self.add_png_path.as_str())
         {
             if self.add_preview.is_none() {
                 let pixels = panels::process_source_pixels(
@@ -510,7 +487,7 @@ impl RustMixApp {
         if !self.add_open {
             return;
         }
-        if !matches!(self.add_tab, 12 | 13 | VIDEO_TAB) {
+        if generator_category(self.add_tab) || (self.add_tab == 1 && self.add_image.is_some()) {
             self.prepare_add_preview(ctx);
         }
         let mut open = self.add_open;
@@ -521,7 +498,10 @@ impl RustMixApp {
             "Input Select",
             "dialog.add_input",
             &mut open,
-            Vec2::new((ctx.viewport_rect().width() * 0.707).max(780.0), height + 70.0),
+            Vec2::new(
+                (ctx.viewport_rect().width() * 0.707).max(780.0),
+                height + 70.0,
+            ),
         )
         .show(ctx, |ui| {
             self.dialog_columns(
@@ -529,170 +509,65 @@ impl RustMixApp {
                 "dialog.add",
                 height,
                 |app, ui| {
-                    if app.add_loading { ui.disable(); }
+                    if app.add_loading {
+                        ui.disable();
+                    }
                     ui.spacing_mut().item_spacing.y = 1.0;
-                    // File video is a primary source choice. Keep stable category ordinals
-                    // while placing it above the procedural library and future integrations.
-                    let categories = ADD_CATEGORIES.into_iter().enumerate().skip(VIDEO_TAB)
-                        .chain(ADD_CATEGORIES.into_iter().enumerate().take(VIDEO_TAB));
-                    let row_height = (ctx.viewport_rect().width() * 38.0 / 1917.0).clamp(25.0,38.0);
+                    let categories = CATEGORY_ORDER.into_iter().filter_map(|idx| {
+                        ADD_CATEGORIES
+                            .get(idx)
+                            .copied()
+                            .map(|category| (idx, category))
+                    });
+                    let row_height =
+                        (ctx.viewport_rect().width() * 38.0 / 1917.0).clamp(25.0, 38.0);
                     for (idx, (label, kind, _)) in categories {
-                        let active = app.add_tab == idx && app.add_kind == kind;
-                        let supported = matches!(idx, 0 | 1 | 3 | 4 | 6 | 11 | 12 | 13 | 14 | 15 | VIDEO_TAB);
-                        let r = ui.add_enabled_ui(supported, |ui| sidebar_row(ui, active, label, row_height, Some(idx))).inner
-                            .on_disabled_hover_text("Unavailable: no media/device backend for this source type");
+                        let active = app.add_tab == idx;
+                        let r = sidebar_row(ui, active, label, row_height, Some(source_icon(idx)));
+                        if active && app.add_reveal {
+                            if !ui.clip_rect().contains_rect(r.rect) {
+                                r.scroll_to_me(None);
+                            }
+                            app.add_reveal = false;
+                        }
+                        app.automation
+                            .insert(format!("dialog.add.category.{idx}"), r.rect);
                         if idx == VIDEO_TAB {
                             app.automation.insert("dialog.add.video".into(), r.rect);
                         } else if matches!(idx, 0 | 1 | 3 | 4 | 6 | 11 | 14 | 15) {
-                            app.automation.insert(if idx == 1 { "dialog.add.image".into() } else { format!("dialog.add.kind.{kind:?}") }, r.rect);
+                            app.automation.insert(
+                                if idx == 1 {
+                                    "dialog.add.image".into()
+                                } else {
+                                    format!("dialog.add.kind.{kind:?}")
+                                },
+                                r.rect,
+                            );
                         }
                         if matches!(idx, 12 | 13) {
-                            app.automation.insert(if idx == 12 { "dialog.add.audio.wav".into() } else { "dialog.add.audio.microphone".into() }, r.rect);
+                            app.automation.insert(
+                                if idx == 12 {
+                                    "dialog.add.audio.wav".into()
+                                } else {
+                                    "dialog.add.audio.microphone".into()
+                                },
+                                r.rect,
+                            );
                         }
                         if r.clicked() {
-                            app.add_tab = idx;
-                            app.add_kind = kind;
+                            app.select_add_category(idx);
                         }
                     }
                 },
                 |app, ui| {
-                    if app.add_loading { ui.disable(); }
-                    if matches!(app.add_tab, 12 | 13) {
-                        app.audio_add_page(ui, ctx);
-                        return;
+                    if app.add_loading {
+                        ui.disable();
                     }
-                    if app.add_tab == VIDEO_TAB {
-                        app.video_add_page(ui, ctx);
-                        return;
-                    }
-                    let (_, _, banner_text) = ADD_CATEGORIES.get(app.add_tab).copied().unwrap_or((
-                        "Video",
-                        InputKind::Grid,
-                        "Select the Video file to open.",
-                    ));
-                    egui::Frame::new()
-                        .fill(HEADER_DARK)
-                        .inner_margin(egui::Margin::symmetric(10, 8))
-                        .show(ui, |ui| {
-                            ui.set_min_width((ui.available_width() - 2.0).max(80.0));
-                            ui.label(RichText::new(banner_text).color(Color32::WHITE).size(15.0));
-                            ui.label(RichText::new("Synthetic sources / PNG / local video · capture and network backends unavailable").size(10.5).color(DIM));
-                        });
-                    light_form_frame(ui, 10, |ui| {
-                        ui.horizontal(|ui| {
-                            ui.add_sized(
-                                [48.0, 22.0],
-                                egui::Label::new(
-                                    RichText::new("Source").color(FORM_TEXT).size(12.0),
-                                ),
-                            );
-                            let text_w = (ui.available_width() - 94.0).max(120.0);
-                            let name = ui.add_sized(
-                                [text_w, 22.0],
-                                egui::TextEdit::singleline(&mut app.add_name)
-                                    .char_limit(4096)
-                                    .hint_text("Generator name or PNG file path"),
-                            );
-                            app.automation.insert("dialog.add.name".into(), name.rect);
-                            if name.changed() { app.add_image = None; app.add_preview = None; }
-                            if ui
-                                .add_sized([80.0, 22.0], egui::Button::new("Browse"))
-                                .clicked() && app.smoke.is_none() && !app.add_loading
-                            {
-                                app.start_png_picker(media::MediaTarget::AddPreview { token: app.add_token });
-                            }
-                        });
-                        ui.add_space(6.0);
-                        ui.columns(2, |cols| {
-                            if let [left_col, right_col, ..] = cols {
-                                egui::Frame::new()
-                                    .fill(Color32::WHITE)
-                                    .corner_radius(4.0)
-                                    .stroke(Stroke::new(1.0, FORM_BORDER))
-                                    .inner_margin(6.0)
-                                    .show(left_col, |ui| {
-                                        ui.set_min_height(155.0);
-                                        ui.label(
-                                            RichText::new("Procedural generators")
-                                                .size(11.0)
-                                                .strong()
-                                                .color(FORM_TEXT),
-                                        );
-                                        ui.separator();
-                                        for (path, kind) in GENERATOR_SAMPLES {
-                                            let selected =
-                                                app.add_kind == kind && app.add_name == path;
-                                            let r = ui.selectable_label(
-                                                selected,
-                                                RichText::new(path).size(11.0).color(FORM_TEXT),
-                                            );
-                                            if r.clicked() {
-                                                app.add_kind = kind;
-                                                app.add_name = path.into();
-                                                app.add_tab = match kind { InputKind::Grid => 0, InputKind::Geometry => 3, InputKind::Studio => 4, InputKind::Bars => 6, InputKind::Color => 11, InputKind::Graphics => 14, InputKind::Countdown => 15 };
-                                                app.add_image = None; app.add_preview = None;
-                                            }
-                                        }
-                                    });
-                                right_col.vertical(|ui| {
-                                    egui::Frame::new()
-                                        .fill(Color32::from_gray(14))
-                                        .corner_radius(4.0)
-                                        .stroke(Stroke::new(1.0, FORM_BORDER))
-                                        .inner_margin(4.0)
-                                        .show(ui, |ui| {
-                                            if app.add_image.is_none() && (app.add_tab == 1 || Path::new(&app.add_name).extension().is_some()) {
-                                                ui.allocate_space(egui::vec2(180.0, 95.0));
-                                                ui.label(RichText::new("PNG is validated on import").color(Color32::WHITE));
-                                            } else if let Some((_, texture)) = &app.add_preview {
-                                                let w = ui.available_width().clamp(140.0, 260.0);
-                                                let r = ui.add(
-                                                    egui::Image::new((
-                                                        texture.id(),
-                                                        egui::vec2(w, w * 9.0 / 16.0),
-                                                    ))
-                                                    .corner_radius(3.0),
-                                                );
-                                                app.automation
-                                                    .insert("dialog.add.preview".into(), r.rect);
-                                            }
-                                        });
-                                    ui.add_space(4.0);
-                                    ui.label(
-                                        RichText::new(format!(
-                                            "{} · 320x180 preview",
-                                            if app.add_tab == 1 { "PNG image".into() } else { app.add_kind.label().to_owned() }
-                                        ))
-                                        .size(11.0)
-                                        .color(FORM_TEXT),
-                                    );
-                                });
-                            }
-                        });
-                        ui.add_space(6.0);
-                        ui.horizontal(|ui| {
-                            ui.add_enabled(false, egui::Checkbox::new(&mut app.add_alpha, "PNG alpha is composited over black"));
-                            ui.add_space(8.0);
-                            ui.add_enabled(false, egui::Checkbox::new(&mut app.add_interlaced, "Interlaced video"));
-                            ui.with_layout(egui::Layout::right_to_left(Align::Center), |ui| {
-                                if ui
-                                    .add_sized([74.0, 22.0], egui::Button::new("Clear"))
-                                    .clicked()
-                                {
-                                    app.add_name.clear();
-                                    app.add_image = None;
-                                    app.add_preview = None;
-                                }
-                            });
-                        });
-                    });
+                    app.add_source_page(ui, ctx);
                 },
             );
             ui.separator();
             ui.horizontal(|ui| {
-                if !matches!(self.add_tab, 12 | 13 | VIDEO_TAB) && self.add_name.trim().is_empty() {
-                    ui.colored_label(PREVIEW, "Enter a non-empty source label.");
-                }
                 ui.with_layout(egui::Layout::right_to_left(Align::Center), |ui| {
                     let cancel = ui.add(
                         egui::Button::new(RichText::new("Cancel").color(Color32::WHITE))
@@ -704,16 +579,16 @@ impl RustMixApp {
                     if cancel.clicked() {
                         close_requested = true;
                     }
-                    let can_add = !self.add_loading && if self.add_tab == VIDEO_TAB {
-                        self.video_add_ready()
-                    } else {
-                        matches!(self.add_tab, 12 | 13) || !self.add_name.trim().is_empty()
-                    };
-                    let confirm = ui.add_enabled(can_add,
+                    let disabled_reason = self.add_disabled_reason();
+                    let can_add = disabled_reason.is_none();
+                    let confirm = ui.add_enabled(
+                        can_add,
                         egui::Button::new(RichText::new("OK").color(Color32::WHITE).strong())
                             .fill(PROGRAM)
                             .min_size(footer_size(ui, FooterRole::Confirm)),
                     );
+                    let confirm =
+                        confirm.on_disabled_hover_text(disabled_reason.unwrap_or_default());
                     self.automation
                         .insert("dialog.add.confirm".into(), confirm.rect);
                     if confirm.clicked() && !self.add_loading {
@@ -735,16 +610,23 @@ impl RustMixApp {
                                     ui.selectable_value(&mut self.add_number, n, n.to_string());
                                 }
                             });
-                        self.automation.insert("dialog.add.number".into(), number.response.rect);
+                        self.automation
+                            .insert("dialog.add.number".into(), number.response.rect);
                     });
                     ui.label(RichText::new("Number").size(12.0).color(Color32::WHITE));
-                    if self.add_loading { ui.label("Loading PNG…"); }
+                    if self.add_loading {
+                        ui.label("Loading PNG…");
+                    }
                 });
             });
         });
         if close_requested || !open {
             self.add_open = false;
             self.add_loading = false;
+            self.add_image = None;
+            self.add_preview = None;
+            self.add_png_path.clear();
+            self.add_error = None;
             self.add_token = self.add_token.wrapping_add(1);
             self.cancel_audio_add();
             self.cancel_video_add();

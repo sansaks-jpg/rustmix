@@ -339,11 +339,21 @@ impl RustMixApp {
         }
     }
 
-    pub(crate) fn cancel_video_add(&mut self) {
+    fn clear_video_add_draft(&mut self) {
         self.video_ui.label.clear();
         self.video_ui.path.clear();
         self.video_ui.probe = None;
         self.video_ui.add_error = None;
+    }
+
+    pub(crate) fn retire_video_category(&mut self) {
+        self.clear_video_add_draft();
+        // The category selector advances add_token. Keep the old receiver until
+        // completion so switching pages cannot spawn overlapping probe workers.
+    }
+
+    pub(crate) fn cancel_video_add(&mut self) {
+        self.clear_video_add_draft();
         // Dropping the receiver retires a late probe result; the token is
         // advanced as well so a reopened dialog never accepts old metadata.
         self.video_ui.job = None;
@@ -934,6 +944,33 @@ mod tests {
             .unwrap_err();
         app.poll_video_probe();
         assert!(app.video_ui.path.is_empty() && app.video_ui.probe.is_none());
+    }
+
+    #[test]
+    fn switching_categories_retires_metadata_but_keeps_one_pending_probe() {
+        let mut app = RustMixApp::headless();
+        app.add_open = true;
+        app.add_token = 9;
+        let (sender, receiver) = mpsc::sync_channel::<ProbeResult>(1);
+        app.video_ui.job = Some(receiver);
+        app.video_ui.job_token = 9;
+        app.video_ui.path = r"C:\media\old.mp4".into();
+        app.select_add_category(1);
+        app.select_add_category(VIDEO_TAB);
+        assert!(app.video_ui.job.is_some());
+        assert!(app.video_ui.path.is_empty());
+        assert!(
+            sender
+                .try_send(ProbeResult {
+                    token: 9,
+                    result: Ok(Some(probe(r"C:\media\old.mp4"))),
+                })
+                .is_ok()
+        );
+        app.poll_video_probe();
+        assert!(app.video_ui.job.is_none() && app.video_ui.probe.is_none());
+        assert!(app.video_ui.path.is_empty());
+        assert_eq!(app.engine.project().inputs.len(), 7);
     }
     #[test]
     fn video_add_page_is_reachable_and_cancel_discards_the_draft() {

@@ -79,78 +79,38 @@ impl RustMixApp {
     }
 
     pub(crate) fn request_add_input(&mut self) -> bool {
-        if self.add_loading {
-            return false;
-        }
-        let name = self.add_name.trim().to_owned();
-        let path = PathBuf::from(&name);
-        let is_file = path.extension().is_some() || name.contains(['/', '\\']);
-        if self.add_tab == 1 && !is_file {
-            self.say("Choose a PNG file for this image input".into(), true);
-            return false;
-        }
-        if name.is_empty() {
-            self.say("Enter a source name before adding an input".into(), true);
+        if let Some(reason) = self.add_disabled_reason() {
+            self.add_error = Some(reason.clone());
+            self.say(reason, true);
             return false;
         }
         let index = self.add_number.saturating_sub(1);
+        if self.add_tab == 1 {
+            let Some(image) = self.add_image.clone() else {
+                return false;
+            };
+            return self.commit_png_input(image, index);
+        }
+        if !super::add_input::generator_category(self.add_tab) {
+            self.add_error =
+                Some("Use this source's validated configuration before adding.".into());
+            return false;
+        }
+        // Generator names are labels, including dots and slashes, never file paths.
         let command = Command::AddInputAt {
-            name: name.clone(),
+            name: self.add_name.trim().to_owned(),
             kind: self.add_kind,
             config: InputConfig::default(),
             index,
         };
-        if let Err(error) = self.engine.enabled(&command) {
-            self.say(error.to_string(), true);
-            return false;
-        }
-        if self.engine.project().inputs.len() >= 32 || index > self.engine.project().inputs.len() {
-            self.say(
-                "Choose an available input position (maximum 32 inputs)".into(),
-                true,
-            );
-            return false;
-        }
-        if is_file {
-            if let Some(fx) = self.add_image.clone()
-                && fx.media_path.as_deref() == Some(name.as_str())
-            {
-                return self.commit_png_input(fx, index);
-            }
-            if !path
-                .extension()
-                .and_then(|s| s.to_str())
-                .is_some_and(|s| s.eq_ignore_ascii_case("png"))
-            {
-                self.say(
-                    "This source accepts PNG images. Choose Video file for MP4.".into(),
-                    true,
-                );
-                return false;
-            }
-            self.add_loading = self.media_loader.enqueue(
-                path,
-                media::MediaTarget::Add {
-                    position: index,
-                    token: self.add_token,
-                },
-            );
-            if self.add_loading {
-                self.say("Loading PNG…".into(), false);
-            } else {
-                self.say(
-                    "PNG queue is full; try again after loading finishes".into(),
-                    true,
-                );
-            }
-            false
+        let added = self.try_execute(command).is_some();
+        if added {
+            self.add_error = None;
+            self.submit_program();
         } else {
-            let added = self.try_execute(command).is_some();
-            if added {
-                self.submit_program();
-            }
-            added
+            self.add_error = Some(self.notice.clone());
         }
+        added
     }
 
     fn commit_png_input(&mut self, fx: InputFx, index: usize) -> bool {
@@ -222,13 +182,20 @@ impl RustMixApp {
         self.image_picker = None;
         match done.target {
             media::MediaTarget::AddPreview { token }
-                if self.add_open && token == self.add_token =>
+                if self.add_open && self.add_tab == 1 && token == self.add_token =>
             {
                 self.add_loading = false;
                 if let Some(path) = done.path {
+                    self.add_png_path = path.to_string_lossy().into_owned();
+                    self.add_image = None;
+                    self.add_preview = None;
+                    self.add_error = None;
                     self.add_loading = self
                         .media_loader
                         .enqueue(path, media::MediaTarget::AddPreview { token });
+                    if !self.add_loading {
+                        self.add_error = Some("Image check is busy. Try again shortly.".into());
+                    }
                 }
             }
             media::MediaTarget::Properties { id, token }
@@ -283,36 +250,27 @@ impl RustMixApp {
         };
         match target {
             media::MediaTarget::AddPreview { token }
-                if self.add_open && token == self.add_token =>
+                if self.add_open && self.add_tab == 1 && token == self.add_token =>
             {
                 self.add_loading = false;
                 match result {
                     Ok(image) => {
-                        self.add_name = image.path.clone();
+                        self.add_png_path = image.path.clone();
                         self.add_kind = InputKind::Color;
                         self.add_tab = 1;
                         let mut fx = InputFx::default();
                         fx.set_image(image);
                         self.add_image = Some(fx);
                         self.add_preview = None;
+                        self.add_error = None;
                         self.say("PNG ready · press OK to add input".into(), false);
                     }
-                    Err(error) => self.say(format!("{error}; previous selection retained"), true),
-                }
-            }
-            media::MediaTarget::Add { position, token }
-                if self.add_open && token == self.add_token =>
-            {
-                self.add_loading = false;
-                match result {
-                    Ok(image) => {
-                        let mut fx = InputFx::default();
-                        fx.set_image(image);
-                        if self.commit_png_input(fx, position) {
-                            self.add_open = false;
-                        }
+                    Err(error) => {
+                        self.add_image = None;
+                        self.add_preview = None;
+                        self.add_error = Some(error.clone());
+                        self.say(format!("{error}; no input added"), true);
                     }
-                    Err(error) => self.say(format!("{error}; no input added"), true),
                 }
             }
             media::MediaTarget::Properties { id, token }

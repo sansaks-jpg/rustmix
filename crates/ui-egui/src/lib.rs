@@ -1,4 +1,6 @@
 #![forbid(unsafe_code)]
+mod add_input;
+mod add_smoke;
 mod audio_controls;
 mod audio_session;
 mod audio_smoke;
@@ -557,9 +559,10 @@ pub struct RustMixApp {
     pub(crate) add_open: bool,
     pub(crate) add_tab: usize,
     pub(crate) add_name: String,
+    pub(crate) add_png_path: String,
+    pub(crate) add_error: Option<String>,
+    pub(crate) add_reveal: bool,
     pub(crate) add_kind: InputKind,
-    pub(crate) add_alpha: bool,
-    pub(crate) add_interlaced: bool,
     pub(crate) add_number: usize,
     pub(crate) add_preview: Option<(InputKind, egui::TextureHandle)>,
     pub(crate) properties: Option<InputState>,
@@ -723,6 +726,7 @@ impl RustMixApp {
                     | "--ui-smoke-reopen"
                     | "--ui-layout-smoke"
                     | "--ui-dialog-smoke"
+                    | "--ui-add-smoke"
                     | "--ui-input-smoke"
                     | "--ui-input-smoke-reopen"
                     | "--ui-reference-smoke"
@@ -830,9 +834,10 @@ impl RustMixApp {
             add_open: false,
             add_tab: dialogs::VIDEO_TAB,
             add_name: "New synthetic input".into(),
+            add_png_path: String::new(),
+            add_error: None,
+            add_reveal: true,
             add_kind: InputKind::Color,
-            add_alpha: false,
-            add_interlaced: false,
             add_number: 1,
             add_preview: None,
             properties: None,
@@ -996,6 +1001,8 @@ impl RustMixApp {
         self.input_filter.clear();
         self.add_open = false;
         self.add_image = None;
+        self.add_png_path.clear();
+        self.add_error = None;
         self.add_loading = false;
         self.add_token = self.add_token.wrapping_add(1);
         self.close_properties();
@@ -1416,6 +1423,7 @@ impl RustMixApp {
                 self.add_token = self.add_token.wrapping_add(1);
                 self.add_loading = false;
                 self.add_number = self.engine.project().inputs.len() + 1;
+                self.add_reveal = true;
                 // A source's render kind does not identify its configuration
                 // page: PNG, video and solid colour all use Color. Retain the
                 // actual category selected by the operator.
@@ -1823,26 +1831,24 @@ impl RustMixApp {
                 return;
             }
             let caret = caret_menu_button(ui, height, |ui| {
-                for (key, idx, label, kind) in [
-                    ("video", dialogs::VIDEO_TAB, "Video file", InputKind::Color),
-                    ("image", 1, "PNG image", InputKind::Color),
-                    ("audio", 12, "WAV audio", InputKind::Bars),
-                    ("microphone", 13, "Microphone", InputKind::Geometry),
-                    ("generators", 0, "Generators", InputKind::Grid),
-                    ("shapes", 3, "Moving shapes", InputKind::Geometry),
-                    ("bars", 6, "Reference bars", InputKind::Bars),
-                    ("title", 14, "Title", InputKind::Graphics),
-                    ("studio", 4, "Studio pattern", InputKind::Studio),
-                    ("colour", 11, "Solid colour", InputKind::Color),
-                    ("timer", 15, "Timer / Clock", InputKind::Countdown),
+                for (key, idx, label) in [
+                    ("video", dialogs::VIDEO_TAB, "Video file"),
+                    ("image", 1, "PNG image"),
+                    ("audio", 12, "WAV audio"),
+                    ("microphone", 13, "Microphone"),
+                    ("generators", 0, "Generators"),
+                    ("shapes", 3, "Moving shapes"),
+                    ("bars", 6, "Reference bars"),
+                    ("title", 14, "Title (unavailable)"),
+                    ("studio", 4, "Studio pattern"),
+                    ("colour", 11, "Colour generators"),
+                    ("timer", 15, "Countdown generator"),
                 ] {
                     let category = ui.button(label);
                     self.automation
                         .insert(format!("production.add.category.{key}"), category.rect);
                     if category.clicked() {
-                        self.add_tab = idx;
-                        self.add_kind = kind;
-                        self.add_name = label.into();
+                        self.select_add_category(idx);
                         self.actions.push(Action::Add);
                         ui.close();
                     }

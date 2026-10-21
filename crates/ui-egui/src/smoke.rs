@@ -140,7 +140,7 @@ impl Smoke {
         })
     }
 
-    fn visual_settled(&self, ctx: &egui::Context) -> bool {
+    pub(crate) fn visual_settled(&self, ctx: &egui::Context) -> bool {
         self.visual_settled_at(
             ctx.input(|input| input.time),
             ctx.global_style().animation_time,
@@ -159,11 +159,12 @@ impl Smoke {
     }
 }
 fn native_mode_name() -> String {
-    const MODES: [&str; 15] = [
+    const MODES: [&str; 16] = [
         "--ui-smoke",
         "--ui-smoke-reopen",
         "--ui-layout-smoke",
         "--ui-dialog-smoke",
+        "--ui-add-smoke",
         "--ui-input-smoke",
         "--ui-input-smoke-reopen",
         "--ui-reference-smoke",
@@ -320,6 +321,9 @@ impl RustMixApp {
     }
 
     fn smoke_run(&mut self, ctx: &egui::Context, s: &mut Smoke) -> Result<()> {
+        if std::env::args().any(|arg| arg == "--ui-add-smoke") {
+            return self.smoke_add_input(ctx, s);
+        }
         if std::env::args().any(|arg| arg == "--ui-video-smoke" || arg == "--ui-video-smoke-reopen")
         {
             return self.smoke_video(ctx, s);
@@ -1220,7 +1224,6 @@ impl RustMixApp {
                 )
                 .map_err(|e| Error::Invalid(e.to_string()))?;
                 self.dispatch(Action::Add, ctx);
-                self.add_name = path.display().to_string();
                 self.add_number = 2;
                 s.stage = 1;
             }
@@ -1230,6 +1233,19 @@ impl RustMixApp {
             }
             29 => {
                 self.validate_dialog_geometry(ctx, "dialog.add")?;
+                self.add_png_path = PathBuf::from("artifacts/input-fixture.png")
+                    .display()
+                    .to_string();
+                self.check_add_png();
+                s.stage = 30;
+            }
+            30 => {
+                if self.add_loading || self.media_loader.busy() {
+                    return Ok(());
+                }
+                if let Some(reason) = self.add_disabled_reason() {
+                    return Err(Error::Invalid(reason));
+                }
                 self.native_click(s, "dialog.add.confirm")?;
                 s.stage = 2;
             }
@@ -2123,6 +2139,7 @@ mod tests {
             None,
         ));
         app.dispatch(Action::Add, &ctx);
+        app.select_add_category(0);
         app.add_name = "New stage".into();
         app.add_kind = InputKind::Color;
         assert!(app.request_add_input());
@@ -2577,8 +2594,8 @@ mod tests {
         let size = [1100.0, 700.0];
         app.execute(Command::RemoveInput(InputId(3)));
         app.dispatch(Action::Add, &ctx);
-        click(&mut app, &ctx, "dialog.add.kind.Bars", size);
-        app.add_kind = InputKind::Bars;
+        click(&mut app, &ctx, "dialog.add.kind.Grid", size);
+        click(&mut app, &ctx, "dialog.add.generator.2", size);
         for _ in 0..4 {
             frame(&mut app, &ctx, vec![], size);
         }
@@ -2945,15 +2962,16 @@ mod tests {
         );
         let size = [1600.0, 900.0];
         app.dispatch(Action::Add, &ctx);
-        click(&mut app, &ctx, "dialog.add.kind.Grid", size);
-        app.add_name = "missing-video.mp4".into();
+        click(&mut app, &ctx, "dialog.add.image", size);
+        app.add_png_path = "missing-video.mp4".into();
+        app.check_add_png();
         for _ in 0..3 {
             frame(&mut app, &ctx, vec![], size);
         }
         let count = app.engine.project().inputs.len();
         click(&mut app, &ctx, "dialog.add.confirm", size);
         assert_eq!(app.engine.project().inputs.len(), count);
-        assert!(app.add_open && app.warning);
+        assert!(app.add_open && app.add_error.is_some());
     }
 
     #[test]
@@ -3395,8 +3413,10 @@ mod tests {
         app.theme(&ctx);
         app.dispatch(Action::Add, &ctx);
         click(&mut app, &ctx, "dialog.add.image", [1600.0, 900.0]);
-        app.add_name = path.display().to_string();
+        app.add_png_path = path.display().to_string();
         app.add_number = 2;
+        app.check_add_png();
+        finish_media(&mut app);
         click(&mut app, &ctx, "dialog.add.confirm", [1600.0, 900.0]);
         finish_media(&mut app);
         let id = app.engine.project().inputs[1].id;
@@ -3515,7 +3535,9 @@ mod tests {
         );
         app.close_properties();
         app.dispatch(Action::Add, &ctx);
-        app.add_name = path.display().to_string();
+        app.select_add_category(1);
+        app.add_png_path = path.display().to_string();
+        app.check_add_png();
         assert!(!app.request_add_input());
         app.reset_editors();
         app.media_loader.reset();
@@ -3534,7 +3556,8 @@ mod tests {
             });
         }
         app.dispatch(Action::Add, &ctx);
-        app.add_name = "some.png".into();
+        app.select_add_category(1);
+        app.add_png_path = "some.png".into();
         let before = app.engine.project().clone();
         assert!(!app.request_add_input());
         assert_eq!(app.engine.project(), &before);
@@ -3550,6 +3573,7 @@ mod tests {
         let ctx = egui::Context::default();
         app.theme(&ctx);
         app.dispatch(Action::Add, &ctx);
+        app.select_add_category(1);
         let original = app.add_name.clone();
         let (tx, rx) = mpsc::sync_channel(1);
         app.image_picker = Some(rx);
@@ -3579,7 +3603,7 @@ mod tests {
         assert_eq!(app.engine.project().inputs.len(), 7);
         frame(&mut app, &ctx, vec![], [1600.0, 900.0]);
         assert!(app.automation.contains_key("dialog.add.preview"));
-        let selected = app.add_name.clone();
+        let selected = app.add_png_path.clone();
         let (tx, rx) = mpsc::sync_channel(1);
         app.image_picker = Some(rx);
         app.add_loading = true;
@@ -3591,7 +3615,7 @@ mod tests {
         })
         .unwrap();
         finish_media(&mut app);
-        assert_eq!(app.add_name, selected);
+        assert_eq!(app.add_png_path, selected);
         assert!(app.add_image.is_some());
         click(&mut app, &ctx, "dialog.add.confirm", [1600.0, 900.0]);
         assert_eq!(app.engine.project().inputs.len(), 8);

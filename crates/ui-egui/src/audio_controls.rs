@@ -288,71 +288,64 @@ impl RustMixApp {
         self.cancel_audio_add();
     }
 
+    pub(crate) fn audio_add_ready(&self) -> bool {
+        let label = self.audio_ui.label.trim();
+        if label.len() > 64 || label.chars().any(char::is_control) {
+            return false;
+        }
+        match self.add_tab {
+            12 => {
+                self.audio_ui.wav_job.is_none()
+                    && self
+                        .audio_ui
+                        .wav_info
+                        .as_ref()
+                        .is_some_and(|info| info.path == self.audio_ui.wav_path)
+            }
+            13 => AudioSource::Microphone {
+                device_id: self.audio_ui.microphone.clone(),
+            }
+            .validate()
+            .is_ok(),
+            _ => false,
+        }
+    }
+
     pub(crate) fn audio_add_page(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
-        ui.heading(if self.add_tab == 12 {
-            "WAV audio source"
-        } else {
-            "Microphone source"
-        });
-        ui.label("Audio-only input; its video is an explicit black slate. Adding a source opens no device.");
-        ui.label("Source label");
-        let name = ui.add(
-            egui::TextEdit::singleline(&mut self.audio_ui.label)
-                .char_limit(64)
-                .hint_text(if self.add_tab == 12 {
-                    "Audio file"
-                } else {
-                    "Microphone"
-                }),
+        super::add_input::page_header(
+            ui,
+            if self.add_tab == 12 {
+                "Select a WAV audio file."
+            } else {
+                "Select a microphone."
+            },
         );
-        self.automation
-            .insert("dialog.add.audio.name".into(), name.rect);
-        if self.add_tab == 12 {
-            ui.label("Local WAV path (PCM16 or IEEE float32, mono/stereo, up to 120 seconds)");
-            let path = ui.add_enabled(
-                self.audio_ui.wav_job.is_none(),
-                egui::TextEdit::singleline(&mut self.audio_ui.wav_path).char_limit(4096),
-            );
-            self.automation
-                .insert("dialog.add.audio.path".into(), path.rect);
-            if path.changed() {
-                self.audio_ui.wav_info = None;
-                self.audio_ui.add_error = None;
-            }
-            ui.horizontal(|ui| {
-                let browse = ui.add_enabled(
-                    self.audio_ui.wav_job.is_none(),
-                    egui::Button::new("Browse WAV…"),
-                );
-                self.automation
-                    .insert("dialog.add.audio.browse".into(), browse.rect);
-                if browse.clicked() && self.smoke.is_none() {
-                    self.start_wav_job(ctx, true);
-                }
-                let validate = ui.add_enabled(
-                    self.audio_ui.wav_job.is_none() && !self.audio_ui.wav_path.trim().is_empty(),
-                    egui::Button::new("Validate WAV"),
-                );
-                self.automation
-                    .insert("dialog.add.audio.validate".into(), validate.rect);
-                if validate.clicked() {
-                    self.start_wav_job(ctx, false);
-                }
-            });
-            if self.audio_ui.wav_job.is_some() {
-                ui.label("Reading and validating WAV…");
-            }
-            if let Some(info) = &self.audio_ui.wav_info {
-                ui.label(format!(
-                    "Validated: {} Hz · {:.2} seconds · {} source frames",
-                    info.sample_rate,
-                    info.frames as f64 / f64::from(info.sample_rate),
-                    info.frames
-                ));
-                ui.label("The monitoring worker checks the file again when monitoring starts.");
-            }
-            ui.label("MP3, compressed WAV and other file codecs are unavailable.");
-        } else {
+        egui::Frame::new().inner_margin(8).show(ui, |ui| {
+            if self.add_tab == 12 {
+                ui.horizontal(|ui| {
+                    let width = (ui.available_width()-94.0).max(120.0);
+                    let path = ui.add_enabled_ui(self.audio_ui.wav_job.is_none(), |ui| ui.add_sized([width,26.0],
+                        egui::TextEdit::singleline(&mut self.audio_ui.wav_path).char_limit(4096).hint_text("WAV audio file"))).inner;
+                    self.automation.insert("dialog.add.audio.path".into(),path.rect);
+                    if path.changed() { self.audio_ui.wav_info=None; self.audio_ui.add_error=None; }
+                    let browse=ui.add_enabled(self.audio_ui.wav_job.is_none(),egui::Button::new("Browse…").min_size(Vec2::new(90.0,26.0)));
+                    self.automation.insert("dialog.add.audio.browse".into(),browse.rect);
+                    if browse.clicked() && self.smoke.is_none() { self.start_wav_job(ctx,true); }
+                    if path.lost_focus() && ctx.input(|x|x.key_pressed(egui::Key::Enter)) && !self.audio_ui.wav_path.trim().is_empty() { self.start_wav_job(ctx,false); }
+                });
+                super::dialogs::light_form_frame(ui,10,|ui| {
+                    ui.set_min_width((ui.available_width()-2.0).max(80.0));
+                    ui.label("WAV audio · PCM16 or float32 · mono/stereo · up to 120 seconds.");
+                    if self.audio_ui.wav_job.is_some() { ui.label("Checking audio file…"); }
+                    else if let Some(info)=&self.audio_ui.wav_info {
+                        ui.label(format!("{} Hz · {:.2} seconds · Ready",info.sample_rate,info.frames as f64 / f64::from(info.sample_rate)));
+                    } else { ui.label("Choose a file with Browse, or enter a path and select Check file."); }
+                    ui.label("MP3 and compressed WAV are unavailable.");
+                });
+                let validate=ui.add_enabled(self.audio_ui.wav_job.is_none() && !self.audio_ui.wav_path.trim().is_empty(),egui::Button::new("Check file"));
+                self.automation.insert("dialog.add.audio.validate".into(),validate.rect);
+                if validate.clicked() { self.start_wav_job(ctx,false); }
+            } else {
             let label = selected_device(
                 &self.audio_ui.capture_devices,
                 self.audio_ui.microphone.as_deref(),
@@ -360,7 +353,7 @@ impl RustMixApp {
             );
             let picker = egui::ComboBox::from_id_salt("dialog.add.audio.capture")
                 .selected_text(label)
-                .width(300.0)
+                .width(ui.available_width().min(300.0))
                 .show_ui(ui, |ui| {
                     let default = ui.selectable_value(
                         &mut self.audio_ui.microphone,
@@ -382,13 +375,23 @@ impl RustMixApp {
             self.automation
                 .insert("dialog.add.audio.capture".into(), picker.response.rect);
             self.audio_refresh_button(ui, ctx, "dialog.add.audio.refresh");
-            ui.colored_label(PREVIEW, "Microphone capture starts only after explicit Start monitoring in Audio I/O. Adding/changing a microphone while monitoring requires Stop then Start.");
-        }
-        if let Some(error) = &self.audio_ui.add_error {
-            let label = ui.colored_label(RED, error);
-            self.automation
-                .insert("dialog.add.audio.error".into(), label.rect);
-        }
+
+                ui.label("Adding a microphone keeps capture off. Start monitoring explicitly in Audio I/O.");
+                if let Some(error)=&self.audio_ui.discovery_error { ui.colored_label(RED,error); }
+            }
+            ui.horizontal(|ui| {
+                ui.label("Name");
+                let width=ui.available_width();
+                let name=ui.add_sized([width,26.0],egui::TextEdit::singleline(&mut self.audio_ui.label).char_limit(64)
+                    .hint_text(if self.add_tab==12 {"Audio file"} else {"Microphone"}));
+                self.automation.insert("dialog.add.audio.name".into(),name.rect);
+            });
+            ui.label("Audio-only input · black video slate. Adding never starts monitoring.");
+            if let Some(error)=&self.audio_ui.add_error {
+                let label=ui.add(egui::Label::new(RichText::new(error).color(RED)).truncate()).on_hover_text(error);
+                self.automation.insert("dialog.add.audio.error".into(),label.rect);
+            }
+        });
     }
 
     pub(crate) fn confirm_audio_input(&mut self, ctx: &egui::Context) -> bool {
@@ -723,7 +726,7 @@ mod tests {
         );
         click(&mut app, &ctx, "dialog.add.confirm", size);
         assert_eq!(*app.engine.project(), before);
-        assert!(app.audio_ui.add_error.is_some());
+        assert!(!app.audio_add_ready());
         click(&mut app, &ctx, "dialog.add.audio.validate", size);
         wait_for_wav(&mut app, &ctx, size);
         let info = app
