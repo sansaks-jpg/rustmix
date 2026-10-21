@@ -1046,6 +1046,10 @@ impl RustMixApp {
                 s.stage = 1;
             }
             1 => {
+                self.native_click(s, "dialog.add.image")?;
+                s.stage = 29;
+            }
+            29 => {
                 self.validate_dialog_geometry(ctx, "dialog.add")?;
                 self.native_click(s, "dialog.add.confirm")?;
                 s.stage = 2;
@@ -1357,7 +1361,30 @@ impl RustMixApp {
                 )));
             }
         }
-        if prefix == "dialog.overlay" {
+        if prefix == "dialog.add" && self.add_tab == dialogs::VIDEO_TAB {
+            let page = self.native_geometry_rect(ctx, "dialog.add.page")?;
+            for id in ["path", "browse", "recent", "name", "validate", "clear"] {
+                let control = self.native_geometry_rect(ctx, &format!("dialog.add.video.{id}"))?;
+                if !page.expand(1.0).contains_rect(control) {
+                    return Err(Error::Invalid(format!(
+                        "Video selection field escapes its page: {id}"
+                    )));
+                }
+            }
+            let path = self.native_geometry_rect(ctx, "dialog.add.video.path")?;
+            let browse = self.native_geometry_rect(ctx, "dialog.add.video.browse")?;
+            let list = self.native_geometry_rect(ctx, "dialog.add.video.recent")?;
+            if (path.center().y - browse.center().y).abs() > 1.0
+                || path.right() >= browse.left()
+                || path.width() < page.width() * 0.65
+                || list.width() < page.width() * 0.94
+                || list.height() < page.height() * 0.45
+            {
+                return Err(Error::Invalid(
+                    "Video file row/list proportions differ from the operator layout".into(),
+                ));
+            }
+        } else if prefix == "dialog.overlay" {
             for (label, field) in [
                 ("number", "slot.1"),
                 ("title", "title"),
@@ -2303,6 +2330,7 @@ mod tests {
         let size = [1100.0, 700.0];
         app.execute(Command::RemoveInput(InputId(3)));
         app.dispatch(Action::Add, &ctx);
+        click(&mut app, &ctx, "dialog.add.kind.Bars", size);
         app.add_kind = InputKind::Bars;
         for _ in 0..4 {
             frame(&mut app, &ctx, vec![], size);
@@ -2426,6 +2454,7 @@ mod tests {
         assert_eq!(app.engine.project().program, InputId(1));
         app.confirm_remove_input = None;
         app.dispatch(Action::Add, &ctx);
+        click(&mut app, &ctx, "dialog.add.kind.Grid", size);
         app.add_name = " ".into();
         frame(&mut app, &ctx, vec![], size);
         let add = app.automation.get("dialog.add.confirm").unwrap().center();
@@ -2669,6 +2698,7 @@ mod tests {
         );
         let size = [1600.0, 900.0];
         app.dispatch(Action::Add, &ctx);
+        click(&mut app, &ctx, "dialog.add.kind.Grid", size);
         app.add_name = "missing-video.mp4".into();
         for _ in 0..3 {
             frame(&mut app, &ctx, vec![], size);
@@ -3117,6 +3147,7 @@ mod tests {
         let ctx = egui::Context::default();
         app.theme(&ctx);
         app.dispatch(Action::Add, &ctx);
+        click(&mut app, &ctx, "dialog.add.image", [1600.0, 900.0]);
         app.add_name = path.display().to_string();
         app.add_number = 2;
         click(&mut app, &ctx, "dialog.add.confirm", [1600.0, 900.0]);

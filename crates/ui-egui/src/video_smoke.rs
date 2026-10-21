@@ -77,11 +77,30 @@ impl RustMixApp {
                 self.basic_mode = false;
                 self.execute(Command::SetInputsPaused(false));
                 self.execute(Command::SelectPreview(InputId(2)));
-                self.native_click(s, "production.add.menu")?;
+                self.native_click(s, "production.add")?;
                 s.scratch_text = Some(fixture);
                 s.stage = 1;
             }
             1 => {
+                if self.add_tab != crate::dialogs::VIDEO_TAB || !self.add_open {
+                    return Err(Error::Invalid(
+                        "Add Input did not open Video by default".into(),
+                    ));
+                }
+                self.validate_dialog_geometry(ctx, "dialog.add")?;
+                self.native_click(s, "dialog.add.cancel")?;
+                s.stage = 20;
+            }
+            20 => {
+                if self.add_open {
+                    return Err(Error::Invalid(
+                        "Video Cancel did not close Input Select".into(),
+                    ));
+                }
+                self.native_click(s, "production.add.menu")?;
+                s.stage = 21;
+            }
+            21 => {
                 self.native_click(s, "production.add.category.video")?;
                 s.stage = 2;
             }
@@ -149,6 +168,23 @@ impl RustMixApp {
                 s.stage = 8;
             }
             8 if s.captured => {
+                self.native_click(s, "dialog.add.video.recent.0")?;
+                s.stage = 22;
+            }
+            22 => {
+                if self.video_probe_pending() {
+                    return Ok(());
+                }
+                if self.video_probe_error().is_some()
+                    || !self.video_add_ready()
+                    || self.engine.project().inputs.len() != 7
+                    || self.engine.project().program != InputId(1)
+                    || self.engine.project().preview != InputId(2)
+                {
+                    return Err(Error::Invalid(
+                        "Recent video selection failed or changed the project before OK".into(),
+                    ));
+                }
                 self.native_click(s, "dialog.add.confirm")?;
                 s.stage = 9;
             }

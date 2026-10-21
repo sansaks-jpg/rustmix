@@ -123,7 +123,7 @@ impl RustMixApp {
                 .is_some_and(|s| s.eq_ignore_ascii_case("png"))
             {
                 self.say(
-                    "Only PNG images are supported; video decoding is unavailable".into(),
+                    "This source accepts PNG images. Choose Video file for MP4.".into(),
                     true,
                 );
                 return false;

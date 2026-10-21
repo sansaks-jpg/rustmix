@@ -28,6 +28,7 @@ struct ProbeResult {
 /// Add-dialog draft for a local video source. Nothing here starts a decoder.
 #[derive(Default)]
 pub(crate) struct VideoUi {
+    pub(crate) history: crate::video_history::VideoHistory,
     label: String,
     path: String,
     probe: Option<VideoProbe>,
@@ -76,6 +77,27 @@ fn present_video_error(input_fx: &mut HashMap<InputId, InputFx>, id: InputId, er
     fx.custom_rgba = None;
     fx.image_pending = false;
     fx.image_error = Some(bounded_reason(error));
+}
+
+fn default_video_label(path: &str) -> String {
+    let mut label = String::new();
+    for character in Path::new(path)
+        .file_stem()
+        .and_then(|name| name.to_str())
+        .unwrap_or("Video file")
+        .chars()
+        .filter(|character| !character.is_control())
+    {
+        if label.len().saturating_add(character.len_utf8()) > 64 {
+            break;
+        }
+        label.push(character);
+    }
+    if label.trim().is_empty() {
+        "Video file".into()
+    } else {
+        label
+    }
 }
 
 #[cfg(windows)]
@@ -269,6 +291,7 @@ impl RustMixApp {
         }
         match result.result {
             Ok(Some(probe)) => {
+                self.video_ui.history.record(&probe.path);
                 self.video_ui.path = probe.path.clone();
                 self.video_ui.probe = Some(probe);
                 self.video_ui.add_error = None;
@@ -345,74 +368,222 @@ impl RustMixApp {
         })
     }
 
+    pub(crate) fn video_add_ready(&self) -> bool {
+        self.video_ui.job.is_none()
+            && self
+                .video_ui
+                .probe
+                .as_ref()
+                .is_some_and(|probe| probe.path == self.video_ui.path)
+    }
+
     pub(crate) fn stop_video_players(&mut self) {
         self.video_players.clear();
         self.cancel_video_add();
     }
 
     pub(crate) fn video_add_page(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
-        ui.heading("Local MP4 video");
-        ui.label("Video-only source decoded by Windows Media Foundation. Audio tracks, cameras and network inputs are not provided.");
-        ui.label("Source label");
-        let name = ui.add(
-            egui::TextEdit::singleline(&mut self.video_ui.label)
-                .char_limit(64)
-                .hint_text("Video file"),
-        );
+        let page_width = ui.available_width();
+        let header = egui::Frame::new()
+            .fill(Color32::from_rgb(10, 15, 20))
+            .inner_margin(egui::Margin::symmetric(8, 8))
+            .show(ui, |ui| {
+                ui.set_min_width((page_width - 16.0).max(80.0));
+                ui.label(
+                    RichText::new("Select a video file.")
+                        .size(13.0)
+                        .color(Color32::WHITE),
+                );
+            });
         self.automation
-            .insert("dialog.add.video.name".into(), name.rect);
-        ui.label("Local MP4 path (validated before adding; frames decode on an owner worker)");
-        let path = ui.add_enabled(
-            self.video_ui.job.is_none(),
-            egui::TextEdit::singleline(&mut self.video_ui.path).char_limit(4096),
-        );
-        self.automation
-            .insert("dialog.add.video.path".into(), path.rect);
-        if path.changed() {
-            self.video_ui.probe = None;
-            self.video_ui.add_error = None;
-        }
-        ui.horizontal(|ui| {
-            let browse = ui.add_enabled(
-                self.video_ui.job.is_none(),
-                egui::Button::new("Browse MP4…"),
-            );
+            .insert("dialog.add.video.header".into(), header.response.rect);
+        egui::Frame::new().inner_margin(8).show(ui, |ui| {
+            ui.horizontal(|ui| {
+                let path_width = (ui.available_width() - 94.0).max(120.0);
+                let path = ui
+                    .add_enabled_ui(self.video_ui.job.is_none(), |ui| {
+                        ui.add_sized(
+                            [path_width, 26.0],
+                            egui::TextEdit::singleline(&mut self.video_ui.path)
+                                .char_limit(4096)
+                                .hint_text("MP4 video file"),
+                        )
+                    })
+                    .inner;
+                self.automation
+                    .insert("dialog.add.video.path".into(), path.rect);
+                if path.changed() {
+                    self.video_ui.probe = None;
+                    self.video_ui.add_error = None;
+                }
+                let browse = ui.add_enabled(
+                    self.video_ui.job.is_none(),
+                    egui::Button::new("Browse…").min_size(Vec2::new(90.0, 26.0)),
+                );
+                self.automation
+                    .insert("dialog.add.video.browse".into(), browse.rect);
+                if browse.clicked() && self.smoke.is_none() {
+                    self.start_video_probe(ctx, true);
+                }
+                if path.lost_focus()
+                    && ctx.input(|input| input.key_pressed(egui::Key::Enter))
+                    && self.video_ui.job.is_none()
+                    && !self.video_ui.path.trim().is_empty()
+                {
+                    self.start_video_probe(ctx, false);
+                }
+            });
+            let list_height = (ui.available_height() - 72.0).max(84.0);
+            let mut selected_path = None;
+            let recent = egui::Frame::new()
+                .fill(Color32::WHITE)
+                .corner_radius(0)
+                .stroke(Stroke::new(1.0, Color32::from_rgb(190, 196, 203)))
+                .inner_margin(2)
+                .show(ui, |ui| {
+                    egui::ScrollArea::vertical()
+                        .id_salt("video.recent.files")
+                        .max_height(list_height)
+                        .auto_shrink([false, false])
+                        .show(ui, |ui| {
+                            if self.video_ui.history.paths().is_empty() {
+                                ui.label(
+                                    RichText::new("Choose Browse or enter an MP4 path.")
+                                        .color(FORM_TEXT),
+                                );
+                            }
+                            for (index, path) in self.video_ui.history.paths().iter().enumerate() {
+                                let enabled = self.video_ui.job.is_none();
+                                let selected = self.video_ui.path == *path;
+                                let row = ui
+                                    .push_id(("video.recent.file", path), |ui| {
+                                        let (rect, response) = ui.allocate_exact_size(
+                                            Vec2::new(ui.available_width(), 22.0),
+                                            if enabled {
+                                                Sense::click()
+                                            } else {
+                                                Sense::hover()
+                                            },
+                                        );
+                                        if selected || response.hovered() {
+                                            let fill = if selected {
+                                                ui.visuals().selection.bg_fill
+                                            } else {
+                                                Color32::from_rgb(235, 240, 245)
+                                            };
+                                            ui.painter().rect_filled(rect, 0.0, fill);
+                                        }
+                                        let mut label_ui = ui.new_child(
+                                            egui::UiBuilder::new()
+                                                .id_salt("filename")
+                                                .max_rect(rect.shrink2(Vec2::new(4.0, 2.0)))
+                                                .layout(egui::Layout::left_to_right(
+                                                    egui::Align::Center,
+                                                )),
+                                        );
+                                        label_ui.add(
+                                            egui::Label::new(RichText::new(path).color(FORM_TEXT))
+                                                .truncate(),
+                                        );
+                                        response.widget_info(|| {
+                                            egui::WidgetInfo::labeled(
+                                                egui::WidgetType::SelectableLabel,
+                                                enabled,
+                                                path,
+                                            )
+                                        });
+                                        response.on_hover_text(path)
+                                    })
+                                    .inner;
+                                self.automation
+                                    .insert(format!("dialog.add.video.recent.{index}"), row.rect);
+                                if enabled && row.clicked() {
+                                    selected_path = Some(path.clone());
+                                }
+                            }
+                        });
+                });
             self.automation
-                .insert("dialog.add.video.browse".into(), browse.rect);
-            if browse.clicked() && self.smoke.is_none() {
-                self.start_video_probe(ctx, true);
-            }
-            let validate = ui.add_enabled(
-                self.video_ui.job.is_none() && !self.video_ui.path.trim().is_empty(),
-                egui::Button::new("Validate video"),
-            );
-            self.automation
-                .insert("dialog.add.video.validate".into(), validate.rect);
-            if validate.clicked() {
+                .insert("dialog.add.video.recent".into(), recent.response.rect);
+            if let Some(path) = selected_path {
+                self.video_ui.path = path;
+                self.video_ui.probe = None;
+                self.video_ui.add_error = None;
                 self.start_video_probe(ctx, false);
             }
-        });
-        if self.video_ui.job.is_some() {
-            ui.label("Probing the MP4 container and its decoder…");
-        }
-        if let Some(probe) = &self.video_ui.probe {
-            let rate = if probe.frame_rate_denominator > 0 {
-                f64::from(probe.frame_rate_numerator) / f64::from(probe.frame_rate_denominator)
+            ui.horizontal(|ui| {
+                ui.add_sized([40.0, 26.0], egui::Label::new("Name"));
+                let name_width = (ui.available_width() - 178.0).max(80.0);
+                let hint = default_video_label(&self.video_ui.path);
+                let name = ui.add_sized(
+                    [name_width, 26.0],
+                    egui::TextEdit::singleline(&mut self.video_ui.label)
+                        .char_limit(64)
+                        .hint_text(hint),
+                );
+                self.automation
+                    .insert("dialog.add.video.name".into(), name.rect);
+                let check = ui.add_enabled(
+                    self.video_ui.job.is_none() && !self.video_ui.path.trim().is_empty(),
+                    egui::Button::new("Check file").min_size(Vec2::new(90.0, 26.0)),
+                );
+                self.automation
+                    .insert("dialog.add.video.validate".into(), check.rect);
+                if check.clicked() {
+                    self.start_video_probe(ctx, false);
+                }
+                let clear = ui
+                    .add_enabled(
+                        self.video_ui.job.is_none() && !self.video_ui.history.paths().is_empty(),
+                        egui::Button::new("Clear").min_size(Vec2::new(76.0, 26.0)),
+                    )
+                    .on_hover_text("Clear recent files. Files and existing inputs stay in place.");
+                self.automation
+                    .insert("dialog.add.video.clear".into(), clear.rect);
+                if clear.clicked() {
+                    self.video_ui.history.clear();
+                }
+            });
+            let (status, color) = if let Some(error) = &self.video_ui.add_error {
+                (error.clone(), RED)
+            } else if self.video_ui.job.is_some() {
+                ("Checking video file…".into(), FORM_TEXT)
+            } else if let Some(probe) = &self.video_ui.probe {
+                let rate = if probe.frame_rate_denominator > 0 {
+                    f64::from(probe.frame_rate_numerator) / f64::from(probe.frame_rate_denominator)
+                } else {
+                    0.0
+                };
+                (
+                    format!(
+                        "{}×{} · {rate:.3} fps · Video only",
+                        probe.width, probe.height
+                    ),
+                    FORM_TEXT,
+                )
             } else {
-                0.0
+                (
+                    "MP4 video only. Add audio as a separate input.".into(),
+                    FORM_TEXT,
+                )
             };
-            ui.label(format!(
-                "Validated: {}×{} · {rate:.3} fps · video only",
-                probe.width, probe.height
-            ));
-            ui.label("The owner worker decodes independently; Preview and Program use the newest accepted frame.");
-        }
-        if let Some(error) = &self.video_ui.add_error {
-            let label = ui.colored_label(RED, error);
+            let status = ui
+                .allocate_ui_with_layout(
+                    Vec2::new(ui.available_width(), 22.0),
+                    egui::Layout::left_to_right(egui::Align::Center),
+                    |ui| {
+                        ui.add(egui::Label::new(RichText::new(&status).color(color)).truncate())
+                            .on_hover_text(&status)
+                    },
+                )
+                .inner;
             self.automation
-                .insert("dialog.add.video.error".into(), label.rect);
-        }
-        ui.label("Video descriptor only: no MP4 audio, GPU decode, camera, capture card or network stream is opened.");
+                .insert("dialog.add.video.status".into(), status.rect);
+            if self.video_ui.add_error.is_some() {
+                self.automation
+                    .insert("dialog.add.video.error".into(), status.rect);
+            }
+        });
     }
 
     pub(crate) fn confirm_video_input(&mut self, ctx: &egui::Context) -> bool {
@@ -434,11 +605,10 @@ impl RustMixApp {
             return false;
         }
         let label = if self.video_ui.label.trim().is_empty() {
-            "Video file"
+            default_video_label(&probe.path)
         } else {
-            self.video_ui.label.trim()
-        }
-        .to_owned();
+            self.video_ui.label.trim().to_owned()
+        };
         let config = InputConfig {
             video_source: Some(source),
             ..InputConfig::default()
@@ -556,6 +726,23 @@ mod tests {
         app.video_ui.path = r"C:\media\other.mp4".into();
         assert!(!app.confirm_video_input(&ctx));
         assert_eq!(*app.engine.project(), before);
+    }
+
+    #[test]
+    fn unnamed_video_uses_a_bounded_file_name_without_switching_preview_or_program() {
+        let mut app = RustMixApp::headless();
+        let ctx = egui::Context::default();
+        let path = format!("C:/media/{}.mp4", "é".repeat(64));
+        app.video_ui.path = path.clone();
+        app.video_ui.probe = Some(probe(&path));
+        let before = app.engine.project().clone();
+        assert!(app.video_add_ready());
+        assert!(app.confirm_video_input(&ctx));
+        let added = app.engine.project().inputs.last().unwrap();
+        assert_eq!(added.name, "é".repeat(32));
+        assert_eq!(app.engine.project().program, before.program);
+        assert_eq!(app.engine.project().preview, before.preview);
+        assert_eq!(default_video_label(""), "Video file");
     }
 
     #[test]
@@ -779,6 +966,110 @@ mod tests {
         click(&mut app, &ctx, "dialog.add.cancel", size);
         assert!(!app.add_open);
         assert!(app.video_ui.path.is_empty() && app.video_ui.probe.is_none());
+        assert_eq!(*app.engine.project(), before);
+    }
+
+    #[test]
+    fn default_video_form_fills_its_page_and_keeps_real_controls_inside_compact_and_large_dialogs()
+    {
+        for size in [
+            [734.0, 466.0],
+            [1100.0, 700.0],
+            [1600.0, 900.0],
+            [1917.0, 1168.0],
+        ] {
+            let mut app = RustMixApp::headless();
+            let ctx = egui::Context::default();
+            app.theme(&ctx);
+            let before = app.engine.project().clone();
+            app.dispatch(Action::Add, &ctx);
+            assert_eq!(app.add_tab, VIDEO_TAB);
+            for _ in 0..5 {
+                frame(&mut app, &ctx, vec![], size);
+            }
+            let page = *app.automation.get("dialog.add.page").unwrap();
+            let path = *app.automation.get("dialog.add.video.path").unwrap();
+            let browse = *app.automation.get("dialog.add.video.browse").unwrap();
+            let list = *app.automation.get("dialog.add.video.recent").unwrap();
+            let video_category = *app.automation.get("dialog.add.video").unwrap();
+            assert!(
+                (video_category.height() - (size[0] * 38.0 / 1917.0).clamp(25.0, 38.0)).abs()
+                    <= 1.0
+            );
+            assert!((path.center().y - browse.center().y).abs() <= 1.0);
+            assert!(path.right() < browse.left());
+            assert!(path.width() >= page.width() * 0.65);
+            assert!(list.width() >= page.width() * 0.94);
+            assert!(list.height() >= page.height() * 0.45);
+            for id in [
+                "dialog.add.video.path",
+                "dialog.add.video.browse",
+                "dialog.add.video.recent",
+                "dialog.add.video.name",
+                "dialog.add.video.validate",
+                "dialog.add.video.clear",
+            ] {
+                assert!(
+                    page.expand(1.0)
+                        .contains_rect(*app.automation.get(id).unwrap()),
+                    "Video form clipped {id} at {size:?}"
+                );
+            }
+            let output = ctx.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(Rect::from_min_size(Pos2::ZERO, Vec2::new(size[0], size[1]))),
+                    ..Default::default()
+                },
+                |ui| app.frame_ui(ui),
+            );
+            for shape in output.shapes {
+                if let egui::Shape::Text(text) = shape.shape {
+                    let label = text.galley.job.text.to_lowercase();
+                    for jargon in [
+                        "owner worker",
+                        "descriptor",
+                        "media foundation",
+                        "gpu decode",
+                    ] {
+                        assert!(
+                            !label.contains(jargon),
+                            "Implementation details are not operator guidance: {label}"
+                        );
+                    }
+                }
+            }
+            click(&mut app, &ctx, "dialog.add.confirm", size);
+            assert!(app.add_open);
+            click(&mut app, &ctx, "dialog.add.cancel", size);
+            assert!(!app.add_open);
+            assert_eq!(*app.engine.project(), before);
+        }
+    }
+
+    #[test]
+    fn recent_file_selection_and_clear_never_add_or_delete_an_input_or_file() {
+        let folder = tempfile::tempdir().unwrap();
+        let path = folder.path().join("old clip.mp4");
+        std::fs::write(&path, b"invalid MP4 fixture").unwrap();
+        let path = path.to_str().unwrap().to_owned();
+        let mut app = RustMixApp::headless();
+        let ctx = egui::Context::default();
+        app.theme(&ctx);
+        app.video_ui.history.record(&path);
+        app.dispatch(Action::Add, &ctx);
+        let before = app.engine.project().clone();
+        let size = [1600.0, 900.0];
+        click(&mut app, &ctx, "dialog.add.video.recent.0", size);
+        wait_probe(&mut app, &ctx, size);
+        assert_eq!(app.video_ui.path, path);
+        assert!(app.video_ui.probe.is_none() && app.video_ui.add_error.is_some());
+        assert_eq!(*app.engine.project(), before);
+        click(&mut app, &ctx, "dialog.add.video.clear", size);
+        assert!(app.video_ui.history.paths().is_empty());
+        assert!(Path::new(&path).is_file());
+        assert_eq!(*app.engine.project(), before);
+        click(&mut app, &ctx, "dialog.add.cancel", size);
+        assert!(app.video_ui.path.is_empty());
         assert_eq!(*app.engine.project(), before);
     }
 }

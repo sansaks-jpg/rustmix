@@ -20,6 +20,7 @@ mod reference_smoke;
 mod smoke;
 mod snapshot;
 mod video_controls;
+mod video_history;
 mod video_player;
 mod video_smoke;
 mod workspace;
@@ -696,6 +697,9 @@ impl RustMixApp {
             }
         }
         if let Some(storage) = cc.storage {
+            app.video_ui.history = video_history::VideoHistory::from_json(
+                storage.get_string("recent-video-files.v1").as_deref(),
+            );
             app.basic_mode = storage.get_string("basic-mode.v1").as_deref() == Some("true");
             app.program_output
                 .restore_preferences(storage.get_string("program-output.v1").as_deref());
@@ -822,9 +826,9 @@ impl RustMixApp {
             job: None,
             last_autosave: Instant::now(),
             add_open: false,
-            add_tab: 0,
+            add_tab: dialogs::VIDEO_TAB,
             add_name: "New synthetic input".into(),
-            add_kind: InputKind::Grid,
+            add_kind: InputKind::Color,
             add_alpha: false,
             add_interlaced: false,
             add_number: 1,
@@ -2544,6 +2548,9 @@ impl eframe::App for RustMixApp {
         }
     }
     fn save(&mut self, storage: &mut dyn eframe::Storage) {
+        if let Ok(json) = self.video_ui.history.to_json() {
+            storage.set_string("recent-video-files.v1", json);
+        }
         storage.set_string("basic-mode.v1", self.basic_mode.to_string());
         storage.set_string("program-output.v1", self.program_output.preferences_json());
         storage.set_string(

@@ -199,7 +199,7 @@ fn sidebar_row(
                 egui::pos2(text_x, rect.center().y),
                 egui::Align2::LEFT_CENTER,
                 label,
-                egui::FontId::proportional(12.0),
+                egui::FontId::proportional((row_height * 14.0 / 38.0).clamp(12.0, 14.0)),
                 Color32::WHITE,
             );
         response.on_hover_text(label)
@@ -535,10 +535,11 @@ impl RustMixApp {
                     // while placing it above the procedural library and future integrations.
                     let categories = ADD_CATEGORIES.into_iter().enumerate().skip(VIDEO_TAB)
                         .chain(ADD_CATEGORIES.into_iter().enumerate().take(VIDEO_TAB));
+                    let row_height = (ctx.viewport_rect().width() * 38.0 / 1917.0).clamp(25.0,38.0);
                     for (idx, (label, kind, _)) in categories {
                         let active = app.add_tab == idx && app.add_kind == kind;
                         let supported = matches!(idx, 0 | 1 | 3 | 4 | 6 | 11 | 12 | 13 | 14 | 15 | VIDEO_TAB);
-                        let r = ui.add_enabled_ui(supported, |ui| sidebar_row(ui, active, label, 25.0, Some(idx))).inner
+                        let r = ui.add_enabled_ui(supported, |ui| sidebar_row(ui, active, label, row_height, Some(idx))).inner
                             .on_disabled_hover_text("Unavailable: no media/device backend for this source type");
                         if idx == VIDEO_TAB {
                             app.automation.insert("dialog.add.video".into(), r.rect);
@@ -703,7 +704,12 @@ impl RustMixApp {
                     if cancel.clicked() {
                         close_requested = true;
                     }
-                    let confirm = ui.add_enabled(!self.add_loading && (matches!(self.add_tab, 12 | 13 | VIDEO_TAB) || !self.add_name.trim().is_empty()),
+                    let can_add = !self.add_loading && if self.add_tab == VIDEO_TAB {
+                        self.video_add_ready()
+                    } else {
+                        matches!(self.add_tab, 12 | 13) || !self.add_name.trim().is_empty()
+                    };
+                    let confirm = ui.add_enabled(can_add,
                         egui::Button::new(RichText::new("OK").color(Color32::WHITE).strong())
                             .fill(PROGRAM)
                             .min_size(footer_size(ui, FooterRole::Confirm)),
@@ -3594,6 +3600,7 @@ mod operator_dialog_tests {
         let ctx = egui::Context::default();
         app.theme(&ctx);
         app.dispatch(Action::Add, &ctx);
+        click(&mut app, &ctx, "dialog.add.kind.Grid");
         app.add_name = "   ".into();
         let original_count = app.engine.project().inputs.len();
         click(&mut app, &ctx, "dialog.add.confirm");
