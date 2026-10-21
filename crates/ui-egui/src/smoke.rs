@@ -342,11 +342,11 @@ impl RustMixApp {
                     "artifacts/workspace-1100.png".into()
                 } else if s.stage == 50 {
                     "artifacts/overlay-unsaved-1600.png".into()
-                } else if s.stage == 54 || s.stage == 57 {
-                    let (stem, requested) = if s.stage == 57 {
-                        ("workspace-reference-client", [1917, 1168])
-                    } else {
-                        ("workspace-reference", [1917, 1198])
+                } else if matches!(s.stage, 54 | 57 | 60) {
+                    let (stem, requested) = match s.stage {
+                        54 => ("workspace-reference", [1917, 1198]),
+                        57 => ("workspace-reference-client", [1917, 1168]),
+                        _ => ("add-input-reference", [1917, 1168]),
                     };
                     let expected = ctx.viewport_rect().size() * ctx.pixels_per_point();
                     if image.width() != expected.x.round() as usize
@@ -864,6 +864,44 @@ impl RustMixApp {
                 s.stage = 57;
             }
             57 if s.captured => {
+                self.dispatch(Action::Add, ctx);
+                s.stage = 59;
+            }
+            59 => {
+                if (ctx.viewport_rect().size() - egui::vec2(1917.0, 1168.0)).length() > 1.0
+                    || self.add_tab != dialogs::VIDEO_TAB
+                {
+                    return Err(Error::Invalid(
+                        "Reference Input Select has the wrong viewport or source page".into(),
+                    ));
+                }
+                self.validate_dialog_geometry(ctx, "dialog.add")?;
+                std::fs::write(
+                    "artifacts/add-input-reference-elements.json",
+                    serde_json::to_vec_pretty(
+                        &self
+                            .automation
+                            .iter()
+                            .filter(|(id, _)| id.starts_with("dialog.add"))
+                            .map(|(id, rect)| (id, format!("{rect:?}")))
+                            .collect::<HashMap<_, _>>(),
+                    )?,
+                )?;
+                ctx.send_viewport_cmd(egui::ViewportCommand::Screenshot(egui::UserData::default()));
+                s.captured = false;
+                s.stage = 60;
+            }
+            60 if s.captured => {
+                self.native_click(s, "dialog.add.cancel")?;
+                s.stage = 61;
+            }
+            61 => {
+                if self.add_open {
+                    return Err(Error::Invalid(
+                        "Reference Input Select Cancel did not close".into(),
+                    ));
+                }
+                self.assert_smoke_state()?;
                 // Native processes share the disposable eframe window store.
                 // Do not leak this additional large reference capture into the
                 // existing source/audio/video workflows' 1600x900 workload.

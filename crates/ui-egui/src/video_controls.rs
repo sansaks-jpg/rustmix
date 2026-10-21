@@ -738,7 +738,9 @@ mod tests {
         let before = app.engine.project().clone();
         assert!(app.video_add_ready());
         assert!(app.confirm_video_input(&ctx));
-        let added = app.engine.project().inputs.last().unwrap();
+        let added = app.engine.project().inputs.iter().find(|input|
+            matches!(&input.config.video_source,Some(VideoSource::File { path: selected }) if selected == &path)
+        ).unwrap();
         assert_eq!(added.name, "é".repeat(32));
         assert_eq!(app.engine.project().program, before.program);
         assert_eq!(app.engine.project().preview, before.preview);

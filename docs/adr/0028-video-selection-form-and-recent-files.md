@@ -35,4 +35,6 @@ and PNG tests select those actual pages explicitly. Native acceptance opens
 default Video then uses the quick menu, validates the generated MP4, selects the
 real recent entry, checks unchanged Program/Preview, and retains existing
 decode/pause/resume/save/reopen and GPU drain gates. Inspect exact new Add/Video
-captures. Local verification stays formatting/diff/inventory/script syntax only.
+captures at1600 and1917x1168 (reference client area), retaining observed1600x900
+restoration before subsequent workflows. Local verification stays formatting/diff/
+inventory/script syntax only.
