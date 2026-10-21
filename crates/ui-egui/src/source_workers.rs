@@ -132,7 +132,7 @@ fn tcp(port: u16) -> Result<TcpStream, String> {
     let socket = TcpStream::connect_timeout(&address, Duration::from_secs(2))
         .map_err(|_| "Browser control connection unavailable")?;
     socket
-        .set_read_timeout(Some(Duration::from_secs(3)))
+        .set_read_timeout(Some(Duration::from_secs(10)))
         .map_err(|_| "Browser read timeout unavailable")?;
     socket
         .set_write_timeout(Some(Duration::from_secs(3)))
@@ -160,9 +160,12 @@ fn discovery_body(reader: &mut impl Read) -> Result<Vec<u8>, String> {
             return Err("Browser discovery response exceeds 128 KiB".into());
         }
         let mut chunk = [0_u8; 4096];
-        let read = reader
-            .read(&mut chunk)
-            .map_err(|_| "Browser page discovery timed out")?;
+        let read = reader.read(&mut chunk).map_err(|_| {
+            format!(
+                "Browser page discovery timed out after {} bytes",
+                bytes.len()
+            )
+        })?;
         if read == 0 {
             return Err("Browser discovery response ended before its body".into());
         }
@@ -227,6 +230,56 @@ fn discovery_endpoint(url: &str, port: u16) -> bool {
     url.starts_with(&format!("ws://127.0.0.1:{port}/"))
         || url.starts_with(&format!("ws://localhost:{port}/"))
 }
+
+fn retry_discovery(error: &str) -> bool {
+    error.starts_with("Browser page discovery timed out")
+        || error == "Browser discovery response ended before its body"
+}
+
+/// Chromium can publish `DevToolsActivePort` before its HTTP endpoint is ready
+/// to answer. Retry the bounded request until it responds or the deadline ends.
+fn discover_pages(
+    port: u16,
+    stop: &AtomicBool,
+    process: &mut ProcessOwner,
+) -> Result<Vec<u8>, String> {
+    const DEADLINE: Duration = Duration::from_secs(30);
+    let start = Instant::now();
+    let mut attempts = 0_u32;
+    let mut last_error = "Browser page discovery did not complete".to_owned();
+    loop {
+        if stop.load(Ordering::Acquire) {
+            return Err("Browser start cancelled".to_owned());
+        }
+        if process
+            .child
+            .try_wait()
+            .map_err(|_| "Browser status unavailable")?
+            .is_some()
+        {
+            return Err("Browser exited during startup".into());
+        }
+        attempts = attempts.saturating_add(1);
+        match tcp(port) {
+            Ok(mut socket) => {
+                if socket.write_all(&discovery_request(port)).is_err() {
+                    last_error = "Browser page discovery failed".into();
+                } else {
+                    match discovery_body(&mut socket) {
+                        Ok(body) => return Ok(body),
+                        Err(error) if retry_discovery(&error) => last_error = error,
+                        Err(error) => return Err(error),
+                    }
+                }
+            }
+            Err(error) => last_error = error,
+        }
+        if start.elapsed() >= DEADLINE {
+            return Err(format!("{last_error} after {attempts} attempt(s)"));
+        }
+        thread::sleep(Duration::from_millis(100));
+    }
+}
 impl Browser {
     fn open(url: &str, width: u32, height: u32, stop: &AtomicBool) -> Result<Self, String> {
         let permit = BrowserPermit::acquire()?;
@@ -288,36 +341,7 @@ impl Browser {
                 }
                 thread::sleep(Duration::from_millis(50));
             };
-            let mut discovery = None;
-            for attempt in 0..20 {
-                match tcp(port) {
-                    Ok(socket) => {
-                        discovery = Some(socket);
-                        break;
-                    }
-                    Err(error) if attempt == 19 => return Err(error),
-                    Err(_) => {
-                        if stop.load(Ordering::Acquire) {
-                            return Err("Browser start cancelled".to_owned());
-                        }
-                        if process
-                            .child
-                            .try_wait()
-                            .map_err(|_| "Browser status unavailable")?
-                            .is_some()
-                        {
-                            return Err("Browser exited during startup".into());
-                        }
-                        thread::sleep(Duration::from_millis(100));
-                    }
-                }
-            }
-            let mut discovery =
-                discovery.ok_or_else(|| "Browser control connection unavailable".to_owned())?;
-            discovery
-                .write_all(&discovery_request(port))
-                .map_err(|_| "Browser page discovery failed")?;
-            let body = discovery_body(&mut discovery)?;
+            let body = discover_pages(port, stop, &mut process)?;
             let pages: Vec<Value> =
                 serde_json::from_slice(&body).map_err(|_| "Invalid browser page list")?;
             let ws = pages
@@ -561,6 +585,19 @@ mod tests {
             "wss://127.0.0.1:43210/devtools/page/abc",
         ] {
             assert!(!discovery_endpoint(url, 43210), "{url}");
+        }
+        assert!(retry_discovery(
+            "Browser page discovery timed out after 0 bytes"
+        ));
+        assert!(retry_discovery(
+            "Browser discovery response ended before its body"
+        ));
+        for error in [
+            "Browser discovery transfer encoding unsupported",
+            "Browser discovery length missing or exceeds limit",
+            "Invalid browser response length",
+        ] {
+            assert!(!retry_discovery(error), "{error}");
         }
     }
 }
