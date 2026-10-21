@@ -92,6 +92,12 @@ impl RustMixApp {
                 self.add_png_path = PathBuf::from("artifacts/add-input-fixture.png")
                     .display()
                     .to_string();
+                s.stage = 4;
+            }
+            4 => {
+                if !s.visual_settled(ctx) {
+                    return Ok(());
+                }
                 self.native_click(s, "dialog.add.png.validate")?;
                 s.stage = 3;
             }
