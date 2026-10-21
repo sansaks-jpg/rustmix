@@ -375,4 +375,36 @@ mod tests {
         frame(&mut app, &ctx, size, vec![]);
         assert_eq!(app.program_texture.as_ref().unwrap().size(), [360, 640]);
     }
+    #[test]
+    fn full_hd_25_and_60_landscape_widgets_commit_the_expected_monitor_raster() {
+        let mut app = RustMixApp::headless();
+        let ctx = egui::Context::default();
+        app.theme(&ctx);
+        let size = [1100.0, 700.0];
+        for (rate_id, expected) in [
+            ("25.00.p", Rate::new(25, 1).unwrap()),
+            ("60.00.p", Rate::new(60, 1).unwrap()),
+        ] {
+            app.dispatch(Action::New, &ctx);
+            click(&mut app, &ctx, "dialog.new.size", size);
+            click(&mut app, &ctx, "dialog.new.size.1920x1080", size);
+            click(&mut app, &ctx, "dialog.new.rate", size);
+            click(&mut app, &ctx, &format!("dialog.new.rate.{rate_id}"), size);
+            click(&mut app, &ctx, "dialog.new.confirm", size);
+            assert!(!app.confirm_new, "New did not close for {rate_id}");
+            let preferences = &app.engine.project().preferences;
+            assert_eq!((preferences.width, preferences.height), (1920, 1080));
+            assert_eq!(preferences.rate, expected);
+            assert_eq!(preferences.scan, ScanMode::Progressive);
+            assert_eq!(preferences.video_standard().monitor_size(), [640, 360]);
+            assert_eq!(app.engine.project().inputs.len(), 2);
+            frame(&mut app, &ctx, size, vec![]);
+            assert_eq!(
+                app.program_texture.as_ref().map(egui::TextureHandle::size),
+                Some([640, 360]),
+                "monitor raster did not follow {rate_id}"
+            );
+            app.saved_revision = app.engine.project().revision;
+        }
+    }
 }

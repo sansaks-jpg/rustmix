@@ -215,6 +215,18 @@ fn discovery_body(reader: &mut impl Read) -> Result<Vec<u8>, String> {
         }
     }
 }
+/// Chromium derives the DevTools websocket URL from the HTTP Host header. A
+/// bare `localhost` host produces `ws://localhost/...` without the ephemeral
+/// port, which cannot reach the just-started browser.
+fn discovery_request(port: u16) -> Vec<u8> {
+    format!("GET /json/list HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nConnection: close\r\n\r\n")
+        .into_bytes()
+}
+
+fn discovery_endpoint(url: &str, port: u16) -> bool {
+    url.starts_with(&format!("ws://127.0.0.1:{port}/"))
+        || url.starts_with(&format!("ws://localhost:{port}/"))
+}
 impl Browser {
     fn open(url: &str, width: u32, height: u32, stop: &AtomicBool) -> Result<Self, String> {
         let permit = BrowserPermit::acquire()?;
@@ -276,11 +288,34 @@ impl Browser {
                 }
                 thread::sleep(Duration::from_millis(50));
             };
-            let mut discovery = tcp(port)?;
+            let mut discovery = None;
+            for attempt in 0..20 {
+                match tcp(port) {
+                    Ok(socket) => {
+                        discovery = Some(socket);
+                        break;
+                    }
+                    Err(error) if attempt == 19 => return Err(error),
+                    Err(_) => {
+                        if stop.load(Ordering::Acquire) {
+                            return Err("Browser start cancelled".to_owned());
+                        }
+                        if process
+                            .child
+                            .try_wait()
+                            .map_err(|_| "Browser status unavailable")?
+                            .is_some()
+                        {
+                            return Err("Browser exited during startup".into());
+                        }
+                        thread::sleep(Duration::from_millis(100));
+                    }
+                }
+            }
+            let mut discovery =
+                discovery.ok_or_else(|| "Browser control connection unavailable".to_owned())?;
             discovery
-                .write_all(
-                    b"GET /json/list HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n",
-                )
+                .write_all(&discovery_request(port))
                 .map_err(|_| "Browser page discovery failed")?;
             let body = discovery_body(&mut discovery)?;
             let pages: Vec<Value> =
@@ -291,9 +326,7 @@ impl Browser {
                 .and_then(|p| p.get("webSocketDebuggerUrl"))
                 .and_then(Value::as_str)
                 .ok_or("Browser page unavailable")?;
-            if !ws.starts_with(&format!("ws://127.0.0.1:{port}/"))
-                && !ws.starts_with(&format!("ws://localhost:{port}/"))
-            {
+            if !discovery_endpoint(ws, port) {
                 return Err("Unexpected browser control endpoint".into());
             }
             let config = WebSocketConfig::default()
@@ -506,6 +539,28 @@ mod tests {
             "HTTP/1.1 200 OK\r\nContent-Length: 2\r\nContent-Length: 2\r\n\r\n[]",
         ] {
             assert!(discovery_body(&mut std::io::Cursor::new(response.as_bytes())).is_err());
+        }
+    }
+    #[test]
+    fn discovery_requests_the_real_port_and_accepts_only_that_loopback_endpoint() {
+        let request = String::from_utf8(discovery_request(43210)).unwrap();
+        assert!(request.contains("Host: 127.0.0.1:43210\r\n"));
+        assert!(request.starts_with("GET /json/list HTTP/1.1\r\n"));
+        assert!(discovery_endpoint(
+            "ws://127.0.0.1:43210/devtools/page/abc",
+            43210
+        ));
+        assert!(discovery_endpoint(
+            "ws://localhost:43210/devtools/page/abc",
+            43210
+        ));
+        for url in [
+            "ws://localhost/devtools/page/abc",
+            "ws://127.0.0.1:43211/devtools/page/abc",
+            "ws://example.com:43210/devtools/page/abc",
+            "wss://127.0.0.1:43210/devtools/page/abc",
+        ] {
+            assert!(!discovery_endpoint(url, 43210), "{url}");
         }
     }
 }

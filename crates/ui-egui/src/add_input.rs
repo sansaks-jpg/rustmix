@@ -884,6 +884,54 @@ mod tests {
     }
 
     #[test]
+    fn every_add_category_opens_a_real_or_explicitly_unavailable_page() {
+        let mut app = RustMixApp::headless();
+        let ctx = egui::Context::default();
+        app.theme(&ctx);
+        app.dispatch(Action::Add, &ctx);
+        let before = app.engine.project().clone();
+        for (tab, (label, _, _)) in ADD_CATEGORIES.iter().enumerate() {
+            app.select_add_category(tab);
+            for _ in 0..4 {
+                frame(&mut app, &ctx, Vec2::new(1600.0, 900.0), vec![]);
+            }
+            assert!(app.add_open, "{label}");
+            assert_eq!(app.add_tab, tab, "{label}");
+            let page = *app.automation.get("dialog.add.page").unwrap();
+            assert!(ctx.viewport_rect().contains_rect(page), "{label}");
+            assert!(app.automation.contains_key("dialog.add.confirm"), "{label}");
+            if unavailable_reason(tab).is_some() {
+                assert!(
+                    app.automation.contains_key("dialog.add.unavailable"),
+                    "{label}"
+                );
+                assert!(app.add_disabled_reason().is_some(), "{label}");
+            } else {
+                assert!(
+                    !app.automation.contains_key("dialog.add.unavailable"),
+                    "{label}"
+                );
+                let field = match tab {
+                    1 => "dialog.add.png.path",
+                    VIDEO_TAB => "dialog.add.video.path",
+                    9 => "dialog.add.photos.folder",
+                    12 => "dialog.add.audio.path",
+                    13 => "dialog.add.audio.capture",
+                    17 => "dialog.add.browser.url",
+                    22 => "dialog.add.camera.device",
+                    _ => "dialog.add.name",
+                };
+                let visible = app.automation.get(field);
+                assert!(visible.is_some(), "{label} is missing its real controls");
+                assert!(page.expand(1.0).contains_rect(*visible.unwrap()), "{label}");
+            }
+        }
+        click(&mut app, &ctx, "dialog.add.cancel");
+        assert!(!app.add_open);
+        assert_eq!(*app.engine.project(), before);
+    }
+
+    #[test]
     fn sidebar_supports_keyboard_selection_and_source_icons_follow_semantics() {
         assert_eq!(source_icon(VIDEO_TAB), SourceIcon::Film);
         assert_eq!(source_icon(1), SourceIcon::Image);

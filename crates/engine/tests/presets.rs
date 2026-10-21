@@ -2,8 +2,10 @@
 use rustmix_engine::{video_format::*, *};
 
 #[test]
-fn blank_presets_apply_portrait_fractional_and_scan_formats_without_demo_media() {
-    for (width, height) in [(1920, 1080), (1080, 1920)] {
+fn blank_presets_apply_every_canvas_fractional_and_scan_format_without_demo_media() {
+    let folder = tempfile::tempdir().unwrap();
+    let path = folder.path().join("preset.json");
+    for (width, height) in CANVAS_SIZES {
         for (rate, scan) in rate_options() {
             let format = VideoStandard {
                 width,
@@ -11,9 +13,19 @@ fn blank_presets_apply_portrait_fractional_and_scan_formats_without_demo_media()
                 rate,
                 scan,
             };
+            let expected_monitor = if height > width {
+                [360, 640]
+            } else {
+                [640, 360]
+            };
+            assert_eq!(format.monitor_size(), expected_monitor);
             let engine = Engine::new_preset(format, 1234).unwrap();
             let project = engine.project();
-            assert_eq!(project.preferences.video_standard(), format);
+            assert_eq!(
+                project.preferences.video_standard(),
+                format,
+                "{width}x{height} {rate:?} {scan:?}"
+            );
             assert_eq!(project.inputs.len(), 2);
             assert!(
                 project
@@ -24,11 +36,28 @@ fn blank_presets_apply_portrait_fractional_and_scan_formats_without_demo_media()
             assert_ne!(project.program, project.preview);
             assert!(engine.transition().is_none());
             assert!(project.overlays.standard.iter().all(|o| !o.enabled));
-            let folder = tempfile::tempdir().unwrap();
-            let path = folder.path().join("preset.json");
             persistence::save(&path, project).unwrap();
             assert_eq!(persistence::load(&path).unwrap(), *project);
         }
+    }
+}
+
+#[test]
+fn full_hd_presets_accept_25_and_60_progressive_frames_per_second() {
+    for (numerator, denominator) in [(25, 1), (60, 1)] {
+        let format = VideoStandard {
+            width: 1920,
+            height: 1080,
+            rate: Rate::new(numerator, denominator).unwrap(),
+            scan: ScanMode::Progressive,
+        };
+        let engine = Engine::new_preset(format, 0).unwrap();
+        assert_eq!(
+            engine.project().preferences.video_standard(),
+            format,
+            "{numerator}/{denominator}"
+        );
+        assert_eq!(format.monitor_size(), [640, 360]);
     }
 }
 
