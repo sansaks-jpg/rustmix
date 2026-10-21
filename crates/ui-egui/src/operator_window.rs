@@ -3,6 +3,21 @@ use super::*;
 
 const CHROME_KEY: &str = "operator.window.chrome.v1";
 
+#[derive(Clone, Copy, Serialize, Deserialize)]
+struct DialogWidth {
+    viewport: f32,
+    preferred: f32,
+    rendered: f32,
+}
+
+impl DialogWidth {
+    fn valid(self) -> bool {
+        [self.viewport, self.preferred, self.rendered]
+            .into_iter()
+            .all(|value| value.is_finite() && (1.0..=65536.0).contains(&value))
+    }
+}
+
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct WindowChrome {
     pub name: &'static str,
@@ -113,25 +128,41 @@ impl OperatorWindow<'_> {
     ) -> Option<egui::InnerResponse<Option<R>>> {
         let id = egui::Id::new(self.name);
         let drag_id = id.with("caption.drag");
+        let width_id = id.with("operator.default.width.v1");
+        let viewport_width = ctx.viewport_rect().width();
+        let width_before = ctx
+            .data_mut(|data| data.get_persisted::<DialogWidth>(width_id))
+            .filter(|width| width.valid());
         let previous = ctx.memory(|memory| memory.area_rect(id));
-        let delta = if ctx
+        let dragging = ctx
             .read_response(drag_id)
-            .is_some_and(|response| response.dragged())
-        {
+            .is_some_and(|response| response.dragged());
+        let delta = if dragging {
             ctx.input(|input| input.pointer.delta())
         } else {
             Vec2::ZERO
         };
-        let position = previous
+        let adapt_default = !dragging
+            && width_before.is_some_and(|width| {
+                (width.viewport - viewport_width).abs() > 1.0
+                    && (width.rendered - width.preferred).abs() <= 4.0
+            });
+        let mut position = previous
             .map(|rect| rect.min + delta)
             .filter(|position| position.is_finite())
             .unwrap_or(self.bounds.center() - self.size * 0.5);
+        if adapt_default && let Some(width) = width_before {
+            let scaled_x = position.x * viewport_width / width.viewport;
+            if scaled_x.is_finite() {
+                position.x = scaled_x;
+            }
+        }
         let frame = egui::Frame::window(&ctx.global_style()).inner_margin(0);
         let mut native_open = *self.open;
         let popup_was_open = egui::Popup::is_any_open(ctx);
         let mut close_clicked = false;
         let mut chrome = None;
-        let output = egui::Window::new(self.title.clone())
+        let window = egui::Window::new(self.title.clone())
             .id(id)
             .open(&mut native_open)
             .title_bar(false)
@@ -143,97 +174,99 @@ impl OperatorWindow<'_> {
             .current_pos(position)
             .min_size(self.minimum)
             .max_size(self.maximum)
-            .constrain_to(self.bounds)
-            .show(ctx, |ui| {
-                let viewport_width = ctx.viewport_rect().width();
-                let height = (viewport_width * 32.0 / 1912.0).clamp(24.0, 32.0);
-                let (header, _) = ui
-                    .allocate_exact_size(egui::vec2(ui.available_width(), height), Sense::hover());
-                ui.painter().rect_filled(header, 0.0, FORM_LIGHT);
-                let close = Rect::from_min_max(
-                    egui::pos2(header.right() - height * 1.45, header.top()),
-                    header.max,
-                );
-                let drag =
-                    Rect::from_min_max(header.min, egui::pos2(close.left(), header.bottom()));
-                let response = ui.interact(drag, drag_id, Sense::drag());
-                response.widget_info(|| {
-                    egui::WidgetInfo::labeled(
-                        egui::WidgetType::Label,
-                        ui.is_enabled(),
-                        self.title.text(),
-                    )
-                });
-                let close_response = ui.interact(close, id.with("caption.close"), Sense::click());
-                close_response.widget_info(|| {
-                    egui::WidgetInfo::labeled(
-                        egui::WidgetType::Button,
-                        ui.is_enabled(),
-                        "Close window",
-                    )
-                });
-                let close_hovered = close_response.hovered();
-                if close_hovered {
-                    ui.painter()
-                        .rect_filled(close, 0.0, Color32::from_rgb(196, 43, 44));
-                }
-                paint_vector_icon(
-                    ui.painter(),
-                    close,
-                    VectorIcon::Close,
-                    if close_hovered {
-                        Color32::WHITE
-                    } else {
-                        FORM_TEXT
-                    },
-                );
-                close_clicked = close_response.on_hover_text("Close window (Esc)").clicked();
-                let badge_size = (height - 10.0).clamp(14.0, 20.0);
-                let badge = Rect::from_center_size(
-                    egui::pos2(header.left() + 6.0 + badge_size * 0.5, header.center().y),
-                    Vec2::splat(badge_size),
-                );
-                ui.painter()
-                    .rect_filled(badge, 1.0, Color32::from_rgb(24, 124, 83));
-                ui.painter().text(
-                    badge.center(),
-                    egui::Align2::CENTER_CENTER,
-                    "R",
-                    egui::FontId::monospace((badge_size * 0.7).clamp(9.0, 14.0)),
-                    Color32::WHITE,
-                );
-                let title_rect = Rect::from_min_max(
-                    egui::pos2(badge.right() + 6.0, header.top()),
-                    egui::pos2(close.left() - 6.0, header.bottom()),
-                );
-                let mut title_ui = ui.new_child(
-                    egui::UiBuilder::new()
-                        .id_salt(id.with("caption.title"))
-                        .max_rect(title_rect)
-                        .layout(egui::Layout::left_to_right(egui::Align::Center)),
-                );
-                title_ui.set_clip_rect(title_rect.intersect(ui.clip_rect()));
-                let title = title_ui.add(
-                    egui::Label::new(
-                        RichText::new(self.title.text())
-                            .color(FORM_TEXT)
-                            .size((viewport_width * 14.0 / 1912.0).clamp(12.0, 14.0)),
-                    )
-                    .truncate()
-                    .selectable(false),
-                );
-                chrome = Some(WindowChrome {
-                    name: self.name,
-                    window: Rect::NOTHING,
-                    header,
-                    title: title.rect,
-                    close,
-                });
-                egui::Frame::new()
-                    .inner_margin(6)
-                    .show(ui, add_contents)
-                    .inner
+            .constrain_to(self.bounds);
+        // A retained default tracks the operator viewport. Limit width for
+        // this paint only; subsequent paints keep normal manual resizing.
+        let window = if adapt_default {
+            window.min_width(self.size.x).max_width(self.size.x)
+        } else {
+            window
+        };
+        let output = window.show(ctx, |ui| {
+            let viewport_width = ctx.viewport_rect().width();
+            let height = (viewport_width * 32.0 / 1912.0).clamp(24.0, 32.0);
+            let (header, _) =
+                ui.allocate_exact_size(egui::vec2(ui.available_width(), height), Sense::hover());
+            ui.painter().rect_filled(header, 0.0, FORM_LIGHT);
+            let close = Rect::from_min_max(
+                egui::pos2(header.right() - height * 1.45, header.top()),
+                header.max,
+            );
+            let drag = Rect::from_min_max(header.min, egui::pos2(close.left(), header.bottom()));
+            let response = ui.interact(drag, drag_id, Sense::drag());
+            response.widget_info(|| {
+                egui::WidgetInfo::labeled(
+                    egui::WidgetType::Label,
+                    ui.is_enabled(),
+                    self.title.text(),
+                )
             });
+            let close_response = ui.interact(close, id.with("caption.close"), Sense::click());
+            close_response.widget_info(|| {
+                egui::WidgetInfo::labeled(egui::WidgetType::Button, ui.is_enabled(), "Close window")
+            });
+            let close_hovered = close_response.hovered();
+            if close_hovered {
+                ui.painter()
+                    .rect_filled(close, 0.0, Color32::from_rgb(196, 43, 44));
+            }
+            paint_vector_icon(
+                ui.painter(),
+                close,
+                VectorIcon::Close,
+                if close_hovered {
+                    Color32::WHITE
+                } else {
+                    FORM_TEXT
+                },
+            );
+            close_clicked = close_response.on_hover_text("Close window (Esc)").clicked();
+            let badge_size = (height - 10.0).clamp(14.0, 20.0);
+            let badge = Rect::from_center_size(
+                egui::pos2(header.left() + 6.0 + badge_size * 0.5, header.center().y),
+                Vec2::splat(badge_size),
+            );
+            ui.painter()
+                .rect_filled(badge, 1.0, Color32::from_rgb(24, 124, 83));
+            ui.painter().text(
+                badge.center(),
+                egui::Align2::CENTER_CENTER,
+                "R",
+                egui::FontId::monospace((badge_size * 0.7).clamp(9.0, 14.0)),
+                Color32::WHITE,
+            );
+            let title_rect = Rect::from_min_max(
+                egui::pos2(badge.right() + 6.0, header.top()),
+                egui::pos2(close.left() - 6.0, header.bottom()),
+            );
+            let mut title_ui = ui.new_child(
+                egui::UiBuilder::new()
+                    .id_salt(id.with("caption.title"))
+                    .max_rect(title_rect)
+                    .layout(egui::Layout::left_to_right(egui::Align::Center)),
+            );
+            title_ui.set_clip_rect(title_rect.intersect(ui.clip_rect()));
+            let title = title_ui.add(
+                egui::Label::new(
+                    RichText::new(self.title.text())
+                        .color(FORM_TEXT)
+                        .size((viewport_width * 14.0 / 1912.0).clamp(12.0, 14.0)),
+                )
+                .truncate()
+                .selectable(false),
+            );
+            chrome = Some(WindowChrome {
+                name: self.name,
+                window: Rect::NOTHING,
+                header,
+                title: title.rect,
+                close,
+            });
+            egui::Frame::new()
+                .inner_margin(6)
+                .show(ui, add_contents)
+                .inner
+        });
         if native_open
             && !popup_was_open
             && !egui::Popup::is_any_open(ctx)
@@ -247,6 +280,14 @@ impl OperatorWindow<'_> {
         *self.open = native_open && !close_clicked;
         if let (Some(output), Some(mut chrome)) = (&output, chrome) {
             chrome.window = output.response.rect;
+            let width = DialogWidth {
+                viewport: viewport_width,
+                preferred: self.size.x,
+                rendered: chrome.window.width(),
+            };
+            if width.valid() {
+                ctx.data_mut(|data| data.insert_persisted(width_id, width));
+            }
             store_chrome(ctx, chrome);
         }
         output

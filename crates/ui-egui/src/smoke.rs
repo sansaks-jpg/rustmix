@@ -876,6 +876,12 @@ impl RustMixApp {
                     ));
                 }
                 self.validate_dialog_geometry(ctx, "dialog.add")?;
+                let body = self.native_geometry_rect(ctx, "dialog.add.body")?;
+                if !(0.66..=0.73).contains(&(body.width() / ctx.viewport_rect().width())) {
+                    return Err(Error::Invalid(
+                        "Default Input Select width did not follow the enlarged viewport".into(),
+                    ));
+                }
                 std::fs::write(
                     "artifacts/add-input-reference-elements.json",
                     serde_json::to_vec_pretty(

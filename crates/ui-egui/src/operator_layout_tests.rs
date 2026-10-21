@@ -72,6 +72,90 @@ fn escape_events(repeat: bool, modifiers: egui::Modifiers) -> Vec<egui::Event> {
 }
 
 #[test]
+fn default_source_dialog_width_tracks_the_parent_and_preserves_a_real_operator_resize() {
+    let mut app = RustMixApp::headless();
+    let ctx = egui::Context::default();
+    app.theme(&ctx);
+    app.dispatch(Action::Add, &ctx);
+    let before = app.engine.project().clone();
+    for size in [
+        Vec2::new(1600.0, 900.0),
+        Vec2::new(1917.0, 1168.0),
+        Vec2::new(1100.0, 700.0),
+        Vec2::new(1917.0, 1168.0),
+    ] {
+        for _ in 0..5 {
+            let _ = paint(&mut app, &ctx, size);
+        }
+        let window = *app
+            .automation
+            .get("dialog.add_input.chrome.window")
+            .unwrap();
+        let expected = (size.x * 0.707).max(780.0).min(size.x - 36.0);
+        assert!(
+            (window.width() - expected).abs() <= 4.0,
+            "Retained default width must follow the parent: {size:?}, {window:?}, expected {expected}"
+        );
+        app.validate_dialog_geometry(&ctx, "dialog.add").unwrap();
+        assert_eq!(*app.engine.project(), before);
+    }
+    // The starting dialog is below its right boundary, leaving room for a real
+    // edge drag to distinguish a custom width from the responsive default.
+    let size = Vec2::new(1917.0, 1168.0);
+    let original = *app
+        .automation
+        .get("dialog.add_input.chrome.window")
+        .unwrap();
+    let start = egui::pos2(original.right() - 2.0, original.center().y);
+    for (pos, pressed) in [
+        (start, Some(true)),
+        (start + Vec2::new(100.0, 0.0), None),
+        (start + Vec2::new(100.0, 0.0), Some(false)),
+    ] {
+        let mut events = vec![egui::Event::PointerMoved(pos)];
+        if let Some(pressed) = pressed {
+            events.push(egui::Event::PointerButton {
+                pos,
+                button: egui::PointerButton::Primary,
+                pressed,
+                modifiers: egui::Modifiers::NONE,
+            });
+        }
+        let _ = ctx.run_ui(
+            egui::RawInput {
+                screen_rect: Some(Rect::from_min_size(Pos2::ZERO, size)),
+                events,
+                ..Default::default()
+            },
+            |ui| app.frame_ui(ui),
+        );
+    }
+    for _ in 0..5 {
+        let _ = paint(&mut app, &ctx, size);
+    }
+    let custom = *app
+        .automation
+        .get("dialog.add_input.chrome.window")
+        .unwrap();
+    assert!(
+        custom.width() > original.width() + 50.0,
+        "The test must perform an actual operator resize"
+    );
+    for _ in 0..5 {
+        let _ = paint(&mut app, &ctx, Vec2::new(2100.0, 1300.0));
+    }
+    let retained = app
+        .automation
+        .get("dialog.add_input.chrome.window")
+        .unwrap();
+    assert!(
+        (retained.width() - custom.width()).abs() <= 2.0,
+        "A custom operator width must remain intact"
+    );
+    assert_eq!(*app.engine.project(), before);
+}
+
+#[test]
 fn escape_cancels_operator_drafts_without_committing_or_disturbing_a_manual_transition() {
     for action in [
         Action::Add,
