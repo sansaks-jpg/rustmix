@@ -58,6 +58,119 @@ fn click(app: &mut RustMixApp, ctx: &egui::Context, id: &str) {
     }
 }
 
+fn escape_events(repeat: bool, modifiers: egui::Modifiers) -> Vec<egui::Event> {
+    [true, false]
+        .into_iter()
+        .map(|pressed| egui::Event::Key {
+            key: egui::Key::Escape,
+            physical_key: Some(egui::Key::Escape),
+            pressed,
+            repeat: repeat && pressed,
+            modifiers,
+        })
+        .collect()
+}
+
+#[test]
+fn escape_cancels_operator_drafts_without_committing_or_disturbing_a_manual_transition() {
+    for action in [
+        Action::Add,
+        Action::Properties(InputId(2)),
+        Action::Settings,
+        Action::OverlaySettings(0),
+        Action::ExternalSettings(1),
+        Action::RecordingSetup,
+        Action::StreamingSetup,
+        Action::MultiCorder,
+        Action::PlayList,
+        Action::ShortcutsWindow,
+    ] {
+        let mut app = RustMixApp::headless();
+        let ctx = egui::Context::default();
+        app.theme(&ctx);
+        app.execute(Command::SetManualProgress(0.4));
+        let before = app.engine.project().clone();
+        app.dispatch(action, &ctx);
+        if let Some(draft) = &mut app.settings_draft {
+            draft.ui_scale = 1.25;
+        }
+        if let Some(draft) = &mut app.properties {
+            draft.name = "Unsaved input name".into();
+        }
+        if let Some((_, draft)) = &mut app.overlay_settings {
+            draft.title = "Unsaved title".into();
+        }
+        for _ in 0..5 {
+            event_frame(&mut app, &ctx, vec![]);
+        }
+        event_frame(&mut app, &ctx, escape_events(false, egui::Modifiers::NONE));
+        assert!(
+            !app.add_open
+                && app.properties.is_none()
+                && !app.settings
+                && app.overlay_settings.is_none()
+                && app.external_settings.is_none()
+                && !app.recording_setup
+                && !app.streaming_setup
+                && !app.multicorder_open
+                && !app.playlist_open
+                && !app.shortcuts_open,
+            "Escape must use the dialog's existing cancellation path"
+        );
+        assert_eq!(*app.engine.project(), before);
+        assert!(app.engine.transition().is_some_and(
+            |transition| transition.manual && (transition.progress - 0.4).abs() < 0.01
+        ));
+    }
+}
+
+#[test]
+fn escape_closes_an_open_combo_before_its_dialog_and_ignores_repeat_or_modified_keys() {
+    let mut app = RustMixApp::headless();
+    let ctx = egui::Context::default();
+    app.theme(&ctx);
+    app.dispatch(Action::Settings, &ctx);
+    click(&mut app, &ctx, "dialog.settings.frameRate");
+    let before = app.engine.project().clone();
+    assert!(egui::Popup::is_any_open(&ctx));
+    event_frame(&mut app, &ctx, escape_events(false, egui::Modifiers::NONE));
+    assert!(app.settings, "The first Escape belongs to the open combo");
+    assert!(!egui::Popup::is_any_open(&ctx));
+    event_frame(&mut app, &ctx, escape_events(true, egui::Modifiers::NONE));
+    assert!(
+        app.settings,
+        "Holding Escape must not discard the parent dialog"
+    );
+    event_frame(&mut app, &ctx, escape_events(false, egui::Modifiers::CTRL));
+    assert!(
+        app.settings,
+        "A modified Escape is not the dialog cancel command"
+    );
+    event_frame(&mut app, &ctx, escape_events(false, egui::Modifiers::NONE));
+    assert!(!app.settings);
+    assert_eq!(*app.engine.project(), before);
+}
+
+#[test]
+fn escape_only_closes_the_topmost_operator_window() {
+    let mut app = RustMixApp::headless();
+    let ctx = egui::Context::default();
+    app.theme(&ctx);
+    app.dispatch(Action::Settings, &ctx);
+    for _ in 0..4 {
+        event_frame(&mut app, &ctx, vec![]);
+    }
+    app.dispatch(Action::OverlaySettings(0), &ctx);
+    for _ in 0..5 {
+        event_frame(&mut app, &ctx, vec![]);
+    }
+    let before = app.engine.project().clone();
+    event_frame(&mut app, &ctx, escape_events(false, egui::Modifiers::NONE));
+    assert!(app.settings);
+    assert!(app.overlay_settings.is_none());
+    assert_eq!(*app.engine.project(), before);
+}
+
 #[test]
 fn quick_input_categories_open_their_real_pages_and_survive_cancel_reopen() {
     let mut app = RustMixApp::headless();

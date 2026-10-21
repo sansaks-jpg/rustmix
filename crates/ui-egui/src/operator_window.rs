@@ -128,6 +128,7 @@ impl OperatorWindow<'_> {
             .unwrap_or(self.bounds.center() - self.size * 0.5);
         let frame = egui::Frame::window(&ctx.global_style()).inner_margin(0);
         let mut native_open = *self.open;
+        let popup_was_open = egui::Popup::is_any_open(ctx);
         let mut close_clicked = false;
         let mut chrome = None;
         let output = egui::Window::new(self.title.clone())
@@ -186,7 +187,7 @@ impl OperatorWindow<'_> {
                         FORM_TEXT
                     },
                 );
-                close_clicked = close_response.on_hover_text("Close window").clicked();
+                close_clicked = close_response.on_hover_text("Close window (Esc)").clicked();
                 let badge_size = (height - 10.0).clamp(14.0, 20.0);
                 let badge = Rect::from_center_size(
                     egui::pos2(header.left() + 6.0 + badge_size * 0.5, header.center().y),
@@ -233,6 +234,16 @@ impl OperatorWindow<'_> {
                     .show(ui, add_contents)
                     .inner
             });
+        if native_open
+            && !popup_was_open
+            && !egui::Popup::is_any_open(ctx)
+            && output
+                .as_ref()
+                .is_some_and(|window| ctx.top_layer_id() == Some(window.response.layer_id))
+            && controls::consume_press(ctx, egui::Modifiers::NONE, egui::Key::Escape)
+        {
+            close_clicked = true;
+        }
         *self.open = native_open && !close_clicked;
         if let (Some(output), Some(mut chrome)) = (&output, chrome) {
             chrome.window = output.response.rect;

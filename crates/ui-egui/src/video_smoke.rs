@@ -88,7 +88,16 @@ impl RustMixApp {
                     ));
                 }
                 self.validate_dialog_geometry(ctx, "dialog.add")?;
-                self.native_click(s, "dialog.add.cancel")?;
+                s.events = [true, false]
+                    .into_iter()
+                    .map(|pressed| egui::Event::Key {
+                        key: egui::Key::Escape,
+                        physical_key: Some(egui::Key::Escape),
+                        pressed,
+                        repeat: false,
+                        modifiers: egui::Modifiers::NONE,
+                    })
+                    .collect();
                 s.stage = 20;
             }
             20 => {
