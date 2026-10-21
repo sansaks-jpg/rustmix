@@ -337,7 +337,7 @@ enum OverlaySwitchDecision {
     Keep,
 }
 
-fn overlay_field_label(ui: &mut egui::Ui, label: &str, width: f32) -> Rect {
+fn aligned_field_label(ui: &mut egui::Ui, label: &str, width: f32) -> Rect {
     // Grid measures occupied child bounds, not the requested child size.
     // Reserve the whole column before painting its right-aligned label.
     let (rect, _) = ui.allocate_exact_size(Vec2::new(width, 26.0), Sense::hover());
@@ -804,7 +804,7 @@ impl RustMixApp {
                     .into_iter()
                     {
                         let supported = !matches!(page, InputPage::Triggers | InputPage::TallyLights | InputPage::Ptz | InputPage::Advanced);
-                        let row_height = if ctx.viewport_rect().height() < 700.0 { 18.5 } else { 25.0 };
+                        let row_height = if ctx.viewport_rect().height() < 700.0 { 18.5 } else { (ctx.viewport_rect().width() * 38.0 / 1917.0).clamp(25.0,38.0) };
                         let r = ui.add_enabled_ui(supported, |ui| sidebar_row(ui, app.input_page == page, label, row_height, None)).inner
                             .on_disabled_hover_text("This source control is unavailable");
                         app.automation
@@ -846,8 +846,14 @@ impl RustMixApp {
                                     .map(str::to_owned)
                                     .unwrap_or_else(|| format!("{} · synthetic {}", draft.name, draft.kind.label()));
                                 let label_w = (ui.available_width() - 84.0).max(120.0);
-                                ui.add_sized([label_w, 20.0], egui::Label::new(RichText::new(&path_lbl).color(Color32::WHITE).size(12.0)).truncate())
-                                    .on_hover_text(&path_lbl);
+                                let (header,_) = ui.allocate_exact_size(Vec2::new(label_w,20.0),Sense::hover());
+                                let mut header_ui = ui.new_child(egui::UiBuilder::new()
+                                    .id_salt("properties.sourceCaption")
+                                    .max_rect(header)
+                                    .layout(egui::Layout::left_to_right(Align::Center)));
+                                header_ui.set_clip_rect(header.intersect(ui.clip_rect()));
+                                header_ui.add(egui::Label::new(RichText::new(&path_lbl).color(Color32::WHITE).size(12.0)).truncate()).on_hover_text(&path_lbl);
+                                app.automation.insert("dialog.properties.sourceHeader".into(),header);
                                 ui.with_layout(egui::Layout::right_to_left(Align::Center), |ui| {
                                     let change = ui.add_enabled(!app.properties_loading, egui::Button::new(RichText::new("Change").color(Color32::WHITE)).fill(CHIP_BG));
                                     app.automation.insert("dialog.properties.change".into(), change.rect);
@@ -873,15 +879,16 @@ impl RustMixApp {
                         InputPage::General => {
                             ui.columns(2, |cols| {
                                 if let [left_col, right_col, ..] = cols {
+                                    let label_width = (left_col.available_width() * 0.23).clamp(76.0,114.0);
+                                    let field_width = (left_col.available_width() - label_width - 8.0).max(80.0);
                                     egui::Grid::new("input_props_left")
                                         .num_columns(2)
                                         .spacing([8.0, 4.0])
                                         .show(left_col, |ui| {
-                                            ui.label(
-                                                RichText::new("Name").size(11.5).color(FORM_TEXT),
-                                            );
+                                            let label = aligned_field_label(ui,"Name",label_width);
+                                            app.automation.insert("dialog.properties.name.label".into(),label);
                                             let name = ui.add_sized(
-                                                [175.0, 20.0],
+                                                [field_width, 22.0],
                                                 egui::TextEdit::singleline(&mut draft.name)
                                                     .char_limit(64),
                                             );
@@ -889,22 +896,21 @@ impl RustMixApp {
                                                 .insert("dialog.properties.name".into(), name.rect);
                                             ui.end_row();
 
-                                            ui.label(
-                                                RichText::new("Aspect Ratio")
-                                                    .size(11.5)
-                                                    .color(FORM_TEXT),
-                                            );
-                                            ui.add_enabled(false, egui::Button::new("Widescreen")
-                                                .min_size(Vec2::new(175.0, 20.0)))
+                                            let label = aligned_field_label(ui,"Aspect Ratio",label_width);
+                                            app.automation.insert("dialog.properties.aspect.label".into(),label);
+                                            let aspect = ui.add_enabled(false, egui::Button::new("Widescreen")
+                                                .min_size(Vec2::new(field_width, 22.0)))
                                                 .on_disabled_hover_text("The current compositor uses a fixed 16:9 working raster. Use Image fit below for Contain, Cover or Stretch.");
+                                            app.automation.insert("dialog.properties.aspect".into(),aspect.rect);
                                             ui.end_row();
 
-                                            ui.label(RichText::new("Category").size(11.5).color(FORM_TEXT));
+                                            let label = aligned_field_label(ui,"Category",label_width);
+                                            app.automation.insert("dialog.properties.category.label".into(),label);
                                             let selected_category = draft.category
                                                 .and_then(|id| app.engine.project().preferences.categories.iter().find(|category| category.id == id))
                                                 .map_or("None", |category| category.name.as_str());
                                             let category = egui::ComboBox::from_id_salt("prop.category")
-                                                .width(175.0)
+                                                .width(field_width)
                                                 .selected_text(selected_category)
                                                 .show_ui(ui, |ui| {
                                                     let none = ui.selectable_value(&mut draft.category, None, "None");
@@ -917,11 +923,7 @@ impl RustMixApp {
                                             app.automation.insert("dialog.properties.category".into(), category.response.rect);
                                             ui.end_row();
 
-                                            ui.label(
-                                                RichText::new("Generator")
-                                                    .size(11.5)
-                                                    .color(FORM_TEXT),
-                                            );
+                                            aligned_field_label(ui,"Generator",label_width);
                                             ui.horizontal(|ui| {
                                                 ui.spacing_mut().item_spacing.x = 3.0;
                                                 for kind in [
@@ -1693,7 +1695,7 @@ impl RustMixApp {
                         let label_width = (ui.available_width() * 0.16).clamp(96.0, 156.0);
                         let field_width = (ui.available_width() - label_width - 12.0).max(240.0);
                         egui::Grid::new("overlay.fields").num_columns(2).spacing([12.0, 6.0]).show(ui, |ui| {
-                            let label = overlay_field_label(ui, "Number", label_width);
+                            let label = aligned_field_label(ui, "Number", label_width);
                             self.automation.insert("dialog.overlay.label.number".into(), label);
                             ui.horizontal(|ui| {
                                 ui.spacing_mut().item_spacing.x = 3.0;
@@ -1704,17 +1706,17 @@ impl RustMixApp {
                                 }
                             });
                             ui.end_row();
-                            let label = overlay_field_label(ui, "Title", label_width);
+                            let label = aligned_field_label(ui, "Title", label_width);
                             self.automation.insert("dialog.overlay.label.title".into(), label);
                             let title = ui.add_sized([field_width, 28.0], egui::TextEdit::singleline(&mut draft.title).char_limit(96));
                             self.automation.insert("dialog.overlay.title".into(), title.rect);
                             ui.end_row();
-                            let label = overlay_field_label(ui, "Subtitle", label_width);
+                            let label = aligned_field_label(ui, "Subtitle", label_width);
                             self.automation.insert("dialog.overlay.label.subtitle".into(), label);
                             let subtitle = ui.add_sized([field_width, 28.0], egui::TextEdit::singleline(&mut draft.subtitle).char_limit(160));
                             self.automation.insert("dialog.overlay.subtitle".into(), subtitle.rect);
                             ui.end_row();
-                            let label = overlay_field_label(ui, "Position", label_width);
+                            let label = aligned_field_label(ui, "Position", label_width);
                             self.automation.insert("dialog.overlay.label.position".into(), label);
                             ui.horizontal(|ui| {
                                 for (position, label) in [(Position::LowerLeft, "Lower left"), (Position::LowerRight, "Lower right"), (Position::TopLeft, "Top left")] {
@@ -1723,7 +1725,7 @@ impl RustMixApp {
                                 }
                             });
                             ui.end_row();
-                            let label = overlay_field_label(ui, "Visibility", label_width);
+                            let label = aligned_field_label(ui, "Visibility", label_width);
                             self.automation.insert("dialog.overlay.label.visibility".into(), label);
                             let enabled = ui.checkbox(&mut draft.enabled, "Show on Program when applied");
                             self.automation.insert("dialog.overlay.enabled".into(), enabled.rect);
@@ -3044,7 +3046,7 @@ mod operator_dialog_tests {
                 let ctx = egui::Context::default();
                 let mut reserved = Rect::NOTHING;
                 let output = ctx.run_ui(egui::RawInput::default(), |ui| {
-                    reserved = overlay_field_label(ui, label, width);
+                    reserved = aligned_field_label(ui, label, width);
                 });
                 let text = output
                     .shapes

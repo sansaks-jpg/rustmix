@@ -72,6 +72,116 @@ fn escape_events(repeat: bool, modifiers: egui::Modifiers) -> Vec<egui::Event> {
 }
 
 #[test]
+fn input_general_labels_fields_header_and_navigation_use_the_available_form_width() {
+    for size in [
+        Vec2::new(734.0, 466.0),
+        Vec2::new(1100.0, 700.0),
+        Vec2::new(1600.0, 900.0),
+        Vec2::new(1917.0, 1168.0),
+    ] {
+        let mut app = RustMixApp::headless();
+        let ctx = egui::Context::default();
+        app.theme(&ctx);
+        app.dispatch(Action::Properties(InputId(3)), &ctx);
+        let before = app.engine.project().clone();
+        for _ in 0..5 {
+            let _ = paint(&mut app, &ctx, size);
+        }
+        let output = paint(&mut app, &ctx, size);
+        app.validate_dialog_geometry(&ctx, "dialog.properties")
+            .unwrap();
+        let page = app.automation["dialog.properties.page"];
+        for (label, key) in [
+            ("Name", "name"),
+            ("Aspect Ratio", "aspect"),
+            ("Category", "category"),
+        ] {
+            let reserved = app.automation[&format!("dialog.properties.{key}.label")];
+            let field = app.automation[&format!("dialog.properties.{key}")];
+            let glyph = text_in(&output.shapes, label, reserved);
+            assert!(
+                (glyph.right() - reserved.right()).abs() <= 2.0,
+                "{label}: {glyph:?} {reserved:?}"
+            );
+            assert!(field.left() - reserved.right() >= 6.0);
+            assert!(field.left() - reserved.right() <= 10.0);
+            assert!(page.expand(1.0).contains_rect(field));
+            if size.x >= 1600.0 {
+                assert!(
+                    field.width() >= page.width() * 0.30,
+                    "{key} should use its form column"
+                );
+            }
+        }
+        let header = app.automation["dialog.properties.sourceHeader"];
+        let caption = text_in(&output.shapes, "Camera C · synthetic Color bars", header);
+        assert!((caption.left() - header.left()).abs() <= 2.0);
+        assert!(header.right() + 2.0 <= app.automation["dialog.properties.change"].left());
+        let general = app.automation["dialog.properties.page.General"];
+        let expected = if size.y < 700.0 {
+            18.5
+        } else {
+            (size.x * 38.0 / 1917.0).clamp(25.0, 38.0)
+        };
+        assert!((general.height() - expected).abs() <= 1.0);
+        assert_eq!(*app.engine.project(), before);
+    }
+}
+
+#[test]
+fn expanded_input_name_keeps_real_typing_staged_until_ok_and_escape_discards_it() {
+    let mut app = RustMixApp::headless();
+    let ctx = egui::Context::default();
+    app.theme(&ctx);
+    let before = app.engine.project().clone();
+    for (name, commit) in [("Discarded source name", false), ("Renamed source", true)] {
+        app.dispatch(Action::Properties(InputId(3)), &ctx);
+        click(&mut app, &ctx, "dialog.properties.name");
+        event_frame(
+            &mut app,
+            &ctx,
+            vec![
+                egui::Event::Key {
+                    key: egui::Key::A,
+                    physical_key: Some(egui::Key::A),
+                    pressed: true,
+                    repeat: false,
+                    modifiers: egui::Modifiers {
+                        ctrl: true,
+                        command: true,
+                        ..egui::Modifiers::NONE
+                    },
+                },
+                egui::Event::Key {
+                    key: egui::Key::A,
+                    physical_key: Some(egui::Key::A),
+                    pressed: false,
+                    repeat: false,
+                    modifiers: egui::Modifiers {
+                        ctrl: true,
+                        command: true,
+                        ..egui::Modifiers::NONE
+                    },
+                },
+                egui::Event::Text(name.into()),
+            ],
+        );
+        assert_eq!(app.properties.as_ref().unwrap().name, name);
+        assert_eq!(*app.engine.project(), before);
+        if commit {
+            click(&mut app, &ctx, "dialog.properties.apply");
+            assert_eq!(app.engine.project().input(InputId(3)).unwrap().name, name);
+        } else {
+            event_frame(&mut app, &ctx, escape_events(false, egui::Modifiers::NONE));
+            assert_eq!(*app.engine.project(), before);
+        }
+        assert!(app.properties.is_none());
+        assert_eq!(app.engine.project().program, before.program);
+        assert_eq!(app.engine.project().preview, before.preview);
+    }
+}
+
+#[test]
 fn default_source_dialog_width_tracks_the_parent_and_preserves_a_real_operator_resize() {
     let mut app = RustMixApp::headless();
     let ctx = egui::Context::default();

@@ -1518,6 +1518,27 @@ impl RustMixApp {
                     "Video file row/list proportions differ from the operator layout".into(),
                 ));
             }
+        } else if prefix == "dialog.properties" && self.input_page == InputPage::General {
+            let page = self.native_geometry_rect(ctx, "dialog.properties.page")?;
+            for key in ["name", "aspect", "category"] {
+                let label =
+                    self.native_geometry_rect(ctx, &format!("dialog.properties.{key}.label"))?;
+                let field = self.native_geometry_rect(ctx, &format!("dialog.properties.{key}"))?;
+                let gutter = field.left() - label.right();
+                if !page.expand(1.0).contains_rect(field)
+                    || !(6.0..=10.0).contains(&gutter)
+                    || (bounds.width() >= 1600.0 && field.width() < page.width() * 0.30)
+                {
+                    return Err(Error::Invalid(format!(
+                        "Input General field is narrow, clipped or overlaps its label: {key}"
+                    )));
+                }
+            }
+            let header = self.native_geometry_rect(ctx, "dialog.properties.sourceHeader")?;
+            let change = self.native_geometry_rect(ctx, "dialog.properties.change")?;
+            if header.right() + 2.0 > change.left() {
+                return Err(Error::Invalid("Source caption overlaps Change".into()));
+            }
         } else if prefix == "dialog.overlay" {
             for (label, field) in [
                 ("number", "slot.1"),
