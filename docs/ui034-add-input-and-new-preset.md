@@ -44,3 +44,9 @@ readiness remain pending. See [ADR 0034](adr/0034-new-preset-and-native-input-fo
   four `-`); the history merge preserves the complete current source tree.
   Pre-existing uncommitted work in the main checkout and historical worktrees
   remains untouched. Further implementation/testing proceeds on main.
+- 8520e26/run39608946397: locked compile and warnings-as-errors Clippy pass;
+  new core, cold-start, dropdown/Cancel/unsaved and HTTP keepalive tests pass.
+  UI suite has 164 passes and one failure: the old running-producer regression
+  expected an immediate unsaved replacement with seven demo sources. Update it
+  to require unchanged state until acknowledgement and the actual two-black-input
+  blank session after OK. Keep the worker acknowledgement and all other gates.

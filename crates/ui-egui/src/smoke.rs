@@ -2161,10 +2161,25 @@ mod tests {
         app.execute(Command::AddPlaylist("Cues".into()));
         app.playlist_selected_id = 2;
         app.playlist_name = "Cues".into();
+        let before = app.engine.project().clone();
         app.dispatch(Action::New, &ctx);
         click(&mut app, &ctx, "dialog.new.confirm", size);
+        assert_eq!(
+            *app.engine.project(),
+            before,
+            "Unsaved replacement requires an explicit acknowledgement"
+        );
+        assert!(app.confirm_new);
+        click(&mut app, &ctx, "dialog.new.replaceUnsaved", size);
+        click(&mut app, &ctx, "dialog.new.confirm", size);
         acknowledged(&app, |engine| {
-            engine.project().name == ProjectState::demo().name
+            engine.project().name == "Untitled production"
+                && engine.project().inputs.len() == 2
+                && engine
+                    .project()
+                    .inputs
+                    .iter()
+                    .all(|input| input.kind == InputKind::Color && input.color == [0; 3])
                 && engine.project().playlists.len() == 1
                 && engine.project().program == InputId(1)
         });
