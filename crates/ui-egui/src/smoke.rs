@@ -160,12 +160,13 @@ impl Smoke {
     }
 }
 fn native_mode_name() -> String {
-    const MODES: [&str; 17] = [
+    const MODES: [&str; 18] = [
         "--ui-smoke",
         "--ui-smoke-reopen",
         "--ui-layout-smoke",
         "--ui-dialog-smoke",
         "--ui-add-smoke",
+        "--ui-preset-smoke",
         "--ui-source-smoke",
         "--ui-input-smoke",
         "--ui-input-smoke-reopen",
@@ -323,6 +324,9 @@ impl RustMixApp {
     }
 
     fn smoke_run(&mut self, ctx: &egui::Context, s: &mut Smoke) -> Result<()> {
+        if std::env::args().any(|arg| arg == "--ui-preset-smoke") {
+            return self.smoke_new_preset(ctx, s);
+        }
         if std::env::args().any(|arg| arg == "--ui-source-smoke") {
             return self.smoke_sources(ctx, s);
         }

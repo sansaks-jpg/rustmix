@@ -14,6 +14,21 @@ use tungstenite::{Message, WebSocket, protocol::WebSocketConfig};
 type Raster = (u32, u32, Arc<Vec<[u8; 4]>>);
 
 const MESSAGE_LIMIT: usize = 12 * 1024 * 1024;
+static BROWSER_OWNERS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+struct BrowserPermit;
+impl BrowserPermit {
+    fn acquire() -> Result<Self, String> {
+        BROWSER_OWNERS.fetch_update(Ordering::AcqRel,Ordering::Acquire,|n|n.checked_add(1).filter(|next|*next<=2))
+            .map_err(|_|"At most two Browser inputs/checks may run at once. Stop another Browser source first.".to_owned())?;
+        Ok(Self)
+    }
+}
+impl Drop for BrowserPermit {
+    fn drop(&mut self) {
+        let _ =
+            BROWSER_OWNERS.fetch_update(Ordering::AcqRel, Ordering::Acquire, |n| n.checked_sub(1));
+    }
+}
 
 fn raster(bytes: Vec<u8>, format: image::ImageFormat) -> Result<Raster, String> {
     if bytes.len() > 32 * 1024 * 1024 {
@@ -64,6 +79,7 @@ struct ProcessOwner {
     child: Child,
     // Temp profile is removed only after this owner's process tree is retired.
     _profile: tempfile::TempDir,
+    _permit: BrowserPermit,
 }
 impl Drop for ProcessOwner {
     fn drop(&mut self) {
@@ -123,8 +139,85 @@ fn tcp(port: u16) -> Result<TcpStream, String> {
         .map_err(|_| "Browser write timeout unavailable")?;
     Ok(socket)
 }
+
+/// Read a length-delimited HTTP response without waiting for connection close.
+/// Chromium may keep its DevTools discovery connection open after the body.
+fn discovery_body(reader: &mut impl Read) -> Result<Vec<u8>, String> {
+    const LIMIT: usize = 128 * 1024;
+    let mut bytes = Vec::new();
+    let mut expected = None;
+    let mut header_end = 0;
+    loop {
+        if let Some(length) = expected
+            && bytes.len() >= header_end + length
+        {
+            return Ok(bytes
+                .get(header_end..header_end + length)
+                .ok_or("Invalid browser response length")?
+                .to_vec());
+        }
+        if bytes.len() >= LIMIT {
+            return Err("Browser discovery response exceeds 128 KiB".into());
+        }
+        let mut chunk = [0_u8; 4096];
+        let read = reader
+            .read(&mut chunk)
+            .map_err(|_| "Browser page discovery timed out")?;
+        if read == 0 {
+            return Err("Browser discovery response ended before its body".into());
+        }
+        bytes.extend_from_slice(
+            chunk
+                .get(..read)
+                .ok_or("Browser response read length invalid")?,
+        );
+        if bytes.len() > LIMIT {
+            return Err("Browser discovery response exceeds 128 KiB".into());
+        }
+        if expected.is_none() {
+            if let Some(end) = bytes.windows(4).position(|w| w == b"\r\n\r\n") {
+                header_end = end + 4;
+                let header =
+                    std::str::from_utf8(bytes.get(..end).ok_or("Browser HTTP header missing")?)
+                        .map_err(|_| "Browser HTTP header invalid")?;
+                let mut lines = header.lines();
+                let status = lines.next().and_then(|s| s.split_whitespace().nth(1));
+                if status != Some("200") {
+                    return Err("Browser discovery HTTP request failed".into());
+                }
+                let mut length = None;
+                for line in lines {
+                    let Some((key, value)) = line.split_once(':') else {
+                        return Err("Browser HTTP header invalid".into());
+                    };
+                    if key.eq_ignore_ascii_case("transfer-encoding") {
+                        return Err("Browser discovery transfer encoding unsupported".into());
+                    }
+                    if key.eq_ignore_ascii_case("content-length") {
+                        if length.is_some() {
+                            return Err("Duplicate browser response length".into());
+                        }
+                        length = Some(
+                            value
+                                .trim()
+                                .parse::<usize>()
+                                .map_err(|_| "Invalid browser response length")?,
+                        );
+                    }
+                }
+                let length = length
+                    .filter(|n| *n > 0 && *n <= LIMIT.saturating_sub(header_end))
+                    .ok_or("Browser discovery length missing or exceeds limit")?;
+                expected = Some(length);
+            } else if bytes.len() > 16 * 1024 {
+                return Err("Browser discovery header too large".into());
+            }
+        }
+    }
+}
 impl Browser {
     fn open(url: &str, width: u32, height: u32, stop: &AtomicBool) -> Result<Self, String> {
+        let permit = BrowserPermit::acquire()?;
         let profile = tempfile::tempdir().map_err(|_| "Browser temporary profile unavailable")?;
         let child = Command::new(executable()?)
             .args([
@@ -151,6 +244,7 @@ impl Browser {
         let mut process = ProcessOwner {
             child,
             _profile: profile,
+            _permit: permit,
         };
         // Failed initialization also retires this exact process tree.
         let connected = (|| {
@@ -188,16 +282,9 @@ impl Browser {
                     b"GET /json/list HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n",
                 )
                 .map_err(|_| "Browser page discovery failed")?;
-            let mut response = String::new();
-            discovery
-                .take(128 * 1024)
-                .read_to_string(&mut response)
-                .map_err(|_| "Browser page discovery timed out")?;
-            let (_, body) = response
-                .split_once("\r\n\r\n")
-                .ok_or("Invalid browser discovery response")?;
+            let body = discovery_body(&mut discovery)?;
             let pages: Vec<Value> =
-                serde_json::from_str(body).map_err(|_| "Invalid browser page list")?;
+                serde_json::from_slice(&body).map_err(|_| "Invalid browser page list")?;
             let ws = pages
                 .iter()
                 .find(|p| p.get("type").and_then(Value::as_str) == Some("page"))
@@ -389,4 +476,36 @@ pub(super) fn probe_browser(url: &str, width: u32, height: u32) -> Result<(), St
     let mut browser = Browser::open(url, width, height, &AtomicBool::new(false))?;
     browser.capture()?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used)]
+    use super::*;
+    struct KeepAlive(std::io::Cursor<Vec<u8>>);
+    impl Read for KeepAlive {
+        fn read(&mut self, out: &mut [u8]) -> std::io::Result<usize> {
+            if self.0.position() == self.0.get_ref().len() as u64 {
+                return Err(std::io::ErrorKind::TimedOut.into());
+            }
+            self.0.read(out)
+        }
+    }
+    #[test]
+    fn devtools_discovery_completes_before_a_keepalive_connection_times_out() {
+        let response =
+            b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: keep-alive\r\n\r\n[]".to_vec();
+        assert_eq!(
+            discovery_body(&mut KeepAlive(std::io::Cursor::new(response))).unwrap(),
+            b"[]"
+        );
+        for response in [
+            "HTTP/1.1 500 Error\r\nContent-Length: 2\r\n\r\n[]",
+            "HTTP/1.1 200 OK\r\nContent-Length: 200000\r\n\r\n[]",
+            "HTTP/1.1 200 OK\r\nContent-Length: 4\r\n\r\n[]",
+            "HTTP/1.1 200 OK\r\nContent-Length: 2\r\nContent-Length: 2\r\n\r\n[]",
+        ] {
+            assert!(discovery_body(&mut std::io::Cursor::new(response.as_bytes())).is_err());
+        }
+    }
 }

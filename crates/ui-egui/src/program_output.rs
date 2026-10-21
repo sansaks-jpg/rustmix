@@ -310,7 +310,7 @@ impl ProgramOutput {
             if let Some(texture) = &texture {
                 ui.painter().image(
                     texture.id(),
-                    fit_program(bounds),
+                    fit_program_aspect(bounds, texture.aspect_ratio()),
                     Rect::from_min_max(Pos2::ZERO, egui::pos2(1.0, 1.0)),
                     Color32::WHITE,
                 );
@@ -338,9 +338,12 @@ impl ProgramOutput {
 }
 
 pub(crate) fn fit_program(bounds: Rect) -> Rect {
+    fit_program_aspect(bounds, 16.0 / 9.0)
+}
+fn fit_program_aspect(bounds: Rect, aspect: f32) -> Rect {
     let size = bounds.size();
-    let width = size.x.min(size.y * (16.0 / 9.0)).max(0.0);
-    Rect::from_center_size(bounds.center(), Vec2::new(width, width * (9.0 / 16.0)))
+    let width = size.x.min(size.y * aspect).max(0.0);
+    Rect::from_center_size(bounds.center(), Vec2::new(width, width / aspect))
 }
 
 impl RustMixApp {

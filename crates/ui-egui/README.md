@@ -116,3 +116,12 @@ UI-004 through UI-006 bound all four dialog windows (`Add Input`, `Input Propert
 UI-010: PNG references and processing parameters belong to engine state. Input Settings keeps a draft/cache until OK; Cancel leaves Program untouched. Source pickers run off the UI thread, one capacity-32 PNG worker decodes bounded images, and stale project/editor results are ignored. Cached rasters fit 640x360, with Contain/Cover/Stretch and alpha over black. Missing PNGs remain visible and can be relinked through Change. Ordered Add Input and duplication preserve source/effect state. Hosted functional PNG acceptance passed, including run 39111788801.
 
 UI-011 measured / cadence qualification failed: the bounded Program worker runs independently of painting, with replaceable state/frame slots and cached active surfaces. Thumbnail refresh is limited to 15 fps. The native profiler measures produced 50/59.94/60 fps cadence at the actual 640x360 reference raster, separately from UI FPS, and the hosted script samples working set/private memory/CPU. Full-HD/GPU/device/encoder/endurance qualification remains open.
+
+UI-034 candidate (2026-10-21): New Preset appears on normal startup/New, with a
+staged landscape/portrait/rate/scan form and explicit unsaved replacement policy.
+Portrait Program/Preview/tiles/output-window/snapshots preserve aspect at the same
+bounded reference pixel count. Camera uses actual mode discovery; Browser exposes
+portrait viewport presets, two owner permits and fixed length-delimited discovery.
+`--ui-preset-smoke` is a mandatory new hosted process. No local compile/native run,
+full-HD/interlaced output, 60fps or physical-device qualification is claimed.
+See [UI-034](../../docs/ui034-add-input-and-new-preset.md).

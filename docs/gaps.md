@@ -1,5 +1,12 @@
 # Known gaps
 
+UI-034 (2026-10-21): startup/New format selector, portrait monitoring, persisted
+scan and native Camera format selection are unverified source candidates.
+Browser keepalive discovery fix awaits hosted reproduction. Prior f6ecbdd run
+39603431352 failed Browser discovery and GPU teardown. No 60fps performance,
+full-HD/interlaced output, physical camera/audio or GPU recovery claim is made.
+See [current implementation/verification](ui034-add-input-and-new-preset.md).
+
 UI-028 through UI-031 (2026-10-21): Video-first Input Select with genuine bounded
 recent files and validation; topmost Escape/popup/repeat safety; responsive
 default widths preserving real resizing; Input Settings expanding fields,

@@ -1,5 +1,11 @@
 # UI milestone progress
 
+UI-034 implementation candidate: [New Preset/Add Input record](ui034-add-input-and-new-preset.md).
+Startup/New modal, format and scan persistence, portrait monitoring, native Camera
+mode selection and Browser keepalive fix are prepared with regression/native gates.
+Hosted verification has not run. Prior f6ecbdd/run39603431352 failed discovery and
+GPU teardown. No test, full-resolution output or hardware acceptance is inherited.
+
 UI-028 through UI-031 (2026-10-21): Video-first Input Select with genuine bounded
 recent files and validation; topmost Escape/popup/repeat safety; responsive
 default widths preserving real resizing; Input Settings expanding fields,

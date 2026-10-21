@@ -10,6 +10,7 @@ mod extended_output;
 mod extra_sources;
 mod inputs;
 mod media;
+mod new_preset;
 #[cfg(test)]
 mod operator_layout_tests;
 mod operator_window;
@@ -658,6 +659,7 @@ pub struct RustMixApp {
     pub(crate) video_players: HashMap<InputId, video_controls::VideoSlot>,
     video_generation: u64,
     pub(crate) confirm_new: bool,
+    pub(crate) new_preset: new_preset::NewPresetUi,
     pub(crate) confirm_close: bool,
     pub(crate) confirm_open: bool,
     pub(crate) allow_close: bool,
@@ -731,6 +733,7 @@ impl RustMixApp {
                     | "--ui-layout-smoke"
                     | "--ui-dialog-smoke"
                     | "--ui-add-smoke"
+                    | "--ui-preset-smoke"
                     | "--ui-source-smoke"
                     | "--ui-input-smoke"
                     | "--ui-input-smoke-reopen"
@@ -769,6 +772,12 @@ impl RustMixApp {
                     .insert(0, "windows-ui".into());
                 cc.egui_ctx.set_fonts(fonts);
             }
+        }
+        if (app.smoke.is_none() || std::env::args().any(|s| s == "--ui-preset-smoke"))
+            && !std::env::args().any(|s| s == "--ui-perf")
+            && app.job.is_none()
+        {
+            app.initialize_blank_startup(&cc.egui_ctx);
         }
         app.program_worker = Some(program::ProgramWorker::spawn(
             program::Snapshot {
@@ -933,6 +942,7 @@ impl RustMixApp {
             video_players: HashMap::new(),
             video_generation: 0,
             confirm_new: false,
+            new_preset: new_preset::NewPresetUi::default(),
             confirm_close: false,
             confirm_open: false,
             allow_close: false,
@@ -1409,7 +1419,7 @@ impl RustMixApp {
                 }
             }
             Action::New => {
-                self.confirm_new = true;
+                self.open_new_preset();
             }
             Action::Open => {
                 self.pending_open = None;
@@ -2168,9 +2178,12 @@ impl RustMixApp {
         ui.horizontal(|ui| {
             ui.spacing_mut().item_spacing.x = 8.0;
             ui.label(
-                RichText::new(format!("640×360/{}p", p.preferences.rate.label()))
-                    .strong()
-                    .color(TEAL),
+                RichText::new({
+                    let [w, h] = p.preferences.video_standard().monitor_size();
+                    format!("{w}×{h}/{}p", p.preferences.rate.label())
+                })
+                .strong()
+                .color(TEAL),
             );
             ui.label(
                 RichText::new("CPU mix · GPU display")

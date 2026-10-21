@@ -68,6 +68,10 @@ function Invoke-NativeSmoke([string[]]$SmokeArguments) {
     if (Test-Path artifacts/profile-error.txt) { throw (Get-Content artifacts/profile-error.txt -Raw) }
     if (Test-Path artifacts/smoke-error.txt) { throw (Get-Content artifacts/smoke-error.txt -Raw) }
 }
+Invoke-NativeSmoke @('--ui-preset-smoke')
+foreach ($name in @('new-preset-startup.png','new-preset-startup-elements.json','new-preset-portrait.png','new-preset-portrait-elements.json','new-preset-workspace.png','new-preset-ok.json','new-preset.rustmix.json')) {
+    if (-not (Test-Path -LiteralPath (Join-Path artifacts $name))) { throw "Missing New Preset evidence: $name" }
+}
 Invoke-NativeSmoke @('--ui-source-smoke')
 foreach ($name in @('source-photos-form','source-browser-form','source-camera-discovery')) {
     foreach ($suffix in @('.png','-elements.json')) {

@@ -148,3 +148,14 @@ The new suite covers schema migration, invalid/cyclic processing graphs, inserti
 ## UI-011 resource and cadence measurements (targets failed)
 
 Clock tests cover exact progressive 24/25/30/50/60 and fractional 24000/1001, 30000/1001, 60000/1001 deadlines over an hour, late-wake skipping and bounded queues. Producer tests cover progress without a UI consumer and static-buffer reuse; source buffers retain capacity across renders. All native launches emit per-process `*-memory.json` and stderr files. `--ui-perf` samples moving 640x360 Program at 50/59.94/60 with seven inputs; `program-cadence.json` records actual frame production and skipped deadlines. A short sample meeting its target is not hardware, full-HD, audio/video sync or broadcast output qualification. A sample missing its target remains an explicit failed performance qualification.
+
+UI-034 candidate (2026-10-21): prepared preset/scan/migration/camera atomicity,
+portrait Browser and real New/Cancel/unsaved-widget regressions. HTTP discovery
+regression uses a complete keepalive response whose next read times out. Hosted
+`--ui-preset-smoke` exercises normal cold initialization, actual New/size/rate/OK
+clicks, Cancel isolation, portrait-60p reference texture, save/load and three GPU
+captures. Source smoke now uses a 1080x1920 loopback Browser viewport. Existing
+native modes, bounded deadlines, adapter evidence and GPU drain gates remain.
+Local allowed formatting/diff/inventory/script-syntax checks only; new Rust/native
+checks have not run. Old f6ecbdd/run39603431352 failed Browser discovery and GPU
+teardown. See [UI-034](ui034-add-input-and-new-preset.md) for limits.

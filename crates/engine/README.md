@@ -1,5 +1,11 @@
 # rustmix-engine
 
+UI-034 candidate: `video_format` validates landscape/portrait project standards,
+rational frame rates, scan/field order and exact Camera modes. `Engine::new_preset`
+constructs two muted black safety inputs without I/O. Schema 10 migrates older
+scan/camera defaults. Prepared tests cover atomic invalid input, persistence and
+legacy migration; hosted execution pending. Interlaced output is not implemented.
+
 Task 1.3 source candidate: schema 6 adds four independent external-output configuration
 slots (`outputs`). `output.route.set` and `output.external.configure` update individual
 fields; `output.external.apply` validates and publishes a complete slot atomically in

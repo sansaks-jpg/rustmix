@@ -9,8 +9,6 @@ use std::sync::{
 
 type Pixels = Arc<Vec<[u8; 4]>>;
 
-pub(crate) const PROGRAM_SIZE: [u32; 2] = [640, 360];
-
 struct Latest<T>(Mutex<Option<T>>);
 impl<T> Default for Latest<T> {
     fn default() -> Self {
@@ -158,6 +156,7 @@ impl Drop for ProgramWorker {
 
 #[derive(Clone, PartialEq)]
 struct SourceKey {
+    size: [u32; 2],
     kind: InputKind,
     color: [u8; 3],
     online: bool,
@@ -213,6 +212,7 @@ impl ProgramRenderer {
         let mut fx = sources.get(&id).cloned().unwrap_or_default();
         fx.config = input.config.clone();
         let key = SourceKey {
+            size: engine.project().preferences.video_standard().monitor_size(),
             kind: input.kind,
             color: input.color,
             online: input.online,
@@ -250,7 +250,7 @@ impl ProgramRenderer {
             );
             return Ok((pixels, generation));
         }
-        let [w, h] = PROGRAM_SIZE;
+        let [w, h] = key.size;
         let old = self.surfaces.remove(&id);
         let mut raw = old
             .and_then(|s| Arc::try_unwrap(s.pixels).ok())
@@ -313,7 +313,7 @@ impl ProgramRenderer {
         {
             return Ok(Arc::clone(pixels));
         }
-        let [w, h] = PROGRAM_SIZE;
+        let [w, h] = project.preferences.video_standard().monitor_size();
         let pixels = Arc::new(render::program_from_sources(
             project,
             transition,

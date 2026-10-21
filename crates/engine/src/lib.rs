@@ -28,6 +28,8 @@ pub mod render;
 pub mod shortcuts;
 pub use shortcuts::{ShortcutAction, ShortcutBinding, default_key_bindings};
 pub mod video_clock;
+pub mod video_format;
+pub use video_format::{ScanMode, VideoStandard};
 pub mod video_source;
 pub mod wav;
 
@@ -185,6 +187,8 @@ pub struct Preferences {
     pub width: u32,
     pub height: u32,
     pub rate: Rate,
+    #[serde(default)]
+    pub scan: ScanMode,
     pub high_contrast: bool,
     pub ui_scale: f32,
     pub shortcuts: bool,
@@ -204,13 +208,14 @@ pub struct WorkspaceState {
     pub name: String,
     pub dock_json: String,
 }
-/// Current project schema. Schema 9 adds Photos, Browser and camera descriptors.
+/// Schema 10 adds scan/field order and exact native camera format descriptors.
+/// Schema 9 adds Photos, Browser and camera descriptors.
 /// Schema 7 adds typed audio-only source descriptors.
 /// Schema 6 adds the four external output slots
 /// (routing and configuration); schema 5 replaced the four-overlay array with
-/// the sixteen-channel production bank; 1–7 load through the persistence
+/// the sixteen-channel production bank; 1–9 load through the persistence
 /// migration.
-pub const SCHEMA: u32 = 9;
+pub const SCHEMA: u32 = 10;
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ProjectState {
     pub schema: u32,
@@ -289,6 +294,7 @@ impl ProjectState {
                     numerator: 30,
                     denominator: 1,
                 },
+                scan: ScanMode::Progressive,
                 high_contrast: false,
                 ui_scale: 1.0,
                 shortcuts: true,
@@ -367,12 +373,7 @@ impl ProjectState {
         self.overlays.validate(&self.inputs)?;
         self.outputs.validate(&self.inputs, self.buses.len())?;
         let p = &self.preferences;
-        if !matches!(
-            (p.width, p.height),
-            (1280, 720) | (1920, 1080) | (2560, 1440) | (3840, 2160)
-        ) {
-            return Err(invalid("Choose a supported 16:9 canvas size"));
-        }
+        p.video_standard().validate()?;
         if Rate::new(p.rate.numerator, p.rate.denominator)? != p.rate {
             return Err(invalid("Frame rate must be reduced"));
         }

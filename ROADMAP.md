@@ -1,5 +1,11 @@
 # Roadmap
 
+UI-034: implement Add Input refinements and the requested startup/New format
+selector. Source complete; next is authorized exact-revision hosted checks,
+mandatory preset/source/native captures and inspection. Physical camera/audio,
+full-resolution/interlaced output and resource/cadence qualification remain open.
+See [UI-034](docs/ui034-add-input-and-new-preset.md).
+
 UI-028 through UI-031 (2026-10-21): Video-first Input Select with genuine bounded
 recent files and validation; topmost Escape/popup/repeat safety; responsive
 default widths preserving real resizing; Input Settings expanding fields,

@@ -338,6 +338,11 @@ impl RustMixApp {
         }
         let start = Instant::now();
         let p = self.engine.project().clone();
+        let [thumbnail_w, thumbnail_h] = if p.preferences.height > p.preferences.width {
+            [216, 384]
+        } else {
+            [384, 216]
+        };
         self.textures.retain(|id, _| p.input(*id).is_some());
         self.thumbnail_pixels.retain(|id, _| p.input(*id).is_some());
         let mut raw_sources: HashMap<InputId, Vec<[u8; 4]>> = HashMap::new();
@@ -346,12 +351,13 @@ impl RustMixApp {
                 .engine
                 .playback(input.id)
                 .map_or(0, |clock| clock.position_ms());
-            if let Ok(pixels) = render::source(input, 384, 216, input_ms) {
+            if let Ok(pixels) = render::source(input, thumbnail_w, thumbnail_h, input_ms) {
                 raw_sources.insert(input.id, pixels);
             }
         }
 
-        let mut processed_preview = processed_sources(&p, &raw_sources, &self.input_fx, 384, 216);
+        let mut processed_preview =
+            processed_sources(&p, &raw_sources, &self.input_fx, thumbnail_w, thumbnail_h);
         for input in &p.inputs {
             if let Some(processed) = processed_preview.remove(&input.id) {
                 // A project revision can change audio/routing without changing any
@@ -362,7 +368,7 @@ impl RustMixApp {
                 {
                     continue;
                 }
-                let image = colour_image([384, 216], &processed);
+                let image = colour_image([thumbnail_w as usize, thumbnail_h as usize], &processed);
                 if let Some(texture) = self.textures.get_mut(&input.id) {
                     update_texture_image(texture, image);
                 } else {
@@ -404,7 +410,15 @@ impl RustMixApp {
         self.last_program_rgba.clear();
         self.last_program_rgba
             .extend(pixels.iter().flatten().copied());
-        let image = colour_image([640, 360], &pixels);
+        let image = colour_image(
+            self.engine
+                .project()
+                .preferences
+                .video_standard()
+                .monitor_size()
+                .map(|d| d as usize),
+            &pixels,
+        );
         if let Some(texture) = &mut self.program_texture {
             update_texture_image(texture, image);
         } else {
@@ -419,6 +433,7 @@ impl RustMixApp {
 
     fn monitor(&mut self, ui: &mut egui::Ui, program: bool) {
         let p = self.engine.project();
+        let aspect = p.preferences.width as f32 / p.preferences.height.max(1) as f32;
         let id = if program { p.program } else { p.preview };
         let Some(input) = p.input(id).cloned() else {
             ui.colored_label(RED, "Source missing");
@@ -554,17 +569,17 @@ impl RustMixApp {
         let available = ui.available_size();
         let transport_h = 28.0;
         let canvas_avail_h = (available.y - transport_h - 4.0).max(40.0);
-        let width = available.x.max(16.0).min(canvas_avail_h * 16.0 / 9.0);
+        let width = available.x.max(16.0).min(canvas_avail_h * aspect);
         // Keep the picture directly below its source header. A tall bank has
         // spare workspace below the transport, not extra black above/below the
         // picture. A height-constrained bank can still pillarbox a 16:9 image.
         let (letterbox, _) = ui.allocate_exact_size(
-            Vec2::new(available.x.max(width), width * 9.0 / 16.0),
+            Vec2::new(available.x.max(width), width / aspect),
             Sense::hover(),
         );
         ui.painter()
             .rect_filled(letterbox, 0.0, Color32::from_rgb(8, 10, 14));
-        let rect = Rect::from_center_size(letterbox.center(), Vec2::new(width, width * 9.0 / 16.0));
+        let rect = Rect::from_center_size(letterbox.center(), Vec2::new(width, width / aspect));
         self.automation.insert(
             format!("monitor.{}", if program { "program" } else { "preview" }),
             rect,
@@ -1243,11 +1258,13 @@ impl RustMixApp {
                                                 let response = if let Some(texture) =
                                                     self.textures.get(&input.id)
                                                 {
-                                                    ui.add(
-                                                        egui::Image::new(texture)
-                                                            .fit_to_exact_size(size)
-                                                            .sense(Sense::click()),
-                                                    )
+                                                    let (rect,response)=ui.allocate_exact_size(size,Sense::click());
+                                                    ui.painter().rect_filled(rect,0.0,Color32::BLACK);
+                                                    let aspect=texture.aspect_ratio();
+                                                    let w=rect.width().min(rect.height()*aspect);
+                                                    let image=Rect::from_center_size(rect.center(),Vec2::new(w,w/aspect));
+                                                    ui.painter().image(texture.id(),image,Rect::from_min_max(Pos2::ZERO,Pos2::new(1.0,1.0)),Color32::WHITE);
+                                                    response
                                                 } else {
                                                     ui.allocate_response(size, Sense::click())
                                                 };
@@ -2003,48 +2020,7 @@ impl RustMixApp {
                 self.about = false;
             }
         }
-        if self.confirm_new {
-            egui::Window::new("New preset?")
-                .collapsible(false)
-                .show(ctx, |ui| {
-                    ui.label("Replace the current workspace with the default preset?");
-                    ui.horizontal(|ui| {
-                        if ui.button("Save current").clicked() {
-                            self.actions.push(Action::Save(false));
-                        }
-                        let create = ui.add_enabled(
-                            self.job.is_none(),
-                            egui::Button::new("Create new preset"),
-                        );
-                        self.automation
-                            .insert("dialog.new.confirm".into(), create.rect);
-                        if create.clicked() {
-                            match Engine::from_project_at(ProjectState::demo(), self.now) {
-                                Ok(engine) => {
-                                    self.engine = engine;
-                                    self.reset_editors();
-                                    self.media_loader.reset();
-                                    self.input_fx.clear();
-                                    self.sync_input_cache();
-                                    self.submit_program();
-                                    self.theme(ctx);
-                                    self.dock = default_dock(false);
-                                    self.audio_restore = None;
-                                    self.path = None;
-                                    self.saved_revision = 0;
-                                    self.textures.clear();
-                                    self.last_demo_frame = None;
-                                    self.confirm_new = false;
-                                }
-                                Err(error) => self.say(error.to_string(), true),
-                            }
-                        }
-                        if ui.button("Cancel").clicked() {
-                            self.confirm_new = false;
-                        }
-                    });
-                });
-        }
+        self.new_preset_dialog(ctx);
         if self.confirm_close {
             egui::Window::new("Unsaved preset")
                 .collapsible(false)

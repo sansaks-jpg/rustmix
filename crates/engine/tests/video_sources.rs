@@ -364,6 +364,7 @@ fn new_source_descriptors_validate_and_roundtrip_without_changing_program() {
         },
         VideoSource::Camera {
             device_id: "test-camera-stable-id".into(),
+            format: None,
         },
     ];
     let mut engine = Engine::default();
@@ -436,6 +437,7 @@ fn new_source_descriptors_validate_and_roundtrip_without_changing_program() {
         },
         VideoSource::Camera {
             device_id: "".into(),
+            format: None,
         },
     ] {
         assert!(source.validate().is_err());

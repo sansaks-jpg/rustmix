@@ -1,5 +1,11 @@
 # Workspace architecture
 
+UI-034 adds the headless video-format/new-session constructor, schema-10 scan
+and exact camera descriptors, UI-only New Preset drafts and bounded native mode
+discovery. Program surfaces/monitor/snapshot orientation changes retain the same
+pixel budget. Browser control reads length-delimited HTTP with two process-owner
+permits. No dependency or layer change. See [ADR 0034](adr/0034-new-preset-and-native-input-formats.md).
+
 UI-028 through UI-031 (2026-10-21): Video-first Input Select with genuine bounded
 recent files and validation; topmost Escape/popup/repeat safety; responsive
 default widths preserving real resizing; Input Settings expanding fields,

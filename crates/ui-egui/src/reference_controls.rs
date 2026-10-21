@@ -216,14 +216,12 @@ impl RustMixApp {
                 let label = display_label(ui, "Master Frame Rate:", label_width);
                 self.automation.insert("dialog.settings.label.frameRate".into(), label);
                 let rate = egui::ComboBox::from_id_salt("settings.rate").width(field_width)
-                    .selected_text(format!("{}p", draft.rate.label())).show_ui(ui, |ui| {
-                        for (num, den, label) in [
-                            (24,1,"24p"), (25,1,"25p"), (30000,1001,"NTSC 29.97p"),
-                            (30,1,"30p"), (50,1,"50p"), (60000,1001,"NTSC 59.94p"), (60,1,"60p"),
-                        ] {
-                            let rate = Rate { numerator: num, denominator: den };
-                            let option = ui.selectable_value(&mut draft.rate, rate, label);
-                            self.automation.insert(format!("dialog.settings.rate.{}", rate.label()), option.rect);
+                    .selected_text(draft.scan.rate_label(draft.rate)).show_ui(ui, |ui| {
+                        for (rate,scan) in rustmix_engine::video_format::rate_options() {
+                            let option = ui.selectable_label(draft.rate == rate && draft.scan == scan, scan.rate_label(rate));
+                            if scan==ScanMode::Progressive { self.automation.insert(format!("dialog.settings.rate.{}", rate.label()), option.rect); }
+                            self.automation.insert(format!("dialog.settings.rate.{}.{}", rate.label(),scan.label()), option.rect);
+                            if option.clicked() { draft.rate=rate; draft.scan=scan; ui.close(); }
                         }
                     });
                 self.automation.insert("dialog.settings.frameRate".into(), rate.response.rect);
@@ -232,7 +230,7 @@ impl RustMixApp {
                 self.automation.insert("dialog.settings.label.outputSize".into(), label);
                 let raster = egui::ComboBox::from_id_salt("settings.canvas").width(field_width)
                     .selected_text(format!("{}×{}", draft.width, draft.height)).show_ui(ui, |ui| {
-                        for (width, height) in [(1280,720),(1920,1080),(2560,1440),(3840,2160)] {
+                        for (width, height) in rustmix_engine::video_format::CANVAS_SIZES {
                             let selected = draft.width == width && draft.height == height;
                             let option = ui.selectable_label(selected, format!("{width}×{height}"));
                             self.automation.insert(format!("dialog.settings.canvas.{width}"), option.rect);
@@ -240,7 +238,7 @@ impl RustMixApp {
                         }
                     });
                 self.automation.insert("dialog.settings.outputSize".into(), raster.response.rect);
-                raster.response.on_hover_text("Project canvas size. Actual Program processing remains 640×360 in this experimental build.");
+                raster.response.on_hover_text("Project canvas size. Monitor processing uses 640×360 landscape or 360×640 portrait. Full-resolution and interlaced output is unavailable.");
                 ui.end_row();
                 if compact {
                     self.display_project_name(ui, label_width, field_width);
@@ -278,10 +276,10 @@ impl RustMixApp {
                 display_label(ui, "Output Aspect Ratio:", label_width);
                 let aspect = ui.add_enabled_ui(false, |ui| {
                     egui::ComboBox::from_id_salt("settings.aspect").width(field_width)
-                        .selected_text("Widescreen (16:9)").show_ui(ui, |_| {})
+                        .selected_text(if draft.height > draft.width { "Portrait (9:16)" } else { "Widescreen (16:9)" }).show_ui(ui, |_| {})
                 }).inner;
                 self.automation.insert("dialog.settings.aspectRatio".into(), aspect.response.rect);
-                aspect.response.on_disabled_hover_text("Only 16:9 project canvases are supported.");
+                aspect.response.on_disabled_hover_text("Aspect ratio follows the selected canvas orientation.");
                 ui.end_row();
                 ui.allocate_space(egui::vec2(0.0,12.0));
                 ui.allocate_space(egui::vec2(0.0,12.0));

@@ -96,11 +96,16 @@ impl VideoPlayer {
                     let result =
                         std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| match &source {
                             VideoSource::File { path } => {
-                                native::run(&worker, input_id, generation, path, false)
+                                native::run(&worker, input_id, generation, path, None, false)
                             }
-                            VideoSource::Camera { device_id } => {
-                                native::run(&worker, input_id, generation, device_id, true)
-                            }
+                            VideoSource::Camera { device_id, format } => native::run(
+                                &worker,
+                                input_id,
+                                generation,
+                                device_id,
+                                format.as_ref(),
+                                true,
+                            ),
                             _ => source_workers::run(&worker, input_id, generation, &source),
                         }));
                     let failure = match result {
@@ -553,6 +558,57 @@ pub(crate) fn discover_cameras() -> Result<Vec<(String, String)>, String> {
     }
 }
 
+#[cfg(windows)]
+fn platform_mode(
+    mode: &rustmix_engine::video_format::CameraFormat,
+) -> rustmix_platform::media_foundation::CameraMode {
+    rustmix_platform::media_foundation::CameraMode {
+        width: mode.width,
+        height: mode.height,
+        numerator: mode.rate.numerator,
+        denominator: mode.rate.denominator,
+        interlace: match mode.scan {
+            rustmix_engine::ScanMode::Progressive => 2,
+            rustmix_engine::ScanMode::InterlacedUpperFirst => 3,
+            rustmix_engine::ScanMode::InterlacedLowerFirst => 4,
+        },
+        subtype: mode.subtype.clone(),
+    }
+}
+pub(crate) fn discover_camera_modes(
+    device: &str,
+) -> Result<Vec<rustmix_engine::video_format::CameraFormat>, String> {
+    #[cfg(windows)]
+    {
+        rustmix_platform::media_foundation::VideoFile::camera_modes(device)
+            .map_err(|e| e.to_string())?
+            .into_iter()
+            .map(|mode| {
+                let format = rustmix_engine::video_format::CameraFormat {
+                    width: mode.width,
+                    height: mode.height,
+                    rate: rustmix_engine::Rate::new(mode.numerator, mode.denominator)
+                        .map_err(|e| e.to_string())?,
+                    scan: match mode.interlace {
+                        2 => rustmix_engine::ScanMode::Progressive,
+                        3 => rustmix_engine::ScanMode::InterlacedUpperFirst,
+                        4 => rustmix_engine::ScanMode::InterlacedLowerFirst,
+                        _ => return Err("Unsupported camera scan".into()),
+                    },
+                    subtype: mode.subtype,
+                };
+                format.validate().map_err(|e| e.to_string())?;
+                Ok(format)
+            })
+            .collect()
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = device;
+        Err("Camera capture requires Windows".into())
+    }
+}
+
 pub(crate) fn probe_source(source: &VideoSource) -> Result<(), String> {
     source.validate().map_err(|e| e.to_string())?;
     #[cfg(windows)]
@@ -567,9 +623,11 @@ pub(crate) fn probe_source(source: &VideoSource) -> Result<(), String> {
             VideoSource::Browser { url, width, height } => {
                 source_workers::probe_browser(url, *width, *height)
             }
-            VideoSource::Camera { device_id } => {
+            VideoSource::Camera { device_id, format } => {
                 use rustmix_platform::media_foundation::{VideoFile, VideoRead};
-                let mut camera = VideoFile::open_camera(device_id).map_err(|e| e.to_string())?;
+                let mode = format.as_ref().map(platform_mode);
+                let mut camera = VideoFile::open_camera_mode(device_id, mode.as_ref())
+                    .map_err(|e| e.to_string())?;
                 for _ in 0..120 {
                     match camera.read_frame().map_err(|e| e.to_string())? {
                         VideoRead::Frame(_) => return Ok(()),
@@ -656,6 +714,7 @@ mod native {
         input_id: InputId,
         generation: u64,
         path: &str,
+        format: Option<&rustmix_engine::video_format::CameraFormat>,
         camera: bool,
     ) -> Result<(), String> {
         if shared.stop.load(Ordering::Acquire) {
@@ -663,7 +722,8 @@ mod native {
         }
         set_health_bounded(&shared.feed, VideoSourceHealth::Probing)?;
         let file = if camera {
-            VideoFile::open_camera(path)
+            let mode = format.map(platform_mode);
+            VideoFile::open_camera_mode(path, mode.as_ref())
         } else {
             VideoFile::open(std::path::Path::new(path))
         }

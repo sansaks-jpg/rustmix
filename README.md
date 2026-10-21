@@ -1,5 +1,12 @@
 # RustMix
 
+UI-034 source candidate (2026-10-21): New Preset on normal startup/New, staged
+landscape/portrait/rational-rate/scan settings, two black safety inputs, native
+Camera format selection, portrait Browser viewport and a bounded HTTP discovery
+fix. **Hosted compilation and runtime acceptance are pending.** Monitoring stays
+640x360 / 360x640 progressive; full-HD/interlaced broadcast output is unavailable.
+See [scope and verification](docs/ui034-add-input-and-new-preset.md).
+
 UI-028 through UI-031 (2026-10-21): Video-first Input Select with genuine bounded
 recent files and validation; topmost Escape/popup/repeat safety; responsive
 default widths preserving real resizing; Input Settings expanding fields,

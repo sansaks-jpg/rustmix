@@ -198,6 +198,76 @@ pub struct CameraDevice {
     pub name: String,
 }
 
+/// Device-reported native mode; plain data can cross to the UI control thread.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CameraMode {
+    pub width: u32,
+    pub height: u32,
+    pub numerator: u32,
+    pub denominator: u32,
+    pub interlace: u32,
+    pub subtype: String,
+}
+
+fn camera_mode(media_type: &IMFMediaType) -> Result<CameraMode> {
+    let [width, height] = media_size(media_type)?;
+    // SAFETY: The owned media type stays on this initialized COM worker. All
+    // getters return scalar values, no application memory or interfaces escape.
+    let (rate, interlace, subtype) = unsafe {
+        (
+            mf("camera frame rate", media_type.GetUINT64(&MF_MT_FRAME_RATE))?,
+            mf(
+                "camera scan mode",
+                media_type.GetUINT32(&MF_MT_INTERLACE_MODE),
+            )?,
+            mf("camera pixel format", media_type.GetGUID(&MF_MT_SUBTYPE))?,
+        )
+    };
+    let (numerator, denominator) = ((rate >> 32) as u32, rate as u32);
+    if numerator == 0
+        || denominator == 0
+        || u64::from(numerator) > 120 * u64::from(denominator)
+        || ![2, 3, 4].contains(&interlace)
+    {
+        return Err(VideoError::Invalid(
+            "Camera mode must have a valid frame rate and progressive or interleaved scan",
+        ));
+    }
+    let (mut gcd, mut remainder) = (numerator, denominator);
+    while remainder != 0 {
+        let next = gcd % remainder;
+        gcd = remainder;
+        remainder = next;
+    }
+    Ok(CameraMode {
+        width,
+        height,
+        numerator: numerator / gcd,
+        denominator: denominator / gcd,
+        interlace,
+        subtype: format!("{subtype:?}"),
+    })
+}
+
+fn camera_native_types(reader: &IMFSourceReader) -> Result<Vec<(CameraMode, IMFMediaType)>> {
+    let mut modes = Vec::new();
+    for index in 0..256 {
+        // SAFETY: The owned reader stays on its COM worker; bounded SDK type
+        // indices return owned interfaces which are released on this thread.
+        let media_type = match unsafe { reader.GetNativeMediaType(FIRST_VIDEO, index) } {
+            Ok(value) => value,
+            Err(error) if error.code() == MF_E_NO_MORE_TYPES => return Ok(modes),
+            Err(error) => return mf("enumerate camera formats", Err(error)),
+        };
+        if let Ok(mode) = camera_mode(&media_type) {
+            modes.push((mode, media_type));
+        }
+    }
+    Err(VideoError::Invalid(
+        "Camera advertises more than 256 formats",
+    ))
+}
+
 fn camera_attributes() -> Result<IMFAttributes> {
     let mut attributes = None;
     // SAFETY: Valid exclusive out pointer, then owned attributes on this COM worker.
@@ -342,13 +412,14 @@ impl VideoFile {
         let reader = mf("open local MP4", unsafe {
             MFCreateSourceReaderFromURL(PCWSTR(wide.as_ptr()), &attributes)
         })?;
-        Self::from_reader(runtime, None, reader)
+        Self::from_reader(runtime, None, reader, None)
     }
 
     fn from_reader(
         runtime: Runtime,
         capture: Option<CaptureOwner>,
         reader: IMFSourceReader,
+        selected: Option<IMFMediaType>,
     ) -> Result<Self> {
         // SAFETY: Reader is a live owned interface on its initializing worker.
         // Stream selectors are SDK constants; only video is enabled (no audio
@@ -362,10 +433,13 @@ impl VideoFile {
                 "select video stream",
                 reader.SetStreamSelection(FIRST_VIDEO, true),
             )?;
-            mf(
-                "inspect native video type",
-                reader.GetNativeMediaType(FIRST_VIDEO, 0),
-            )?
+            match selected {
+                Some(native) => native,
+                None => mf(
+                    "inspect native video type",
+                    reader.GetNativeMediaType(FIRST_VIDEO, 0),
+                )?,
+            }
         };
         let source_size = media_size(&native)?;
         let [source_width, source_height] = source_size;
@@ -396,6 +470,11 @@ impl VideoFile {
 
     /// Explicit operator-selected camera. Never selects a different device on failure.
     pub fn open_camera(device_id: &str) -> Result<Self> {
+        let (runtime, source, reader) = Self::camera_reader(device_id)?;
+        Self::from_reader(runtime, Some(source), reader, None)
+    }
+
+    fn camera_reader(device_id: &str) -> Result<(Runtime, CaptureOwner, IMFSourceReader)> {
         if device_id.is_empty() || device_id.len() > 4096 || device_id.chars().any(char::is_control)
         {
             return Err(VideoError::Invalid("Invalid camera device ID"));
@@ -436,7 +515,59 @@ impl VideoFile {
             )?;
             (owner, reader)
         };
-        Self::from_reader(runtime, Some(source), reader)
+        Ok((runtime, source, reader))
+    }
+
+    /// Opens only the explicitly selected device; mode discovery reads no frames.
+    pub fn camera_modes(device_id: &str) -> Result<Vec<CameraMode>> {
+        let (_runtime, _source, reader) = Self::camera_reader(device_id)?;
+        Ok(camera_native_types(&reader)?
+            .into_iter()
+            .map(|(mode, _)| mode)
+            .collect())
+    }
+
+    pub fn open_camera_mode(device_id: &str, mode: Option<&CameraMode>) -> Result<Self> {
+        let Some(mode) = mode else {
+            return Self::open_camera(device_id);
+        };
+        let (runtime, source, reader) = Self::camera_reader(device_id)?;
+        let (_, native) = camera_native_types(&reader)?
+            .into_iter()
+            .find(|(candidate, _)| candidate == mode)
+            .ok_or(VideoError::Invalid(
+                "Selected camera format is no longer available; refresh formats",
+            ))?;
+        // SAFETY: Owned native type and reader live on the same COM worker,
+        // no reads are pending; MF retains its own reference to the exact type.
+        unsafe {
+            mf(
+                "select native camera format",
+                reader.SetCurrentMediaType(FIRST_VIDEO, None, &native),
+            )?;
+        }
+        let mut camera = Self::from_reader(runtime, Some(source), reader, Some(native))?;
+        let size = fit_reference(mode.width, mode.height);
+        let rate = Some([mode.numerator, mode.denominator]);
+        if configure_rgb32_rate(&camera.reader, Some(size), rate).is_err() {
+            configure_rgb32_rate(&camera.reader, None, rate)?;
+        }
+        // SAFETY: The reader returns an owned current type on its COM worker.
+        let current = unsafe {
+            mf(
+                "inspect selected camera output",
+                camera.reader.GetCurrentMediaType(FIRST_VIDEO),
+            )?
+        };
+        camera.format = decoded_format(&current)?;
+        if u64::from(camera.format.frame_rate_numerator) * u64::from(mode.denominator)
+            != u64::from(mode.numerator) * u64::from(camera.format.frame_rate_denominator)
+        {
+            return Err(VideoError::Invalid(
+                "Camera processor changed the selected frame rate",
+            ));
+        }
+        Ok(camera)
     }
 
     pub fn format(&self) -> VideoFormat {
@@ -659,6 +790,13 @@ fn local_mp4_path(path: &Path) -> Result<Vec<u16>> {
 }
 
 fn configure_rgb32(reader: &IMFSourceReader, size: Option<[u32; 2]>) -> Result<()> {
+    configure_rgb32_rate(reader, size, None)
+}
+fn configure_rgb32_rate(
+    reader: &IMFSourceReader,
+    size: Option<[u32; 2]>,
+    rate: Option<[u32; 2]>,
+) -> Result<()> {
     // SAFETY: All COM values are owned on the initialized worker. Attribute
     // GUIDs and scalar values are SDK constants; SetCurrentMediaType borrows
     // this owned media type for the call and retains its own COM reference.
@@ -682,6 +820,15 @@ fn configure_rgb32(reader: &IMFSourceReader, size: Option<[u32; 2]>) -> Result<(
                 media_type.SetUINT64(
                     &MF_MT_FRAME_SIZE,
                     (u64::from(width) << 32) | u64::from(height),
+                ),
+            )?;
+        }
+        if let Some([numerator, denominator]) = rate {
+            mf(
+                "request selected camera rate",
+                media_type.SetUINT64(
+                    &MF_MT_FRAME_RATE,
+                    (u64::from(numerator) << 32) | u64::from(denominator),
                 ),
             )?;
         }

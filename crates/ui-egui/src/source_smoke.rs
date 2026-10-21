@@ -173,6 +173,8 @@ impl RustMixApp {
                     .url
                     .clone();
                 self.add_name = "Fixture browser".into();
+                self.source_ui.width = 1080;
+                self.source_ui.height = 1920;
                 s.stage = 8;
             }
             8 => {

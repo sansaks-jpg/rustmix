@@ -88,6 +88,8 @@ pub enum VideoSource {
     },
     Camera {
         device_id: String,
+        #[serde(default)]
+        format: Option<crate::video_format::CameraFormat>,
     },
 }
 
@@ -103,7 +105,10 @@ impl VideoSource {
 
     pub fn validate(&self) -> Result<()> {
         let path = match self {
-            Self::Camera { device_id } => {
+            Self::Camera { device_id, format } => {
+                if let Some(format) = format {
+                    format.validate()?;
+                }
                 return if valid_audio_identity(device_id) {
                     Ok(())
                 } else {
@@ -119,12 +124,13 @@ impl VideoSource {
                     && (url.starts_with("https://") || url.starts_with("http://"))
                     && authority.is_some_and(|a| !a.is_empty() && !a.contains('@'))
                     && (64..=1920).contains(width)
-                    && (64..=1080).contains(height)
+                    && (64..=1920).contains(height)
+                    && u64::from(*width) * u64::from(*height) <= 1920 * 1080
                 {
                     Ok(())
                 } else {
                     Err(invalid(
-                        "Browser needs an HTTP(S) URL without credentials and a 64–1920 by 64–1080 viewport",
+                        "Browser needs an HTTP(S) URL without credentials, sides of 64–1920 pixels and at most 2073600 pixels (Full HD / portrait)",
                     ))
                 };
             }

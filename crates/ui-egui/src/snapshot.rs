@@ -2,8 +2,8 @@
 use super::*;
 use std::io::Write;
 
-fn write_snapshot(path: &std::path::Path, pixels: &[u8]) -> Result<()> {
-    if pixels.len() != 640 * 360 * 4 {
+fn write_snapshot(path: &std::path::Path, pixels: &[u8], size: [u32; 2]) -> Result<()> {
+    if !matches!(size, [640, 360] | [360, 640]) || pixels.len() != 640 * 360 * 4 {
         return Err(Error::Invalid(
             "No complete Program frame is available".into(),
         ));
@@ -17,11 +17,12 @@ fn write_snapshot(path: &std::path::Path, pixels: &[u8]) -> Result<()> {
         .create_new(true)
         .open(path)?;
     let result = (|| {
+        let [width, height] = size;
         image::write_buffer_with_format(
             &mut file,
             pixels,
-            640,
-            360,
+            width,
+            height,
             image::ColorType::Rgba8,
             image::ImageFormat::Png,
         )
@@ -54,10 +55,14 @@ impl RustMixApp {
             .map_or(0, |d| d.as_nanos());
         let path = folder.join(format!("program-{}-{nonce}.png", std::process::id()));
         let pixels = self.last_program_rgba.clone();
+        let size = self.program_texture.as_ref().map_or([640, 360], |t| {
+            let [width, height] = t.size();
+            [width as u32, height as u32]
+        });
         let (tx, rx) = mpsc::sync_channel(1);
         self.job = Some(rx);
         std::thread::spawn(move || {
-            let done = match write_snapshot(&path, &pixels) {
+            let done = match write_snapshot(&path, &pixels, size) {
                 Ok(()) => JobDone::SnapshotSaved(path),
                 Err(error) => JobDone::Failed(error.to_string()),
             };
@@ -79,7 +84,7 @@ mod tests {
         assert!(app.job.is_none());
         let path = dir.path().join("existing.png");
         std::fs::write(&path, b"keep").unwrap();
-        assert!(write_snapshot(&path, &vec![10; 640 * 360 * 4]).is_err());
+        assert!(write_snapshot(&path, &vec![10; 640 * 360 * 4], [640, 360]).is_err());
         assert_eq!(std::fs::read(path).unwrap(), b"keep");
     }
     #[test]
