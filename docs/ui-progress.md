@@ -757,3 +757,12 @@ and shortcut actions `ShortcutAction::ToggleOverlay(slot)` now inspect the activ
 - If the overlay channel is already enabled and displaying that exact Preview source, clicking toggles it off (`overlay.enabled = false`).
 - If the overlay channel was showing a different source, clicking switches the overlay to the current Preview source.
 - Tooltips provide operator feedback indicating the active source or the Preview overlay action.
+
+## 2026-10-22 - Default CG template removed from demo inputs and added to Add Input
+
+- Removed the default "Graphics" input from `ProjectState::demo()`, replacing it with "Camera D" (`InputKind::Studio`). Clicking default inputs no longer displays a hardcoded CG overlay banner.
+- Removed the hardcoded `"YOUR STORY. LIVE."` monitor painter text in `panels.rs`, dynamically displaying `&input.name` for graphics inputs.
+- Enabled Tab 14 ("Title") in the Add Input dialog (`crates/ui-egui/src/add_input.rs` and `dialogs.rs`):
+  - Added to `CATEGORY_ORDER` (`[VIDEO_TAB, 22, 1, 11, 14, 12, 13, 0]`).
+  - Marked available in `unavailable_reason`.
+  - Added Title/CG overlay templates ("Lower Third Graphic", "Title Banner Overlay") in `generator_add_page` so operators can create Title and CG overlay inputs directly on demand.

@@ -240,7 +240,7 @@ pub(super) const ADD_CATEGORIES: [(&str, InputKind, &str); 26] = [
     (
         "Title",
         InputKind::Graphics,
-        "Title templates are unavailable. Use Generators for a procedural lower-third sample.",
+        "Procedural lower-third title and CG graphic overlay.",
     ),
     (
         "Countdown",

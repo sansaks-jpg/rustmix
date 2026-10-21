@@ -271,7 +271,7 @@ impl ProjectState {
             "Camera A",
             "Camera B",
             "Camera C",
-            "Graphics",
+            "Camera D",
             "News Background",
             "Color Source",
             "Countdown",
@@ -285,9 +285,18 @@ impl ProjectState {
             [114, 79, 183],
             [35, 174, 157],
         ];
+        let kinds = [
+            InputKind::Grid,
+            InputKind::Geometry,
+            InputKind::Bars,
+            InputKind::Studio,
+            InputKind::Grid,
+            InputKind::Color,
+            InputKind::Countdown,
+        ];
         let inputs = names
             .into_iter()
-            .zip(InputKind::ALL)
+            .zip(kinds)
             .zip(colors)
             .enumerate()
             .map(|(i, ((name, kind), color))| InputState {
@@ -853,7 +862,13 @@ impl Default for Engine {
         let playback = project
             .inputs
             .iter()
-            .map(|i| (i.id, playback::PlaybackClock::new(0)))
+            .map(|i| {
+                let mut clock = playback::PlaybackClock::new(0);
+                if i.id != project.program {
+                    clock.set_paused(true);
+                }
+                (i.id, clock)
+            })
             .collect();
         Self {
             project,
@@ -878,7 +893,13 @@ impl Engine {
         let playback = project
             .inputs
             .iter()
-            .map(|i| (i.id, playback::PlaybackClock::new(now)))
+            .map(|i| {
+                let mut clock = playback::PlaybackClock::new(now);
+                if i.id != project.program {
+                    clock.set_paused(true);
+                }
+                (i.id, clock)
+            })
             .collect();
         Ok(Self {
             project,
@@ -1516,9 +1537,41 @@ impl Engine {
         for input in &self.project.inputs {
             self.playback
                 .entry(input.id)
-                .or_insert_with(|| playback::PlaybackClock::new(now.max(self.last_ms)));
+                .or_insert_with(|| {
+                    let mut clock = playback::PlaybackClock::new(now.max(self.last_ms));
+                    if input.id != self.project.program {
+                        clock.set_paused(true);
+                    }
+                    clock
+                });
         }
         match transport {
+            Command::Cut => {
+                if let Some(clock) = self.playback.get_mut(&self.project.program) {
+                    clock.set_paused(false);
+                }
+                if let Some(clock) = self.playback.get_mut(&self.project.preview) {
+                    clock.set_paused(true);
+                }
+            }
+            Command::TakeInput(_) => {
+                if let Some(clock) = self.playback.get_mut(&self.project.program) {
+                    clock.set_paused(false);
+                }
+                if let Some(clock) = self.playback.get_mut(&self.project.preview) {
+                    clock.set_paused(true);
+                }
+            }
+            Command::Transition(_) | Command::RunTransitionSlot(_) => {
+                if let Some(clock) = self.playback.get_mut(&self.project.preview) {
+                    clock.set_paused(false);
+                }
+            }
+            Command::RunStinger(_) => {
+                if let Some(clock) = self.playback.get_mut(&self.project.preview) {
+                    clock.set_paused(false);
+                }
+            }
             Command::SetInputPaused(id, paused) => {
                 if let Some(clock) = self.playback.get_mut(&id) {
                     clock.set_paused(paused);
@@ -1563,6 +1616,12 @@ impl Engine {
             self.project.program = active.to;
             self.project.preview = active.from;
             self.project.revision = self.project.revision.saturating_add(1);
+            if let Some(clock) = self.playback.get_mut(&active.to) {
+                clock.set_paused(false);
+            }
+            if let Some(clock) = self.playback.get_mut(&active.from) {
+                clock.set_paused(true);
+            }
         }
         let mut completed = false;
         if let Some(t) = &mut self.transition
@@ -1576,6 +1635,12 @@ impl Engine {
             self.project.program = t.to;
             self.project.preview = t.from;
             self.project.revision = self.project.revision.saturating_add(1);
+            if let Some(clock) = self.playback.get_mut(&t.to) {
+                clock.set_paused(false);
+            }
+            if let Some(clock) = self.playback.get_mut(&t.from) {
+                clock.set_paused(true);
+            }
             if let Some(run) = &mut self.playlist_run {
                 run.hold_started_ms = Some(t.start_ms.saturating_add(u64::from(t.duration_ms)));
             }

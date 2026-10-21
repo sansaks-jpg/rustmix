@@ -740,7 +740,7 @@ impl RustMixApp {
                 ui.painter().text(
                     rect.lerp_inside(egui::vec2(0.12, 0.7)),
                     Align2::LEFT_CENTER,
-                    "YOUR STORY. LIVE.",
+                    &input.name,
                     FontId::proportional(rect.height() * 0.07),
                     tint,
                 );

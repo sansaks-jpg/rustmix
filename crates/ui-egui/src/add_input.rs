@@ -3,7 +3,7 @@ use super::dialogs::{ADD_CATEGORIES, GENERATOR_SAMPLES, VIDEO_TAB, light_form_fr
 use super::*;
 
 // Preserve existing automation ordinals; presentation order is explicit.
-pub(super) const CATEGORY_ORDER: [usize; 7] = [VIDEO_TAB, 22, 1, 11, 12, 13, 0];
+pub(super) const CATEGORY_ORDER: [usize; 8] = [VIDEO_TAB, 22, 1, 11, 14, 12, 13, 0];
 
 pub(super) fn unavailable_reason(tab: usize) -> Option<&'static str> {
     match tab {
@@ -12,9 +12,6 @@ pub(super) fn unavailable_reason(tab: usize) -> Option<&'static str> {
         7 => Some("Instant Replay capture and storage are unavailable."),
         8 => Some("Image-sequence and stinger file inputs are unavailable."),
         10 => Some("PowerPoint presentation inputs are unavailable."),
-        14 => Some(
-            "Title template inputs are unavailable. The Generators library includes an original lower-third sample.",
-        ),
         16 => Some("Virtual-set inputs are unavailable. Studio pattern is a procedural generator."),
         18 => Some("Video Call inputs are unavailable. No guest connection will be started."),
         19 => Some(
@@ -26,13 +23,13 @@ pub(super) fn unavailable_reason(tab: usize) -> Option<&'static str> {
         ),
         24 => Some("Video Delay capture and buffering are unavailable."),
         25 => Some("Telestrator inputs are unavailable. No web controller will be enabled."),
-        0 | 1 | 3 | 4 | 6 | 9 | 17 | 22 | 11 | 12 | 13 | 15 | VIDEO_TAB => None,
+        0 | 1 | 3 | 4 | 6 | 9 | 14 | 17 | 22 | 11 | 12 | 13 | 15 | VIDEO_TAB => None,
         _ => Some("This input category is unavailable."),
     }
 }
 
 pub(super) fn generator_category(tab: usize) -> bool {
-    matches!(tab, 0 | 3 | 4 | 6 | 11 | 15)
+    matches!(tab, 0 | 3 | 4 | 6 | 11 | 14 | 15)
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -244,6 +241,8 @@ impl RustMixApp {
         self.add_kind = kind;
         self.add_name = if tab == 0 {
             "New synthetic input".into()
+        } else if tab == 14 {
+            "Lower Third Graphic".into()
         } else {
             label.into()
         };
@@ -493,6 +492,8 @@ impl RustMixApp {
             ui,
             if self.add_tab == 11 {
                 "Colour generators"
+            } else if self.add_tab == 14 {
+                "Title / CG overlay"
             } else {
                 "Procedural generator"
             },
@@ -524,6 +525,20 @@ impl RustMixApp {
                     }
                 }
                 ui.label("Solid colour and transparent inputs are unavailable.");
+            } else if self.add_tab == 14 {
+                ui.label("Select a Title / CG Overlay template:");
+                for (key, label, kind) in [
+                    ("lower_third", "Lower Third Graphic", InputKind::Graphics),
+                    ("title_banner", "Title Banner Overlay", InputKind::Graphics),
+                ] {
+                    let r = ui.radio_value(&mut self.add_kind, kind, label);
+                    self.automation
+                        .insert(format!("dialog.add.title.{key}"), r.rect);
+                    if r.changed() {
+                        self.add_name = label.into();
+                        self.add_preview = None;
+                    }
+                }
             } else if self.add_tab == 0 {
                 for (index, (name, kind)) in GENERATOR_SAMPLES.into_iter().enumerate() {
                     let r = ui.selectable_label(self.add_kind == kind, name);
