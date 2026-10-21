@@ -50,6 +50,25 @@ impl SourceUi {
     }
 }
 
+fn photo_descriptor_path(path: &Path) -> std::result::Result<String, String> {
+    let text = path.to_str().ok_or("Photo path must be Unicode")?;
+    if let Some(local) = text.strip_prefix(r"\\?\") {
+        if local.as_bytes().get(1) != Some(&b':')
+            || !local
+                .as_bytes()
+                .first()
+                .is_some_and(u8::is_ascii_alphabetic)
+        {
+            return Err(
+                "Choose a local disk photo folder; network/device paths are unsupported".into(),
+            );
+        }
+        Ok(local.to_owned())
+    } else {
+        Ok(text.to_owned())
+    }
+}
+
 fn photo_folder(folder: &str, interval_ms: u32) -> std::result::Result<VideoSource, String> {
     let directory = Path::new(folder)
         .canonicalize()
@@ -79,11 +98,7 @@ fn photo_folder(folder: &str, interval_ms: u32) -> std::result::Result<VideoSour
         if paths.len() >= 256 {
             return Err("Use at most 256 photos per input".into());
         }
-        paths.push(
-            path.to_str()
-                .ok_or("Photo path must be Unicode")?
-                .to_owned(),
-        );
+        paths.push(photo_descriptor_path(&path)?);
     }
     paths.sort();
     let source = VideoSource::Photos { paths, interval_ms };
@@ -327,8 +342,42 @@ impl RustMixApp {
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::unwrap_used, clippy::indexing_slicing)]
+    #![allow(clippy::unwrap_used, clippy::indexing_slicing, clippy::panic)]
     use super::*;
+    #[test]
+    fn canonical_windows_photo_paths_use_local_drive_descriptors() {
+        assert_eq!(
+            photo_descriptor_path(Path::new(r"\\?\C:\Photos\one.png")).unwrap(),
+            r"C:\Photos\one.png"
+        );
+        assert!(photo_descriptor_path(Path::new(r"\\?\UNC\server\one.png")).is_err());
+        assert!(photo_descriptor_path(Path::new(r"\\?\Volume{bad}\one.png")).is_err());
+    }
+    #[cfg(windows)]
+    #[test]
+    fn real_photo_folder_checks_png_jpeg_bmp_and_rejects_corrupt_media() {
+        let directory = tempfile::tempdir().unwrap();
+        for name in ["c.bmp", "a.png", "b.jpg"] {
+            image::RgbImage::from_pixel(16, 9, image::Rgb([25_u8, 165, 70]))
+                .save(directory.path().join(name))
+                .unwrap();
+        }
+        let VideoSource::Photos { paths, interval_ms } =
+            photo_folder(directory.path().to_str().unwrap(), 500).unwrap()
+        else {
+            panic!("Photos descriptor required");
+        };
+        assert_eq!(paths.len(), 3);
+        assert_eq!(interval_ms, 500);
+        assert!(
+            paths[0].ends_with("a.png")
+                && paths[1].ends_with("b.jpg")
+                && paths[2].ends_with("c.bmp")
+        );
+        assert!(paths.iter().all(|p| !p.starts_with(r"\\?\")));
+        std::fs::write(directory.path().join("bad.png"), b"not a PNG").unwrap();
+        assert!(photo_folder(directory.path().to_str().unwrap(), 500).is_err());
+    }
     #[test]
     fn source_draft_is_checked_against_current_fields_and_retires_pending_results() {
         let mut app = RustMixApp::headless();
