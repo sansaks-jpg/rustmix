@@ -155,8 +155,11 @@ impl InputState {
     pub fn source_label(&self) -> &'static str {
         if let Some(source) = &self.config.audio_source {
             source.label()
-        } else if self.config.video_source.is_some() {
-            "MP4 video"
+        } else if let Some(source) = &self.config.video_source {
+            match source {
+                VideoSource::File { .. } => "MP4 video",
+                _ => source.label(),
+            }
         } else if self.config.media_path.is_some() {
             "PNG image"
         } else {

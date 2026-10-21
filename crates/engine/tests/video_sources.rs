@@ -386,6 +386,12 @@ fn new_source_descriptors_validate_and_roundtrip_without_changing_program() {
             )
             .unwrap();
     }
+    for input in engine.project().inputs.iter().take(3) {
+        assert_eq!(
+            input.source_label(),
+            input.config.video_source.as_ref().unwrap().label()
+        );
+    }
     assert_eq!(engine.project().program, program);
     assert_eq!(engine.project().preview, preview);
     let dir = tempfile::tempdir().unwrap();
@@ -419,6 +425,14 @@ fn new_source_descriptors_validate_and_roundtrip_without_changing_program() {
             url: "https://example.com".into(),
             width: u32::MAX,
             height: 360,
+        },
+        VideoSource::Photos {
+            paths: vec!["https://example.com/image.png".into()],
+            interval_ms: 1000,
+        },
+        VideoSource::Photos {
+            paths: vec!["C:/photo.png:alternate.png".into()],
+            interval_ms: 1000,
         },
         VideoSource::Camera {
             device_id: "".into(),

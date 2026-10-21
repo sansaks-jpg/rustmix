@@ -134,6 +134,17 @@ impl VideoSource {
                     && (500..=3_600_000).contains(interval_ms)
                     && paths.iter().all(|p| {
                         valid_audio_identity(p)
+                            && {
+                                let mut colons = p.match_indices(':');
+                                let local = match colons.next() {
+                                    None => true,
+                                    Some((1, _)) => {
+                                        p.as_bytes().first().is_some_and(u8::is_ascii_alphabetic)
+                                    }
+                                    Some(_) => false,
+                                };
+                                local && colons.next().is_none()
+                            }
                             && !p.starts_with("//")
                             && !p.starts_with(r"\\")
                             && std::path::Path::new(p)

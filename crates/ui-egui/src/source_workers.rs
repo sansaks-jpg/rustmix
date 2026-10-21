@@ -320,6 +320,9 @@ pub(super) fn run(
         if last_restart.is_some_and(|r| r != control.restart_generation) {
             elapsed = Duration::ZERO;
             last_picture = None;
+            if let Some(browser) = &mut browser {
+                browser.call("Page.reload", json!({"ignoreCache":true}))?;
+            }
         }
         last_restart = Some(control.restart_generation);
         let picture = match source {
