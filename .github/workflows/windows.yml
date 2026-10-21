@@ -36,17 +36,19 @@ jobs:
       - name: Build release on GitHub only
         run: cargo build --release --workspace --locked
       - name: Package Windows executable
-        if: ${{ !cancelled() && hashFiles('target/release/rustmix.exe') != '' }}
+        if: ${{ success() && hashFiles('target/release/rustmix.exe') != '' }}
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Path dist -Force | Out-Null
           Copy-Item -LiteralPath target/release/rustmix.exe -Destination dist/
           Copy-Item -LiteralPath README.md,ATTRIBUTION.md,LICENSE-MIT -Destination dist/
+          Copy-Item -LiteralPath docs/core-engine-audit.md -Destination dist/AUDIT.md
+          $env:GITHUB_SHA | Set-Content dist/BUILD-COMMIT.txt
           ./scripts/collect-notices.ps1
           Get-FileHash -Algorithm SHA256 dist/rustmix.exe | Format-List | Out-File dist/SHA256.txt
-          'Experimental build. Check the associated GitHub run for actual test outcomes. Physical display/audio acceptance and complete vMix-class functionality are not qualified.' | Set-Content dist/BUILD-STATUS.txt
+          'Experimental core build. This workflow compiles and packages without running automated tests. See AUDIT.md for local checks and their limits. Physical display/audio and production endurance are not qualified.' | Set-Content dist/BUILD-STATUS.txt
       - uses: actions/upload-artifact@v4
-        if: ${{ !cancelled() && hashFiles('dist/rustmix.exe') != '' }}
+        if: ${{ success() && hashFiles('dist/rustmix.exe') != '' }}
         with:
           name: rustmix-windows-x64
           path: dist/

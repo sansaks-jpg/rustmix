@@ -99,6 +99,50 @@ fn measure_full_hd_compositor_and_downscale() {
     );
     summary("downscale", &downscale);
 
+    project.overlays.standard[0].enabled = false;
+    for kind in [
+        TransitionKind::Wipe,
+        TransitionKind::BarnDoor,
+        TransitionKind::Slide,
+        TransitionKind::VerticalSlideReverse,
+    ] {
+        let moving = TransitionState {
+            kind,
+            ..transition.clone()
+        };
+        let samples = measure(
+            || {
+                let _ = render::program_from_sources(
+                    &project,
+                    Some(&moving),
+                    0.0,
+                    1920,
+                    1080,
+                    &from,
+                    Some(&target),
+                )
+                .unwrap();
+            },
+            30,
+        );
+        summary(kind.label(), &samples);
+    }
+
+    let mut buffer = Vec::new();
+    let mut input = project.inputs.first().unwrap().clone();
+    for kind in InputKind::ALL {
+        input.kind = kind;
+        let mut ms = 0_u64;
+        let samples = measure(
+            || {
+                ms += 33;
+                render::source_into(&input, 1920, 1080, ms, &mut buffer).unwrap();
+            },
+            30,
+        );
+        summary(&format!("source {}", kind.label()), &samples);
+    }
+
     // Keep the process time bounded even on a slow debug runner.
     std::thread::sleep(Duration::from_millis(1));
 }

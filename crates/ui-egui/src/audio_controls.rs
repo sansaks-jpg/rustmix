@@ -43,6 +43,32 @@ pub(crate) struct AudioUi {
     add_error: Option<String>,
 }
 impl AudioUi {
+    pub(crate) fn master_peaks(&self) -> [f32; 2] {
+        if self.monitoring_active() {
+            self.status.as_ref().map_or([0.0; 2], |status| status.peak)
+        } else {
+            [0.0; 2]
+        }
+    }
+    pub(crate) fn source_position(&self, id: InputId) -> Option<(u64, Option<u64>)> {
+        if !self.monitoring_active() {
+            return None;
+        }
+        let source = self
+            .status
+            .as_ref()?
+            .sources
+            .iter()
+            .find(|source| source.id == id)?;
+        let millis = |frames: u64| {
+            frames.saturating_mul(1000) / u64::from(rustmix_engine::audio_engine::SAMPLE_RATE)
+        };
+        Some((
+            millis(source.position_frames),
+            (source.duration_frames > 0).then(|| millis(source.duration_frames)),
+        ))
+    }
+
     pub(crate) fn validated_wav_metadata(&self) -> Option<(u32, usize)> {
         self.wav_info
             .as_ref()
@@ -491,7 +517,7 @@ impl RustMixApp {
                 let mut body_ui = ui.new_child(egui::UiBuilder::new().max_rect(body).layout(egui::Layout::top_down(egui::Align::Min)));
                 body_ui.set_clip_rect(body.intersect(ui.clip_rect()));
                 egui::ScrollArea::vertical().max_height(height).show(&mut body_ui, |ui| {
-                    ui.label("Real local Master audio · 48 kHz stereo. The main mixer controls gain/mute/sends; its animated legacy meters remain simulations.");
+                    ui.label("Real local Master audio · 48 kHz stereo. The main mixer controls gain/mute/sends and shows measured Master peaks. Per-input peak metering is unavailable.");
                     ui.colored_label(PREVIEW, "Start monitoring opens the selected speakers/headphones and all configured microphones. Use headphones to avoid feedback. Closing this dialog keeps monitoring running; Stop releases the devices.");
                     let active = self.audio_ui.is_active();
                     let picker = egui::ComboBox::from_id_salt("dialog.audio_io.output")

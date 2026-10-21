@@ -63,6 +63,10 @@ impl PlaybackClock {
         self.position_ms = 0;
         self.restart_generation = self.restart_generation.saturating_add(1);
     }
+    pub(crate) fn seek(&mut self, position_ms: u64) {
+        self.position_ms = position_ms.min(DEMO_DURATION_MS);
+        self.restart_generation = self.restart_generation.saturating_add(1);
+    }
     pub(crate) fn set_looping(&mut self, looping: bool) {
         self.looping = looping;
     }

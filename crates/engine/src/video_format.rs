@@ -104,6 +104,20 @@ impl Default for VideoStandard {
     }
 }
 impl VideoStandard {
+    pub fn canvas_label(self) -> String {
+        let name = match (self.width, self.height) {
+            (1920, 1080) => "Full HD",
+            (1080, 1920) => "Full HD Portrait",
+            (1280, 720) => "HD",
+            (720, 1280) => "HD Portrait",
+            (3840, 2160) => "Ultra HD",
+            (2160, 3840) => "Ultra HD Portrait",
+            _ if self.height > self.width => "Portrait",
+            _ => "Landscape",
+        };
+        format!("{name} ({}×{})", self.width, self.height)
+    }
+
     pub fn validate(self) -> Result<()> {
         if !CANVAS_SIZES.contains(&(self.width, self.height)) {
             return Err(invalid(

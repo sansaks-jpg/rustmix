@@ -5,6 +5,7 @@ mod audio_controls;
 mod audio_session;
 mod audio_smoke;
 mod controls;
+mod core_scope;
 mod dialogs;
 mod extended_output;
 mod extra_sources;
@@ -87,8 +88,8 @@ pub(crate) struct InputFx {
     pub image_error: Option<String>,
     pub image_pending: bool,
     /// Monotonic id for the current raster. Program surface caching must use
-    /// this instead of an `Arc` address: dynamic video replaces the buffer every
-    /// frame and an address can be reused by a newer allocation.
+    /// this together with payload identity: generations distinguish later
+    /// allocations, and identity separates independent decoders at equal counts.
     pub image_generation: u64,
 }
 impl std::ops::Deref for InputFx {
@@ -486,6 +487,7 @@ pub(crate) enum Action {
     AudioSettings,
     SettingsAt(SettingsPage),
     OverlaySettings(usize),
+    #[cfg(test)]
     ExternalSettings(u8),
     ApplyExternal(ExternalOutput),
     RecordingSetup,
@@ -493,9 +495,6 @@ pub(crate) enum Action {
     MultiCorder,
     PlayList,
     ShortcutsWindow,
-    ToggleRecordSim,
-    ToggleStreamSim,
-    ToggleExternalSim,
     Snapshot,
     About,
     Workspace(bool),
@@ -531,7 +530,8 @@ pub struct RustMixApp {
     pub(crate) now: u64,
     pub(crate) textures: HashMap<InputId, egui::TextureHandle>,
     /// Exact last uploaded thumbnail pixels, bounded by 32 inputs at 384x216.
-    thumbnail_pixels: HashMap<InputId, Vec<[u8; 4]>>,
+    thumbnail_pixels: HashMap<InputId, Arc<Vec<[u8; 4]>>>,
+    thumbnail_renderer: program::ProgramRenderer,
     pub(crate) program_texture: Option<egui::TextureHandle>,
     pub(crate) last_program_rgba: Vec<u8>,
     /// Latest full-resolution Program surface for output/measurement consumers.
@@ -672,6 +672,8 @@ pub struct RustMixApp {
     pub(crate) fps: f32,
     fps_start: Instant,
     fps_frames: u32,
+    last_fps_frame: Option<u64>,
+    last_checkpoint_revision: Option<u64>,
     pub(crate) generation_ms: f32,
     pub(crate) selected_audio: Option<InputId>,
     pub(crate) input_filter: String,
@@ -682,6 +684,7 @@ pub struct RustMixApp {
     monitor_view_height: Option<f32>,
     /// Retained only to drain submitted work during explicit application exit.
     gpu_device: Option<eframe::wgpu::Device>,
+    gpu_adapter: Option<String>,
     smoke_gpu_queue: Option<eframe::wgpu::Queue>,
     pub(crate) operator_hwnd: Option<usize>,
 }
@@ -700,6 +703,10 @@ impl RustMixApp {
             .wgpu_render_state
             .as_ref()
             .map(|state| state.device.clone());
+        app.gpu_adapter = cc.wgpu_render_state.as_ref().map(|state| {
+            let info = state.adapter.get_info();
+            format!("{} · {:?}", info.name, info.backend)
+        });
         if let Some(storage) = cc.storage
             && let Some(json) = storage.get_string("workspace.v2")
         {
@@ -784,7 +791,7 @@ impl RustMixApp {
         {
             app.initialize_blank_startup(&cc.egui_ctx);
         }
-        app.program_worker = Some(program::ProgramWorker::spawn(
+        match program::ProgramWorker::spawn(
             program::Snapshot {
                 generation: app.program_generation,
                 engine: app.engine.clone(),
@@ -792,7 +799,10 @@ impl RustMixApp {
             },
             app.start,
             Some(cc.egui_ctx.clone()),
-        ));
+        ) {
+            Ok(worker) => app.program_worker = Some(worker),
+            Err(error) => app.say(error, true),
+        }
         if std::env::args().any(|s| s == "--ui-perf") {
             app.profile = Some(profile::Profile::default());
         }
@@ -819,6 +829,7 @@ impl RustMixApp {
             now: 0,
             textures: HashMap::new(),
             thumbnail_pixels: HashMap::new(),
+            thumbnail_renderer: program::ProgramRenderer::default(),
             program_texture: None,
             last_program_rgba: Vec::new(),
             last_program_full: Arc::new(Vec::new()),
@@ -953,6 +964,8 @@ impl RustMixApp {
             fps: 0.0,
             fps_start: Instant::now(),
             fps_frames: 0,
+            last_fps_frame: None,
+            last_checkpoint_revision: None,
             generation_ms: 0.0,
             selected_audio: Some(InputId(1)),
             input_filter: String::new(),
@@ -962,6 +975,7 @@ impl RustMixApp {
             tbar_latched: false,
             monitor_view_height: None,
             gpu_device: None,
+            gpu_adapter: None,
             smoke_gpu_queue: None,
             operator_hwnd: None,
         }
@@ -1224,6 +1238,11 @@ impl RustMixApp {
         base.join("RustMix").join("recovery.rustmix.json")
     }
 
+    fn checkpoint_needed(&self) -> bool {
+        let revision = self.engine.project().revision;
+        self.saved_revision != revision && self.last_checkpoint_revision != Some(revision)
+    }
+
     fn capture_workspace(&mut self) {
         match serde_json::to_string(self.audio_restore.as_ref().unwrap_or(&self.dock)) {
             Ok(json) => {
@@ -1254,30 +1273,42 @@ impl RustMixApp {
         };
         let (tx, rx) = mpsc::sync_channel(1);
         self.job = Some(rx);
-        std::thread::spawn(move || {
-            let path = path.or_else(|| {
-                rfd::FileDialog::new()
-                    .add_filter("RustMix project", &["json"])
-                    .set_file_name("production.rustmix.json")
-                    .save_file()
-            });
-            let result = if let Some(path) = path {
-                let setup = if auto {
-                    path.parent().map(std::fs::create_dir_all).transpose()
+        let spawn = std::thread::Builder::new()
+            .name("rustmix-project-save".into())
+            .spawn(move || {
+                let path = path.or_else(|| {
+                    rfd::FileDialog::new()
+                        .add_filter("RustMix project", &["json"])
+                        .set_file_name("production.rustmix.json")
+                        .save_file()
+                });
+                let result = if let Some(path) = path {
+                    let setup = if auto {
+                        path.parent().map(std::fs::create_dir_all).transpose()
+                    } else {
+                        Ok(None)
+                    };
+                    match setup.and_then(|_| {
+                        persistence::save(&path, &project).map_err(std::io::Error::other)
+                    }) {
+                        Ok(()) => JobDone::Saved(path, revision, auto),
+                        Err(e) => JobDone::Failed(e.to_string()),
+                    }
                 } else {
-                    Ok(None)
+                    JobDone::Cancelled
                 };
-                match setup
-                    .and_then(|_| persistence::save(&path, &project).map_err(std::io::Error::other))
-                {
-                    Ok(()) => JobDone::Saved(path, revision, auto),
-                    Err(e) => JobDone::Failed(e.to_string()),
-                }
-            } else {
-                JobDone::Cancelled
-            };
-            let _ = tx.send(result);
-        });
+                let _ = tx.send(result);
+            });
+        if let Err(error) = spawn {
+            self.job = None;
+            self.say(
+                format!(
+                    "File worker could not start ({:?}); project retained",
+                    error.kind()
+                ),
+                true,
+            );
+        }
     }
 
     /// Save entry point for the opt-in native smoke drivers. It first waits out
@@ -1308,22 +1339,34 @@ impl RustMixApp {
         }
         let (tx, rx) = mpsc::sync_channel(1);
         self.job = Some(rx);
-        std::thread::spawn(move || {
-            let path = path.or_else(|| {
-                rfd::FileDialog::new()
-                    .add_filter("RustMix project", &["json"])
-                    .pick_file()
+        let spawn = std::thread::Builder::new()
+            .name("rustmix-project-load".into())
+            .spawn(move || {
+                let path = path.or_else(|| {
+                    rfd::FileDialog::new()
+                        .add_filter("RustMix project", &["json"])
+                        .pick_file()
+                });
+                let result = if let Some(path) = path {
+                    match persistence::load(&path) {
+                        Ok(p) => JobDone::Loaded(Box::new(p), path),
+                        Err(e) => JobDone::Failed(e.to_string()),
+                    }
+                } else {
+                    JobDone::Cancelled
+                };
+                let _ = tx.send(result);
             });
-            let result = if let Some(path) = path {
-                match persistence::load(&path) {
-                    Ok(p) => JobDone::Loaded(Box::new(p), path),
-                    Err(e) => JobDone::Failed(e.to_string()),
-                }
-            } else {
-                JobDone::Cancelled
-            };
-            let _ = tx.send(result);
-        });
+        if let Err(error) = spawn {
+            self.job = None;
+            self.say(
+                format!(
+                    "File worker could not start ({:?}); project retained",
+                    error.kind()
+                ),
+                true,
+            );
+        }
     }
 
     fn poll_job(&mut self, ctx: &egui::Context) {
@@ -1333,6 +1376,9 @@ impl RustMixApp {
                 self.job = None;
                 match done {
                     JobDone::Saved(path, revision, auto) => {
+                        if auto {
+                            self.last_checkpoint_revision = Some(revision);
+                        }
                         if !auto {
                             self.path = Some(path);
                             self.saved_revision = revision;
@@ -1352,6 +1398,7 @@ impl RustMixApp {
                             Ok(engine) => {
                                 let layout = engine.project().workspace.dock_json.clone();
                                 self.engine = engine;
+                                self.last_checkpoint_revision = None;
                                 self.reset_editors();
                                 self.media_loader.reset();
                                 self.input_fx.clear();
@@ -1490,6 +1537,7 @@ impl RustMixApp {
                     self.overlay_preview = None;
                 }
             }
+            #[cfg(test)]
             Action::ExternalSettings(slot) => {
                 if self.engine.project().outputs.slot(slot).is_some() {
                     self.external_settings = Some(ExternalSettingsDraft {
@@ -1522,9 +1570,6 @@ impl RustMixApp {
             Action::MultiCorder => self.multicorder_open = true,
             Action::PlayList => self.playlist_open = true,
             Action::ShortcutsWindow => self.shortcuts_open = true,
-            Action::ToggleRecordSim | Action::ToggleStreamSim | Action::ToggleExternalSim => {
-                self.say("Unavailable: this build has no encoder, network sender or external video backend".into(), true);
-            }
             Action::Snapshot => self.start_snapshot(std::env::temp_dir().join("rustmix-snapshots")),
             Action::About => self.about = true,
             Action::Workspace(audio) => {
@@ -1758,10 +1803,9 @@ impl RustMixApp {
                 let settings_menu = caret_menu_button(ui, height, |ui| {
                     for (label, page) in [
                         ("Display…", SettingsPage::Display),
-                        ("Outputs / NDI / OMT / SRT…", SettingsPage::Outputs),
                         ("Options…", SettingsPage::Options),
                         ("Performance / Appearance…", SettingsPage::Appearance),
-                        ("Web Controller / Workspace…", SettingsPage::Workspace),
+                        ("Workspace…", SettingsPage::Workspace),
                         ("Shortcuts…", SettingsPage::Shortcuts),
                     ] {
                         if ui.button(label).clicked() {
@@ -1859,7 +1903,6 @@ impl RustMixApp {
                     ("generators", 0, "Generators"),
                     ("shapes", 3, "Moving shapes"),
                     ("bars", 6, "Reference bars"),
-                    ("title", 14, "Title (unavailable)"),
                     ("studio", 4, "Studio pattern"),
                     ("colour", 11, "Colour generators"),
                     ("timer", 15, "Countdown generator"),
@@ -1879,159 +1922,6 @@ impl RustMixApp {
             caret
                 .response
                 .on_hover_text("Quick input category selector");
-            ui.add_space(group_gap);
-
-            // 1. Record: [ ⚙ | Record ]
-            let rec_gear = vector_icon_button(
-                ui,
-                VectorIcon::Gear,
-                egui::vec2(setup_width, height),
-                false,
-                None,
-            )
-            .on_hover_text("Open Recording Setup");
-            self.automation
-                .insert("output.record.settings".into(), rec_gear.rect);
-            if rec_gear.clicked() {
-                self.actions.push(Action::RecordingSetup);
-            }
-            let rec_secs = if self.rec_active {
-                self.now.saturating_sub(self.rec_started_ms) / 1000
-            } else {
-                0
-            };
-            let rec_lbl = if self.rec_active {
-                format!("REC {:02}:{:02}", rec_secs / 60, rec_secs % 60)
-            } else {
-                "Record".into()
-            };
-            let mut rec_btn_w = egui::Button::new(RichText::new(rec_lbl).strong())
-                .min_size(egui::vec2(68.0 + 24.0 * wide, height));
-            if self.rec_active {
-                rec_btn_w = rec_btn_w.fill(Color32::from_rgb(200, 30, 30));
-            }
-            let rec_btn = ui.add_enabled(false, rec_btn_w).on_disabled_hover_text(
-                "Unavailable: no recording encoder backend; use the gear to inspect setup",
-            );
-            self.automation.insert("output.record".into(), rec_btn.rect);
-            if rec_btn.clicked() {
-                self.actions.push(Action::ToggleRecordSim);
-            }
-            ui.add_space(group_gap);
-
-            // 2. External: [ ⚙ | External ]
-            let ext_gear = vector_icon_button(
-                ui,
-                VectorIcon::Gear,
-                egui::vec2(setup_width, height),
-                false,
-                None,
-            )
-            .on_hover_text("Configure external output routes (no output backend)");
-            self.automation
-                .insert("output.external.settings".into(), ext_gear.rect);
-            self.automation
-                .insert("output.external.open".into(), ext_gear.rect);
-            if ext_gear.clicked() {
-                self.actions.push(Action::ExternalSettings(1));
-            }
-            let mut ext_btn_w = egui::Button::new(
-                RichText::new(if self.external_active {
-                    "EXT ON"
-                } else {
-                    "External"
-                })
-                .strong(),
-            )
-            .min_size(egui::vec2(66.0 + 24.0 * wide, height));
-            if self.external_active {
-                ext_btn_w = ext_btn_w.fill(Color32::from_rgb(200, 30, 30));
-            }
-            let ext_btn = ui.add_enabled(false, ext_btn_w).on_disabled_hover_text(
-                "Unavailable: no external video backend; use the gear to configure routing",
-            );
-            self.automation
-                .insert("output.external".into(), ext_btn.rect);
-            if ext_btn.clicked() {
-                self.actions.push(Action::ToggleExternalSim);
-            }
-            ui.add_space(group_gap);
-
-            // 3. Stream: [ ⚙ | Stream | ▾ ]
-            let stm_gear = vector_icon_button(
-                ui,
-                VectorIcon::Gear,
-                egui::vec2(setup_width, height),
-                false,
-                None,
-            )
-            .on_hover_text("Open Streaming Settings");
-            self.automation
-                .insert("output.stream.settings".into(), stm_gear.rect);
-            if stm_gear.clicked() {
-                self.actions.push(Action::StreamingSetup);
-            }
-            let stm_secs = if self.stream_active {
-                self.now.saturating_sub(self.stream_started_ms) / 1000
-            } else {
-                0
-            };
-            let stm_lbl = if self.stream_active {
-                format!("LIVE {:02}:{:02}", stm_secs / 60, stm_secs % 60)
-            } else {
-                "Stream".into()
-            };
-            let mut stm_btn_w = egui::Button::new(RichText::new(stm_lbl).strong())
-                .min_size(egui::vec2(64.0 + 24.0 * wide, height));
-            if self.stream_active {
-                stm_btn_w = stm_btn_w.fill(Color32::from_rgb(200, 30, 30));
-            }
-            let stm_btn = ui.add_enabled(false, stm_btn_w).on_disabled_hover_text(
-                "Unavailable: no streaming sender backend; use the gear to inspect setup",
-            );
-            self.automation.insert("output.stream".into(), stm_btn.rect);
-            if stm_btn.clicked() {
-                self.actions.push(Action::ToggleStreamSim);
-            }
-            caret_menu_button(ui, height, |ui| {
-                for ch in 0..5 {
-                    if ui
-                        .button(format!("Destination {} Settings…", ch + 1))
-                        .clicked()
-                    {
-                        self.stream_channel = ch;
-                        self.actions.push(Action::StreamingSetup);
-                        ui.close();
-                    }
-                }
-            });
-            ui.add_space(group_gap);
-
-            // 4. MultiCorder: [ ⚙ | MultiCorder ]
-            let mc_gear = vector_icon_button(
-                ui,
-                VectorIcon::Gear,
-                egui::vec2(setup_width, height),
-                false,
-                None,
-            )
-            .on_hover_text("Open MultiCorder");
-            self.automation
-                .insert("output.multicorder.settings".into(), mc_gear.rect);
-            if mc_gear.clicked() {
-                self.actions.push(Action::MultiCorder);
-            }
-            let mut mc_btn_w = egui::Button::new(RichText::new("MultiCorder").strong())
-                .min_size(egui::vec2(82.0 + 36.0 * wide, height));
-            if self.mc_running {
-                mc_btn_w = mc_btn_w.fill(PROGRAM);
-            }
-            let mc_btn = ui.add(mc_btn_w).on_hover_text("Open MultiCorder");
-            self.automation
-                .insert("output.multicorder".into(), mc_btn.rect);
-            if mc_btn.clicked() {
-                self.actions.push(Action::MultiCorder);
-            }
             ui.add_space(group_gap);
 
             // 5. PlayList: [ ⚙ | PlayList ]
@@ -2181,30 +2071,37 @@ impl RustMixApp {
 
     fn status(&mut self, ui: &mut egui::Ui) {
         let p = self.engine.project();
+        let [program_w, program_h] = p.preferences.video_standard().program_size();
+        let [monitor_w, monitor_h] = p.preferences.video_standard().monitor_size();
         ui.horizontal(|ui| {
             ui.spacing_mut().item_spacing.x = 8.0;
-            ui.label(
-                RichText::new({
-                    let w = p.preferences.width;
-                    let h = p.preferences.height;
-                    format!("{w}×{h}/{}p", p.preferences.rate.label())
-                })
-                .strong()
-                .color(TEAL),
-            );
+            let format = ui.label(
+                RichText::new(format!("{program_w}×{program_h}/{}p", p.preferences.rate.label()))
+                    .strong()
+                    .color(TEAL),
+            ).on_hover_text(format!(
+                "Program output: {}×{} · {}. Project canvas: {}×{}. Monitor raster: {}×{}.",
+                program_w, program_h,
+                p.preferences.scan.rate_label(p.preferences.rate),
+                p.preferences.width, p.preferences.height,
+                monitor_w, monitor_h,
+            ));
+            self.automation.insert("status.format".into(), format.rect);
             ui.label(
                 RichText::new("CPU mix · GPU display")
                     .strong()
                     .color(ui.visuals().text_color()),
             );
             if self.program_worker.is_some() {
-                ui.label(
-                    RichText::new(format!(
-                        "PGM {:.1} fps · drop {}",
-                        self.video_stats.fps, self.video_stats.skipped
-                    ))
+                let pgm = ui.label(
+                    RichText::new(if self.video_stats.fps > 0.0 {
+                        format!("PGM {:.1} fps · drop {}", self.video_stats.fps, self.video_stats.skipped)
+                    } else {
+                        format!("PGM — fps · drop {}", self.video_stats.skipped)
+                    })
                     .color(DIM),
-                );
+                ).on_hover_text("Measured CPU Program cadence and skipped render deadlines; GPU displays the monitor texture.");
+                self.automation.insert("status.program".into(), pgm.rect);
             }
             ui.label(RichText::new("UI FPS:").strong().color(DIM));
             ui.label(RichText::new(format!("{:.0}", self.fps)).color(ui.visuals().text_color()));
@@ -2474,12 +2371,19 @@ impl RustMixApp {
         if self.smoke.is_none()
             && self.profile.is_none()
             && self.job.is_none()
+            && self.checkpoint_needed()
             && self.last_autosave.elapsed() > Duration::from_secs(60)
         {
             self.start_save(false, true);
             self.last_autosave = Instant::now();
         }
-        self.fps_frames = self.fps_frames.saturating_add(1);
+        // egui can discard a sizing pass and call this UI again for the same
+        // frame. Count presented frame attempts, not repeated layout passes.
+        let frame_number = ctx.cumulative_frame_nr();
+        if self.last_fps_frame != Some(frame_number) {
+            self.fps_frames = self.fps_frames.saturating_add(1);
+            self.last_fps_frame = Some(frame_number);
+        }
         if self.fps_start.elapsed() >= Duration::from_secs(1) {
             self.fps = self.fps_frames as f32 / self.fps_start.elapsed().as_secs_f32();
             self.fps_start = Instant::now();

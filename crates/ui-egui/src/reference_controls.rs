@@ -229,10 +229,10 @@ impl RustMixApp {
                 let label = display_label(ui, "Output Size:", label_width);
                 self.automation.insert("dialog.settings.label.outputSize".into(), label);
                 let raster = egui::ComboBox::from_id_salt("settings.canvas").width(field_width)
-                    .selected_text(format!("{}×{}", draft.width, draft.height)).show_ui(ui, |ui| {
+                    .selected_text(draft.video_standard().canvas_label()).show_ui(ui, |ui| {
                         for (width, height) in rustmix_engine::video_format::CANVAS_SIZES {
                             let selected = draft.width == width && draft.height == height;
-                            let option = ui.selectable_label(selected, format!("{width}×{height}"));
+                            let option = ui.selectable_label(selected, VideoStandard { width, height, ..draft.video_standard() }.canvas_label());
                             self.automation.insert(format!("dialog.settings.canvas.{width}"), option.rect);
                             if option.clicked() { draft.width = width; draft.height = height; ui.close(); }
                         }
@@ -287,7 +287,7 @@ impl RustMixApp {
                 ui.end_row();
                 display_label(ui, "Fullscreen:", label_width);
                 ui.horizontal(|ui| {
-                    let width = ((field_width - 4.0) * 0.5).max(86.0);
+                    let width = field_width.max(86.0);
                     let menu = ui.allocate_ui_with_layout(egui::vec2(width,32.0),
                         egui::Layout::centered_and_justified(egui::Direction::LeftToRight), |ui| {
                             ui.menu_button("Fullscreen 1", |ui| {
@@ -297,10 +297,6 @@ impl RustMixApp {
                             })
                         }).inner;
                     self.automation.insert("dialog.settings.programWindow".into(), menu.response.rect);
-                    let secondary = ui.add_enabled(false, egui::Button::new("Fullscreen 2")
-                        .min_size(egui::vec2(width,32.0)))
-                        .on_disabled_hover_text("Unavailable: no independent secondary-output router.");
-                    self.automation.insert("dialog.settings.secondaryOutput".into(), secondary.rect);
                 });
                 ui.end_row();
                 display_label(ui, "Display:", label_width);
@@ -309,8 +305,11 @@ impl RustMixApp {
                 self.automation.insert("dialog.settings.display".into(), display.rect);
                 display.on_hover_text("Configure the display through Fullscreen 1. No output starts until explicitly requested.");
                 ui.end_row();
-                display_label(ui, "Actual Program:", label_width);
-                ui.label("640×360 CPU reference");
+                display_label(ui, "Program surface:", label_width);
+                let [program_w, program_h] = draft.video_standard().program_size();
+                let [monitor_w, monitor_h] = draft.video_standard().monitor_size();
+                let description = format!("{program_w}×{program_h} CPU · {monitor_w}×{monitor_h} monitor");
+                ui.add_sized([field_width, 26.0], egui::Label::new(&description).truncate()).on_hover_text(description);
                 ui.end_row();
                 ui.allocate_space(egui::vec2(0.0,20.0));
                 ui.allocate_space(egui::vec2(0.0,20.0));

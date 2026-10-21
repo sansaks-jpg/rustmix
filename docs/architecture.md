@@ -1,5 +1,12 @@
 # Workspace architecture
 
+UI-036 keeps CPU composition and wgpu monitor display explicit, shares the
+validated source renderer with the thumbnail cache, keys decoded payloads by
+generation and immutable identity, and bounds worker-start/file-retry failures.
+Core navigation excludes deferred capabilities; project schemas/dependencies
+are unchanged. [ADR 0036](adr/0036-core-cpu-gpu-audit.md) records the decisions.
+
+
 UI-035 keeps destination/format inspection and topic-specific settings in
 `ui-egui::output_dialogs` / `settings_pages`. Engine mutations retain the existing
 typed command boundary. Test-only software capture consumes actual egui meshes

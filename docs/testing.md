@@ -1,5 +1,11 @@
 # Verification
 
+UI-036 current owner instruction supersedes the older UI-035 build restriction:
+local build/manual laptop acceptance precedes push; GitHub compiles/packages
+without automated test execution. See [current audit](core-engine-audit.md) for
+exact checks, failed intermediate runs, measurements and scope boundaries.
+
+
 UI-035 owner exception (2026-10-21): local Rust tests are explicitly authorized;
 do not build/package the RustMix application `.exe`. Use selected library and
 integration test runners, Clippy checks and test-only software captures of actual

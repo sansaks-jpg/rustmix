@@ -1,5 +1,10 @@
 # Roadmap
 
+UI-036: core-only operator navigation and an audit of all current CPU/GPU,
+media, audio, project and worker boundaries. New backends remain deferred.
+Current validation and remaining limits: [core audit](docs/core-engine-audit.md).
+
+
 UI-035: existing-panel workflow alignment against `vmix-photos`, reviewed through
 actual egui paint without building the application executable. See
 [UI-035](docs/ui035-reference-uiux.md). Native/DPI/GPU and unavailable backend

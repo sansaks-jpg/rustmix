@@ -153,6 +153,36 @@ pub struct InputState {
     pub category: Option<u8>,
 }
 impl InputState {
+    /// Transport capability comes from the committed source, never its name,
+    /// picture colour or the fallback generator used by a video-only adapter.
+    pub fn has_playback(&self) -> bool {
+        if let Some(source) = &self.config.audio_source {
+            return matches!(source, AudioSource::WavFile { .. });
+        }
+        if let Some(source) = &self.config.video_source {
+            return matches!(
+                source,
+                VideoSource::File { .. } | VideoSource::Photos { .. }
+            );
+        }
+        self.config.media_path.is_none()
+            && matches!(
+                self.kind,
+                InputKind::Grid | InputKind::Geometry | InputKind::Studio | InputKind::Countdown
+            )
+    }
+
+    /// Audio sources and video inputs participate in audio routing, mixing and metering.
+    pub fn has_audio(&self) -> bool {
+        self.config.audio_source.is_some() || self.config.video_source.is_some()
+    }
+
+    pub fn is_procedural_playback(&self) -> bool {
+        self.has_playback()
+            && self.config.audio_source.is_none()
+            && self.config.video_source.is_none()
+    }
+
     /// The actual source contract, independent of its procedural fallback enum.
     pub fn source_label(&self) -> &'static str {
         if let Some(source) = &self.config.audio_source {
@@ -290,10 +320,7 @@ impl ProjectState {
             preferences: Preferences {
                 width: 1920,
                 height: 1080,
-                rate: Rate {
-                    numerator: 30,
-                    denominator: 1,
-                },
+                rate: VideoStandard::default().rate,
                 scan: ScanMode::Progressive,
                 high_contrast: false,
                 ui_scale: 1.0,
@@ -522,6 +549,7 @@ pub enum Command {
     RenameProject(String),
     SetInputPaused(InputId, bool),
     RestartInput(InputId),
+    SeekInput(InputId, u64),
     SetInputLoop(InputId, bool),
     SetInputsPaused(bool),
 }
@@ -777,6 +805,7 @@ impl Command {
                 ("input.pause", "Set source pause", "Inputs", "", true, true)
             }
             Self::RestartInput(_) => ("input.restart", "Restart source", "Inputs", "", true, true),
+            Self::SeekInput(..) => ("input.seek", "Seek source", "Inputs", "", true, true),
             Self::SetInputLoop(..) => ("input.loop", "Set source loop", "Inputs", "", true, false),
             Self::SetInputsPaused(_) => (
                 "inputs.pause",
@@ -922,6 +951,19 @@ impl Engine {
     }
     pub fn enabled(&self, command: &Command) -> Result<()> {
         match command {
+            Command::SetInputPaused(id, _)
+            | Command::RestartInput(id)
+            | Command::SeekInput(id, _)
+            | Command::SetInputLoop(id, _) => {
+                let input = self
+                    .project
+                    .input(*id)
+                    .ok_or_else(|| invalid("Input not found"))?;
+                if !input.has_playback() {
+                    return Err(invalid("This source has no playback transport"));
+                }
+                Ok(())
+            }
             Command::SetInputCategory(id, category) => {
                 if self.project.input(*id).is_none() {
                     return Err(invalid("Input not found"));
@@ -975,7 +1017,11 @@ impl Engine {
                 Err(invalid("Automatic transition is running"))
             }
             Command::RemoveInput(id)
-                if *id == self.project.program || *id == self.project.preview =>
+                if *id == self.project.program
+                    || *id == self.project.preview
+                    || self.stinger.as_ref().is_some_and(|stinger| {
+                        stinger.input == *id || stinger.from == *id || stinger.to == *id
+                    }) =>
             {
                 Err(invalid(
                     "Take this input out of Program and Preview before removing it",
@@ -1324,6 +1370,11 @@ impl Engine {
                     .key_bindings
                     .retain(|binding| binding.action != ShortcutAction::Preview(id));
                 next.outputs.forget_input(id);
+                for channel in &mut next.overlays.stingers {
+                    if channel.stinger_input == Some(id) {
+                        channel.stinger_input = None;
+                    }
+                }
                 for input in &mut next.inputs {
                     if input.config.pip_source == Some(id) {
                         input.config.pip_source = None;
@@ -1444,6 +1495,7 @@ impl Engine {
             }
             Command::SetInputPaused(id, _)
             | Command::RestartInput(id)
+            | Command::SeekInput(id, _)
             | Command::SetInputLoop(id, _) => {
                 if next.input(id).is_none() {
                     return Err(invalid("Input not found"));
@@ -1475,6 +1527,11 @@ impl Engine {
             Command::RestartInput(id) => {
                 if let Some(clock) = self.playback.get_mut(&id) {
                     clock.restart();
+                }
+            }
+            Command::SeekInput(id, position_ms) => {
+                if let Some(clock) = self.playback.get_mut(&id) {
+                    clock.seek(position_ms);
                 }
             }
             Command::SetInputLoop(id, looping) => {
@@ -1535,14 +1592,13 @@ impl Engine {
     }
     fn tick_playback(&mut self, now: u64) {
         for (id, clock) in &mut self.playback {
-            if let Some(input) = self.project.input(*id)
-                && (input.kind == InputKind::Color
-                    || input.kind == InputKind::Bars
-                    || input.config.media_path.is_some())
-            {
-                continue;
-            }
-            clock.advance(now, self.inputs_paused);
+            let inactive = self
+                .project
+                .input(*id)
+                .is_none_or(|input| !input.online || !input.has_playback());
+            // Advance the clock's origin even while inactive so replacing a
+            // still or reconnecting a source cannot accumulate idle time.
+            clock.advance(now, self.inputs_paused || inactive);
         }
     }
 }

@@ -61,13 +61,23 @@ impl RustMixApp {
         });
         let (tx, rx) = mpsc::sync_channel(1);
         self.job = Some(rx);
-        std::thread::spawn(move || {
-            let done = match write_snapshot(&path, &pixels, size) {
-                Ok(()) => JobDone::SnapshotSaved(path),
-                Err(error) => JobDone::Failed(error.to_string()),
-            };
-            let _ = tx.send(done);
-        });
+        let spawn = std::thread::Builder::new()
+            .name("rustmix-snapshot".into())
+            .spawn(move || {
+                let done = match write_snapshot(&path, &pixels, size) {
+                    Ok(()) => JobDone::SnapshotSaved(path),
+                    Err(error) => JobDone::Failed(error.to_string()),
+                };
+                let _ = tx.send(done);
+            });
+        if let Err(error) = spawn {
+            self.job = None;
+            self.say(
+                format!("Snapshot worker could not start ({:?})", error.kind()),
+                true,
+            );
+            return;
+        }
         self.say("Saving Program snapshot…".into(), false);
     }
 }

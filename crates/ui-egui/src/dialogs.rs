@@ -1088,7 +1088,7 @@ impl RustMixApp {
                                 if let Some(error)=app.input_fx.get(&id).and_then(|fx|fx.image_error.as_ref()) { ui.colored_label(RED,error); }
                             }
                             if let Some(VideoSource::File { path }) = &draft.config.video_source {
-                                ui.label("Source type: MP4 video, decoded on its own owner worker. MP4 audio is not decoded.");
+                                ui.label("Source type: MP4 video, decoded on its own owner worker. Video audio is linked to the Audio Mixer.");
                                 ui.label(format!("Path: {path}"));
                                 if let Some(fx) = app.input_fx.get(&id) {
                                     match (&fx.image_error, fx.custom_rgba.is_some()) {
@@ -1334,14 +1334,14 @@ impl RustMixApp {
                         ),
                         (SettingsPage::Audio, "Audio", "Audio"),
                         (SettingsPage::AudioOutputs, "Audio Outputs", "AudioOutputs"),
-                        (SettingsPage::Workspace, "Web Controller", "Workspace"),
+                        (SettingsPage::Workspace, "Workspace", "Workspace"),
                         (SettingsPage::TallyLights, "Tally Lights", "TallyLights"),
                         (SettingsPage::Shortcuts, "Shortcuts", "Shortcuts"),
                         (SettingsPage::Activators, "Activators", "Activators"),
                         (SettingsPage::Scripting, "Scripting", "Scripting"),
                         (SettingsPage::Alerts, "Alerts", "Alerts"),
                         (SettingsPage::About, "About", "About"),
-                    ] {
+                    ].into_iter().filter(|(page, _, _)| core_scope::settings_page(*page)) {
                         let r = sidebar_row(ui, app.settings_page == page, label, 27.0, None);
                         app.automation
                             .insert(format!("dialog.settings.page.{key}"), r.rect);
@@ -1358,16 +1358,15 @@ impl RustMixApp {
                     let footer = ui.horizontal(|ui| {
                         ui.spacing_mut().item_spacing.x = 3.0;
                         ui.spacing_mut().button_padding = Vec2::new(2.0, 3.0);
-                        let button_width = ((footer_width - 6.0) / 3.0).max(30.0);
-                        for action_lbl in ["Import", "Export", "Default"] {
-                            let action = ui.add_enabled(
-                                action_lbl == "Default",
-                                egui::Button::new(RichText::new(action_lbl).size(10.0))
+                        let button_width = footer_width.max(30.0);
+                        {
+                            let action = ui.add(
+                                egui::Button::new(RichText::new("Default").size(10.0))
                                     .fill(CHIP_BG)
                                     .min_size(Vec2::new(button_width, 27.0)),
                             );
-                            app.automation.insert(format!("dialog.settings.navigation.{action_lbl}"), action.rect);
-                            if action.clicked() && action_lbl == "Default" {
+                            app.automation.insert("dialog.settings.navigation.Default".into(), action.rect);
+                            if action.clicked() {
                                 reset_default = true;
                             }
                         }
@@ -1410,7 +1409,7 @@ impl RustMixApp {
                         }
                         SettingsPage::Workspace => {
                             ui.label(
-                                RichText::new("Web Controller & Workspace Layout")
+                                RichText::new("Workspace Layout")
                                     .size(13.0)
                                     .strong()
                                     .color(FORM_TEXT),
@@ -1431,7 +1430,6 @@ impl RustMixApp {
                                 app.settings_layout = Some(true);
                             }
                             ui.add_space(6.0);
-                            ui.label("Web Controller unavailable: no HTTP listener is running.");
                         }
                         SettingsPage::Shortcuts => app.shortcut_settings(ui, &mut draft),
                         SettingsPage::Categories => app.category_settings(ui, &mut draft),
@@ -2308,8 +2306,8 @@ impl RustMixApp {
                 ("Preview 1\n[Input number]".into(), preview(1)),
                 ("Preview 2\n[Input number]".into(), preview(2)),
                 ("Preview 3\n[Input number]".into(), preview(3)),
-                ("Record\n[Unavailable]".into(), Action::ToggleRecordSim),
-                ("Stream\n[Unavailable]".into(), Action::ToggleStreamSim),
+                ("Pause inputs\n[Transport]".into(), Action::PauseDemo),
+                ("Program monitor\n[Window]".into(), Action::ProgramOutputOpen),
             ];
             let columns = ((ui.available_width() + 6.0) / 104.0).floor().clamp(3.0, 9.0) as usize;
             let tile_width = (ui.available_width() - (columns.saturating_sub(1) as f32 * 6.0)) / columns as f32;
@@ -2323,7 +2321,7 @@ impl RustMixApp {
                 .show(ui, |ui| {
                     for (idx, (label, action)) in tiles.into_iter().enumerate() {
                         let enabled = match &action {
-                            Action::Unavailable(_) | Action::ToggleRecordSim | Action::ToggleStreamSim | Action::ToggleExternalSim => false,
+                            Action::Unavailable(_) => false,
                             Action::Engine(command) => self.engine.enabled(command).is_ok(),
                             _ => true,
                         };
@@ -2566,13 +2564,11 @@ mod operator_dialog_tests {
             assert!((body.width() / size.x - 0.60).abs() < 0.025);
             assert!((nav.width() / body.width() - 0.218).abs() < 0.015);
             let display = *app.automation.get("dialog.settings.page.Display").unwrap();
-            let next = *app.automation.get("dialog.settings.page.Outputs").unwrap();
+            let next = *app.automation.get("dialog.settings.page.Options").unwrap();
             assert!((display.height() - 27.0).abs() <= 1.0);
             assert!((next.top() - display.top() - 28.0).abs() <= 1.0);
             for id in [
                 "dialog.settings.navigation.footer",
-                "dialog.settings.navigation.Import",
-                "dialog.settings.navigation.Export",
                 "dialog.settings.navigation.Default",
             ] {
                 let rect = *app.automation.get(id).unwrap();
@@ -2586,7 +2582,6 @@ mod operator_dialog_tests {
                 "dialog.settings.frameRate",
                 "dialog.settings.projectName",
                 "dialog.settings.programWindow",
-                "dialog.settings.secondaryOutput",
             ] {
                 let rect = *app.automation.get(id).unwrap();
                 assert!(

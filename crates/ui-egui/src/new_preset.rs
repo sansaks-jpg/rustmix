@@ -209,8 +209,10 @@ impl RustMixApp {
                 self.audio_restore = None;
                 self.path = None;
                 self.saved_revision = 0;
+                self.last_checkpoint_revision = None;
                 self.textures.clear();
                 self.thumbnail_pixels.clear();
+                self.thumbnail_renderer = program::ProgramRenderer::default();
                 self.last_demo_frame = None;
                 self.confirm_new = false;
                 self.say("New preset created · add a source to begin".into(), false);
@@ -241,10 +243,10 @@ impl RustMixApp {
                     let width = (ui.available_width()*0.63).clamp(150.0,460.0);
                     let format = &mut self.new_preset.format;
                     let size = egui::ComboBox::from_id_salt("new.size").width(width)
-                        .selected_text(format!("{}   ({}×{})", if format.height > format.width {"Portrait"} else {"Landscape"},format.width,format.height))
+                        .selected_text(format.canvas_label())
                         .show_ui(ui, |ui| {
                             for (w,h) in CANVAS_SIZES {
-                                let option = ui.selectable_label((w,h)==(format.width,format.height),format!("{}   {w}×{h}",if h>w {"Portrait"} else {"Landscape"}));
+                                let option = ui.selectable_label((w,h)==(format.width,format.height),VideoStandard {width:w,height:h,..*format}.canvas_label());
                                 self.automation.insert(format!("dialog.new.size.{w}x{h}"),option.rect);
                                 if option.clicked() { format.width=w; format.height=h; ui.close(); }
                             }

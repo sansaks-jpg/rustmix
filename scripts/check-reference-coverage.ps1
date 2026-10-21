@@ -74,5 +74,5 @@ $fullMatch = ($unmatched -eq 0 -and $audit.reference.wire_contract_qualified -eq
     $audit.runtime_evidence.cadence_qualified -eq $true -and $audit.runtime_evidence.hardware_qualified -eq $true)
 if ($audit.all_features_match -ne $fullMatch) { throw 'The all-features-match claim is inconsistent with its evidence and gaps' }
 Write-Output "Reference inventory verified: 30 areas, 40 input types, 20 effects, 16 overlay/stinger channels, 9 audio destinations, 12 UI workflows, 777 unique shortcut function names in 29 groups."
-Write-Output "Actual engine scope: $($engineEffects.Count) effects, $standardChannels title-panel channels and $stingerChannels modelled stinger channels, $busCount simulated audio buses. Full reference match: $fullMatch."
+Write-Output "Actual engine scope: $($engineEffects.Count) effects, $standardChannels title-panel channels and $stingerChannels modelled stinger channels, $busCount configured audio buses (device qualification separate). Full reference match: $fullMatch."
 if ($RequireFullMatch -and -not $fullMatch) { throw 'Full reference acceptance FAILED: missing/partial features, protocol, hardware and cadence qualification remain.' }

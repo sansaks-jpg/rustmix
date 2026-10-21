@@ -3,10 +3,7 @@ use super::dialogs::{ADD_CATEGORIES, GENERATOR_SAMPLES, VIDEO_TAB, light_form_fr
 use super::*;
 
 // Preserve existing automation ordinals; presentation order is explicit.
-pub(super) const CATEGORY_ORDER: [usize; 26] = [
-    VIDEO_TAB, 0, 21, 2, 22, 23, 5, 7, 8, 24, 1, 9, 10, 11, 12, 13, 14, 16, 17, 18, 19, 25, 3, 4,
-    6, 15,
-];
+pub(super) const CATEGORY_ORDER: [usize; 7] = [VIDEO_TAB, 22, 1, 11, 12, 13, 0];
 
 pub(super) fn unavailable_reason(tab: usize) -> Option<&'static str> {
     match tab {
@@ -676,7 +673,13 @@ mod tests {
             wait_image(&mut app);
             assert!(app.add_image.is_some());
             assert!(app.add_disabled_reason().is_none());
-            click(&mut app, &ctx, &format!("dialog.add.category.{target}"));
+            if target == 14 {
+                assert!(!app.automation.contains_key("dialog.add.category.14"));
+                // Compatibility validation remains exercised for hidden legacy drafts.
+                app.select_add_category(target);
+            } else {
+                click(&mut app, &ctx, &format!("dialog.add.category.{target}"));
+            }
             assert_eq!(app.add_tab, target);
             assert!(app.add_image.is_none() && app.add_png_path.is_empty());
             if target == 14 {
@@ -946,12 +949,12 @@ mod tests {
         key(&mut app, &ctx, egui::Key::Tab, egui::Modifiers::NONE);
         key(&mut app, &ctx, egui::Key::Enter, egui::Modifiers::NONE);
         assert_eq!(
-            app.add_tab, 9,
-            "Tab then Enter selects the Photos row following Image"
+            app.add_tab, 11,
+            "Tab then Enter selects the Colour row following Image"
         );
-        assert!(app.automation.contains_key("dialog.add.photos.folder"));
+        assert!(app.automation.contains_key("dialog.add.name"));
         assert!(!app.automation.contains_key("dialog.add.unavailable"));
-        assert!(app.add_disabled_reason().is_some());
+        assert!(app.add_disabled_reason().is_none());
         assert_eq!(*app.engine.project(), before);
     }
 }

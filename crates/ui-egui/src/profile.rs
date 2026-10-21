@@ -40,15 +40,18 @@ impl RustMixApp {
             let worker = self.program_worker.take();
             drop(worker);
             let evidence = self.run_hd_bench();
-            self.program_worker = Some(program::ProgramWorker::spawn(
-                program::Snapshot {
-                    generation: self.program_generation,
-                    engine: self.engine.clone(),
-                    sources: self.input_fx.clone(),
-                },
-                self.start,
-                Some(ctx.clone()),
-            ));
+            self.program_worker = Some(
+                program::ProgramWorker::spawn(
+                    program::Snapshot {
+                        generation: self.program_generation,
+                        engine: self.engine.clone(),
+                        sources: self.input_fx.clone(),
+                    },
+                    self.start,
+                    Some(ctx.clone()),
+                )
+                .map_err(Error::Invalid)?,
+            );
             let evidence = evidence?;
             std::fs::create_dir_all("artifacts")?;
             std::fs::write(

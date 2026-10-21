@@ -1,7 +1,11 @@
 //! Deterministic meter simulation only. No audio device or samples are produced.
 use crate::{AudioChannel, InputState, ProjectState};
 pub fn input_peaks(input: &InputState, solo_active: bool, ms: u64) -> [f32; 2] {
-    if !input.online || input.audio.muted || (solo_active && !input.audio.solo) {
+    if !input.has_audio()
+        || !input.online
+        || input.audio.muted
+        || (solo_active && !input.audio.solo)
+    {
         return [0.0; 2];
     }
     let phase = (ms % 60000) as f32 / 1000.0 + input.id.0 as f32 * 1.7;

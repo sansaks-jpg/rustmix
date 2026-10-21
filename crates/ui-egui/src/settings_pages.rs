@@ -242,6 +242,13 @@ impl RustMixApp {
                         ("Project schema", SCHEMA.to_string()),
                         ("Interface", "Native egui / wgpu".into()),
                         (
+                            "Display device",
+                            self.gpu_adapter
+                                .clone()
+                                .unwrap_or_else(|| "No native GPU attached".into()),
+                        ),
+                        ("Composition", "CPU reference · GPU texture display".into()),
+                        (
                             "Implementation",
                             "Original branding and controls · not affiliated with vMix".into(),
                         ),

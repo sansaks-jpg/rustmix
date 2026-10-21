@@ -85,6 +85,20 @@ fn atomic_bytes(path: &Path, bytes: &[u8]) -> Result<()> {
     let mut temp = tempfile::NamedTempFile::new_in(parent)?;
     temp.write_all(bytes)?;
     temp.as_file().sync_all()?;
+    // A short-lived Windows sharing/antivirus hold must not discard a flushed
+    // replacement. Keep the same file and bound retries on the I/O worker.
+    for delay_ms in [5, 15, 40] {
+        match temp.persist(path) {
+            Ok(_) => return Ok(()),
+            Err(error) => {
+                if error.error.kind() != std::io::ErrorKind::PermissionDenied {
+                    return Err(Error::Io(error.error));
+                }
+                temp = error.file;
+                std::thread::sleep(std::time::Duration::from_millis(delay_ms));
+            }
+        }
+    }
     temp.persist(path).map_err(|e| Error::Io(e.error))?;
     Ok(())
 }

@@ -153,12 +153,26 @@ impl RustMixApp {
         }
         let (tx, rx) = mpsc::sync_channel(1);
         self.image_picker = Some(rx);
-        std::thread::spawn(move || {
-            let path = rfd::FileDialog::new()
-                .add_filter("PNG image", &["png"])
-                .pick_file();
-            let _ = tx.send(media::PickerDone { target, path });
-        });
+        let spawn = std::thread::Builder::new()
+            .name("rustmix-image-picker".into())
+            .spawn(move || {
+                let path = rfd::FileDialog::new()
+                    .add_filter("PNG image", &["png"])
+                    .pick_file();
+                let _ = tx.send(media::PickerDone { target, path });
+            });
+        if let Err(error) = spawn {
+            self.image_picker = None;
+            self.add_loading = false;
+            self.properties_loading = false;
+            self.say(
+                format!(
+                    "Image picker could not start ({:?}); current source retained",
+                    error.kind()
+                ),
+                true,
+            );
+        }
     }
 
     fn poll_image_picker(&mut self) {

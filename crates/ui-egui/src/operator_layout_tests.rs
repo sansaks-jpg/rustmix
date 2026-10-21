@@ -452,7 +452,6 @@ fn quick_input_categories_open_their_real_pages_and_survive_cancel_reopen() {
         ("generators", 0, "dialog.add.name"),
         ("shapes", 3, "dialog.add.name"),
         ("bars", 6, "dialog.add.name"),
-        ("title", 14, "dialog.add.unavailable"),
         ("studio", 4, "dialog.add.name"),
         ("colour", 11, "dialog.add.name"),
         ("timer", 15, "dialog.add.name"),

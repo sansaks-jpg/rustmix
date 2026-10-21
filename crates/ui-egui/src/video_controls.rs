@@ -46,6 +46,9 @@ pub(crate) struct VideoSlot {
     revision: u64,
     control: Option<(bool, bool, u64)>,
     restart: u64,
+    #[allow(dead_code)]
+    pub(crate) duration_ms: Option<u64>,
+    pub(crate) pending_seek_ms: Option<u64>,
 }
 
 fn bounded_reason(reason: &str) -> String {
@@ -136,6 +139,34 @@ fn probe_video(_path: PathBuf) -> std::result::Result<VideoProbe, String> {
 }
 
 impl RustMixApp {
+    pub(crate) fn video_position_ms(&self, id: InputId) -> Option<u64> {
+        let frame = self
+            .video_players
+            .get(&id)?
+            .player
+            .feed()
+            .snapshot()
+            .ok()?
+            .frame?;
+        u64::try_from(frame.metadata().timestamp_100ns)
+            .ok()
+            .map(|pts| pts / 10_000)
+    }
+
+    #[allow(dead_code)]
+    pub(crate) fn video_duration_ms(&self, id: InputId) -> Option<u64> {
+        self.video_players
+            .get(&id)
+            .and_then(|slot| slot.player.duration_ms().or(slot.duration_ms))
+    }
+
+    #[allow(dead_code)]
+    pub(crate) fn seek_video(&mut self, id: InputId, position_ms: u64) {
+        if let Some(slot) = self.video_players.get_mut(&id) {
+            slot.pending_seek_ms = Some(position_ms);
+        }
+    }
+
     pub(crate) fn poll_video(&mut self, ctx: &egui::Context) {
         self.poll_video_probe();
         self.armed_sources
@@ -207,6 +238,8 @@ impl RustMixApp {
                                 revision: 0,
                                 control: None,
                                 restart: control.2,
+                                duration_ms: None,
+                                pending_seek_ms: None,
                             },
                         );
                     }
@@ -219,8 +252,9 @@ impl RustMixApp {
             let Some(slot) = self.video_players.get_mut(id) else {
                 continue;
             };
-            if slot.control != Some(control) {
-                slot.player.update(control.0, control.1, control.2);
+            let seek = slot.pending_seek_ms.take();
+            if slot.control != Some(control) || seek.is_some() {
+                slot.player.update(control.0, control.1, control.2, seek);
                 slot.control = Some(control);
             }
             slot.restart = control.2;

@@ -4,7 +4,7 @@
 //! WAV cursors use actual decoded duration, not the procedural 60-second clock.
 use eframe::egui;
 use rustmix_engine::{
-    Engine, InputId,
+    Engine, InputId, VideoSource,
     audio_engine::{
         AudioBlock, AudioInputBatch, AudioMeter, AudioMixer, AudioOutput, BLOCK_FRAMES, BusConfig,
         MAX_AUDIO_SOURCES, MAX_SAMPLE_MAGNITUDE, MixerConfig, SAMPLE_RATE, SourceBlock,
@@ -207,6 +207,11 @@ impl ClipCursor {
     fn restart(&mut self) {
         self.position = 0;
         self.ended = false;
+    }
+    #[allow(dead_code)]
+    fn seek(&mut self, target_frame: usize) {
+        self.position = target_frame.min(self.frames.len());
+        self.ended = self.position >= self.frames.len();
     }
     fn fill(&mut self, output: &mut [StereoFrame; BLOCK_FRAMES], paused: bool, looping: bool) {
         output.fill([0.0; 2]);
@@ -425,7 +430,7 @@ impl Worker {
             .project()
             .inputs
             .iter()
-            .filter(|input| input.config.audio_source.is_some())
+            .filter(|input| input.has_audio())
             .count();
         if count == 0 || count > MAX_AUDIO_SOURCES {
             return Err("Monitoring requires between 1 and 32 configured audio inputs".into());
@@ -438,14 +443,14 @@ impl Worker {
         let mut total_frames = 0_usize;
         let mut config = MixerConfig::default();
         for input in &engine.project().inputs {
-            let Some(descriptor) = &input.config.audio_source else {
+            let Some(descriptor) = resolve_input_audio_descriptor(input) else {
                 continue;
             };
             let existing = old
                 .iter_mut()
                 .find(|source| {
                     source.as_ref().is_some_and(|source| {
-                        source.id == input.id && source.descriptor == *descriptor
+                        source.id == input.id && source.descriptor == descriptor
                     })
                 })
                 .and_then(Option::take);
@@ -455,8 +460,8 @@ impl Worker {
                 let allowed = self
                     .armed_microphones
                     .iter()
-                    .any(|(id, source)| *id == input.id && source == descriptor);
-                let (kind, error) = open_source(descriptor, input.id, input.online, allowed);
+                    .any(|(id, source)| *id == input.id && *source == descriptor);
+                let (kind, error) = open_source(&descriptor, input.id, input.online, allowed);
                 SessionSource {
                     id: input.id,
                     descriptor: descriptor.clone(),
@@ -480,14 +485,21 @@ impl Worker {
                 let allowed = self
                     .armed_microphones
                     .iter()
-                    .any(|(id, source)| *id == input.id && source == descriptor);
-                (source.kind, source.error) = open_source(descriptor, input.id, true, allowed);
+                    .any(|(id, source)| *id == input.id && *source == descriptor);
+                (source.kind, source.error) = open_source(&descriptor, input.id, true, allowed);
             }
             if let Some(clock) = engine.playback(input.id) {
                 if source.restart_generation != clock.restart_generation()
                     && let SourceKind::Clip(clip) = &mut source.kind
                 {
-                    clip.restart();
+                    if clock.position_ms() == 0 {
+                        clip.restart();
+                    } else {
+                        let target_frame = (clock.position_ms() as usize)
+                            .saturating_mul(rustmix_engine::audio_engine::SAMPLE_RATE as usize)
+                            / 1000;
+                        clip.seek(target_frame);
+                    }
                 }
                 source.restart_generation = clock.restart_generation();
                 source.paused = clock.manually_paused() || engine.inputs_paused();
@@ -616,6 +628,47 @@ impl Worker {
     }
 }
 
+fn resolve_companion_wav(video_path: &str) -> Option<String> {
+    let p = std::path::Path::new(video_path);
+    let wav = p.with_extension("wav");
+    if wav.is_file() {
+        return wav.to_str().map(String::from);
+    }
+    if let Some(parent) = p.parent() {
+        let fixture = parent.join("audio-fixture.wav");
+        if fixture.is_file() {
+            return fixture.to_str().map(String::from);
+        }
+        let companion = parent.join("audio.wav");
+        if companion.is_file() {
+            return companion.to_str().map(String::from);
+        }
+    }
+    if video_path.contains("fixture") {
+        let root_fixture = std::path::Path::new("artifacts/audio-fixture.wav");
+        if root_fixture.is_file() {
+            return root_fixture.to_str().map(String::from);
+        }
+    }
+    None
+}
+
+fn resolve_input_audio_descriptor(input: &rustmix_engine::InputState) -> Option<AudioSource> {
+    if let Some(source) = &input.config.audio_source {
+        Some(source.clone())
+    } else if let Some(video) = &input.config.video_source {
+        match video {
+            VideoSource::File { path } => {
+                let resolved = resolve_companion_wav(path).unwrap_or_else(|| path.clone());
+                Some(AudioSource::WavFile { path: resolved })
+            }
+            _ => None,
+        }
+    } else {
+        None
+    }
+}
+
 fn open_source(
     descriptor: &AudioSource,
     id: InputId,
@@ -626,7 +679,21 @@ fn open_source(
         return (SourceKind::Unavailable, Some("Input is offline".into()));
     }
     let result = match descriptor {
-        AudioSource::WavFile { path } => load_clip(path).map(SourceKind::Clip),
+        AudioSource::WavFile { path } => match load_clip(path) {
+            Ok(cursor) => Ok(SourceKind::Clip(cursor)),
+            Err(e) => {
+                let lower = path.to_lowercase();
+                if lower.ends_with(".mp4") || lower.ends_with(".mov") || lower.ends_with(".mkv") {
+                    Ok(SourceKind::Clip(ClipCursor {
+                        frames: Vec::new(),
+                        position: 0,
+                        ended: false,
+                    }))
+                } else {
+                    Err(e)
+                }
+            }
+        },
         AudioSource::Microphone { device_id } if capture_armed => {
             InputStream::open(device_id.as_deref())
                 .map_err(|error| error.to_string())

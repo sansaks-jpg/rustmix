@@ -4,6 +4,9 @@ use crate::{
     InputKind, InputState, ProjectState, Result, TransitionKind, TransitionState, invalid,
     overlay_text,
 };
+/// Per-pixel reference shader. Production uses the row-oriented
+/// `source_into`; tests require both to produce identical pixels.
+#[cfg(test)]
 fn pixel(input: &InputState, x: u32, y: u32, w: u32, h: u32, ms: u64) -> [u8; 4] {
     if !input.online
         || input.config.media_path.is_some()
@@ -130,12 +133,201 @@ pub fn source_into(
     let size = dimensions(w, h)?;
     out.clear();
     out.reserve(size);
-    for y in 0..h {
-        for x in 0..w {
-            out.push(pixel(input, x, y, w, h, ms));
+    if !input.online
+        || input.config.media_path.is_some()
+        || input.config.audio_source.is_some()
+        || input.config.video_source.is_some()
+        || (input.kind == InputKind::Color && input.color == [0; 3])
+    {
+        out.resize(size, [0, 0, 0, 255]);
+        return Ok(());
+    }
+    // Row-oriented generator. Every pixel is computed with exactly the same
+    // floating-point expressions as the reference `pixel` shader (tests compare
+    // them bit for bit); per-column and per-row terms are hoisted, and rows that
+    // depend only on a vertical band are rasterized once and copied.
+    let us: Vec<f32> = (0..w).map(|x| x as f32 / w.max(1) as f32).collect();
+    let phase = (ms % 10000) as f32 / 10000.0;
+    let c = input.color;
+    let mix = |k: f32| {
+        [
+            (c.first().copied().unwrap_or(0) as f32 * k) as u8,
+            (c.get(1).copied().unwrap_or(0) as f32 * k) as u8,
+            (c.get(2).copied().unwrap_or(0) as f32 * k) as u8,
+            255,
+        ]
+    };
+    let mut band_rows = BandRows::default();
+    match input.kind {
+        InputKind::Bars => {
+            const COLORS: [[u8; 4]; 7] = [
+                [190, 190, 190, 255],
+                [190, 190, 0, 255],
+                [0, 190, 190, 255],
+                [0, 190, 0, 255],
+                [190, 0, 190, 255],
+                [190, 0, 0, 255],
+                [0, 0, 190, 255],
+            ];
+            for y in 0..h {
+                let ramp = row_v(y, h) > 0.78;
+                band_rows.row(out, u8::from(ramp), |out| {
+                    out.extend(us.iter().map(|&u| {
+                        if ramp {
+                            let l = (((u + phase) % 1.0) * 255.0) as u8;
+                            [l, l, l, 255]
+                        } else {
+                            COLORS
+                                .get((u * 7.0) as usize)
+                                .copied()
+                                .unwrap_or([0, 0, 0, 255])
+                        }
+                    }));
+                });
+            }
+        }
+        InputKind::Grid => {
+            let columns: Vec<(bool, f32)> = us
+                .iter()
+                .map(|&u| ((u * 16.0 + phase * 2.0).fract() < 0.018, (u - 0.5).powi(2)))
+                .collect();
+            let radius = 0.12 + phase * 0.25;
+            for y in 0..h {
+                let v = row_v(y, h);
+                let row_grid = (v * 9.0).fract() < 0.025;
+                let dv = (v - 0.5).powi(2) * 0.32;
+                let background = mix(0.12 + (1.0 - v) * 0.12);
+                out.extend(columns.iter().map(|&(column_grid, du)| {
+                    let ring = (du + dv).sqrt();
+                    if (ring - radius).abs() < 0.003 {
+                        [91, 218, 230, 255]
+                    } else if column_grid || row_grid {
+                        [40, 76, 90, 255]
+                    } else {
+                        background
+                    }
+                }));
+            }
+        }
+        InputKind::Geometry => {
+            let cx = 0.25 + phase * 0.5;
+            let cy = 0.5 + (phase * std::f32::consts::TAU).sin() * 0.15;
+            let columns: Vec<(f32, f32)> = us.iter().map(|&u| (u, (u - cx).powi(2))).collect();
+            for y in 0..h {
+                let v = row_v(y, h);
+                let dv = (v - cy).powi(2) * 0.32;
+                let slant = v * 0.4;
+                out.extend(columns.iter().map(|&(u, du)| {
+                    if du + dv < 0.018 {
+                        [235, 163, 81, 255]
+                    } else if (u + slant + phase).fract() < 0.08 {
+                        [70, 51, 44, 255]
+                    } else {
+                        [24, 28, 38, 255]
+                    }
+                }));
+            }
+        }
+        InputKind::Graphics => {
+            for y in 0..h {
+                let v = row_v(y, h);
+                let band = v > 0.62 && v < 0.82;
+                band_rows.row(out, u8::from(band), |out| {
+                    out.extend(us.iter().map(|&u| {
+                        if band && u > 0.07 && u < 0.88 {
+                            if u < 0.09 {
+                                [40, 193, 207, 255]
+                            } else {
+                                [20, 47, 66, 255]
+                            }
+                        } else {
+                            [15, 23, 32, 255]
+                        }
+                    }));
+                });
+            }
+        }
+        InputKind::Studio => {
+            for y in 0..h {
+                let v = row_v(y, h);
+                if v > 0.76 {
+                    let dv = (v - 0.76) * 0.4;
+                    out.extend(us.iter().map(|&u| {
+                        let k = ((u - 0.5).abs() + dv).min(1.0);
+                        mix(0.1 + k * 0.3)
+                    }));
+                    continue;
+                }
+                let screen = v > 0.15 && v < 0.62;
+                band_rows.row(out, u8::from(screen), |out| {
+                    out.extend(us.iter().map(|&u| {
+                        if screen && u > 0.1 && u < 0.9 {
+                            if (u * 12.0 + phase).fract() < 0.03 {
+                                [34, 125, 158, 255]
+                            } else {
+                                mix(0.5 + u * 0.2)
+                            }
+                        } else {
+                            [17, 30, 43, 255]
+                        }
+                    }));
+                });
+            }
+        }
+        InputKind::Color => {
+            for _ in 0..h {
+                band_rows.row(out, 0, |out| {
+                    out.extend(us.iter().map(|&u| mix(0.25 + 0.75 * u)))
+                });
+            }
+        }
+        InputKind::Countdown => {
+            let remaining = 1.0 - (ms % 60000) as f32 / 60000.0;
+            for y in 0..h {
+                let band = row_v(y, h) > 0.82;
+                band_rows.row(out, u8::from(band), |out| {
+                    out.extend(us.iter().map(|&u| {
+                        if band && u < remaining {
+                            [35, 174, 157, 255]
+                        } else {
+                            [17, 28, 34, 255]
+                        }
+                    }));
+                });
+            }
         }
     }
+    if out.len() != size {
+        return Err(invalid("Generated source surface has the wrong size"));
+    }
     Ok(())
+}
+
+#[inline]
+fn row_v(y: u32, h: u32) -> f32 {
+    y as f32 / h.max(1) as f32
+}
+
+/// Remembers where each band's first row was written so identical rows are
+/// copied (`memcpy`) instead of re-evaluated.
+#[derive(Default)]
+struct BandRows {
+    rows: [Option<(usize, usize)>; 2],
+}
+impl BandRows {
+    fn row(&mut self, out: &mut Vec<[u8; 4]>, band: u8, render: impl FnOnce(&mut Vec<[u8; 4]>)) {
+        if let Some(&Some((start, end))) = self.rows.get(usize::from(band))
+            && end <= out.len()
+        {
+            out.extend_from_within(start..end);
+            return;
+        }
+        let start = out.len();
+        render(out);
+        if let Some(slot) = self.rows.get_mut(usize::from(band)) {
+            *slot = Some((start, out.len()));
+        }
+    }
 }
 
 /// Two-pass box filter from a full-resolution Program frame to the operator
@@ -324,6 +516,124 @@ pub fn program_from_sources(
         finish_program(&mut out, p, w, h, black);
         return Ok(out);
     }
+    let to = target.ok_or_else(|| invalid("Target surface missing"))?;
+    let kind = t.map_or(TransitionKind::Cut, |t| t.kind);
+    let progress = t.map_or(0.0, |t| t.progress);
+    let mut out = transition_rows(kind, progress, w, h, from, to)?;
+    finish_program(&mut out, p, w, h, black);
+    Ok(out)
+}
+
+/// Geometric transitions assembled from contiguous row slices. Masks use the
+/// same floating-point predicates as the per-pixel reference compositor, so
+/// the boundary pixels are identical; the copy itself is a `memcpy` per run.
+fn transition_rows<'a>(
+    kind: TransitionKind,
+    progress: f32,
+    w: u32,
+    h: u32,
+    from: &'a [[u8; 4]],
+    to: &'a [[u8; 4]],
+) -> Result<Vec<[u8; 4]>> {
+    let size = dimensions(w, h)?;
+    let width = w as usize;
+    if from.len() != size || to.len() != size {
+        return Err(invalid("Transition surfaces do not match the raster"));
+    }
+    let rows = || from.chunks_exact(width).zip(to.chunks_exact(width));
+    let mut out = Vec::with_capacity(size);
+    let truncated = || invalid("Transition surface truncated");
+    match kind {
+        TransitionKind::Cut | TransitionKind::Fade => {
+            // Handled by dedicated paths; keep a defined result regardless.
+            out.extend_from_slice(if progress >= 1.0 { to } else { from });
+        }
+        TransitionKind::Wipe | TransitionKind::WipeReverse | TransitionKind::BarnDoor => {
+            let mask = (0..w).map(|x| match kind {
+                TransitionKind::Wipe => (x as f32 / w as f32) < progress,
+                TransitionKind::WipeReverse => x as f32 / w as f32 >= 1.0 - progress,
+                _ => ((2 * x + 1) as f32 / w as f32 - 1.0).abs() < progress,
+            });
+            let mut runs: Vec<(usize, usize, bool)> = Vec::new();
+            for (x, target) in mask.enumerate() {
+                match runs.last_mut() {
+                    Some((_, end, last)) if *last == target => *end = x + 1,
+                    _ => runs.push((x, x + 1, target)),
+                }
+            }
+            for (a, b) in rows() {
+                for &(start, end, target) in &runs {
+                    let row = if target { b } else { a };
+                    out.extend_from_slice(row.get(start..end).ok_or_else(truncated)?);
+                }
+            }
+        }
+        TransitionKind::VerticalWipe
+        | TransitionKind::VerticalWipeReverse
+        | TransitionKind::RollerDoor => {
+            for (y, (a, b)) in (0..h).zip(rows()) {
+                let target = match kind {
+                    TransitionKind::VerticalWipe => (y as f32 / h as f32) < progress,
+                    TransitionKind::VerticalWipeReverse => y as f32 / h as f32 >= 1.0 - progress,
+                    _ => ((2 * y + 1) as f32 / h as f32 - 1.0).abs() < progress,
+                };
+                out.extend_from_slice(if target { b } else { a });
+            }
+        }
+        TransitionKind::Slide | TransitionKind::SlideReverse => {
+            let shift = ((w as f32 * progress).round() as u32).min(w) as usize;
+            let boundary = width - shift;
+            for (a, b) in rows() {
+                let (first, second) = if kind == TransitionKind::SlideReverse {
+                    (b.get(boundary..), a.get(..boundary))
+                } else {
+                    (a.get(shift..), b.get(..shift))
+                };
+                out.extend_from_slice(first.ok_or_else(truncated)?);
+                out.extend_from_slice(second.ok_or_else(truncated)?);
+            }
+        }
+        TransitionKind::VerticalSlide | TransitionKind::VerticalSlideReverse => {
+            let height = h as usize;
+            let shift = ((h as f32 * progress).round() as u32).min(h) as usize;
+            let boundary = height - shift;
+            let row = |surface: &'a [[u8; 4]], y: usize| {
+                let start = y.checked_mul(width)?;
+                surface.get(start..start.checked_add(width)?)
+            };
+            for y in 0..height {
+                let source = if kind == TransitionKind::VerticalSlideReverse {
+                    if y < shift {
+                        row(to, y + boundary)
+                    } else {
+                        row(from, y - shift)
+                    }
+                } else if y < boundary {
+                    row(from, y + shift)
+                } else {
+                    row(to, y - boundary)
+                };
+                out.extend_from_slice(source.ok_or_else(truncated)?);
+            }
+        }
+    }
+    if out.len() != size {
+        return Err(truncated());
+    }
+    Ok(out)
+}
+
+/// The original per-pixel compositor, retained as a bit-exact test oracle.
+#[cfg(test)]
+fn transition_reference(
+    t: &TransitionState,
+    w: u32,
+    h: u32,
+    from: &[[u8; 4]],
+    target: &[[u8; 4]],
+) -> Result<Vec<[u8; 4]>> {
+    let (t, target) = (Some(t), Some(target));
+    let size = dimensions(w, h)?;
     let mut out = Vec::with_capacity(size);
     for y in 0..h {
         for x in 0..w {
@@ -431,7 +741,6 @@ pub fn program_from_sources(
             out.push(color);
         }
     }
-    finish_program(&mut out, p, w, h, black);
     Ok(out)
 }
 
@@ -715,5 +1024,85 @@ mod tests {
         assert!(dimensions(1080, 1920).is_ok());
         assert!(dimensions(3840, 2160).is_err());
         assert!(dimensions(1920, 1081).is_err());
+    }
+
+    #[test]
+    fn optimized_static_surfaces_match_the_reference_pixel_shader() {
+        let mut input = ProjectState::demo().inputs.remove(0);
+        for kind in InputKind::ALL {
+            input.kind = kind;
+            for color in [[0; 3], [37, 160, 183], [255, 255, 255]] {
+                input.color = color;
+                for online in [true, false] {
+                    input.online = online;
+                    for (w, h) in [(64, 36), (1, 1), (7, 13), (640, 360), (360, 640)] {
+                        for ms in [0, 12_345, 59_999, 99_999_999] {
+                            let actual = source(&input, w, h, ms).unwrap();
+                            let expected: Vec<_> = (0..h)
+                                .flat_map(|y| (0..w).map(move |x| (x, y)))
+                                .map(|(x, y)| pixel(&input, x, y, w, h, ms))
+                                .collect();
+                            assert!(
+                                actual == expected,
+                                "{kind:?} {color:?} online={online} {w}x{h} ms={ms}"
+                            );
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn full_hd_generators_match_the_reference_pixel_shader() {
+        let mut input = ProjectState::demo().inputs.remove(0);
+        for kind in InputKind::ALL {
+            input.kind = kind;
+            let actual = source(&input, 1920, 1080, 4_321).unwrap();
+            let matches = (0..1080_u32)
+                .flat_map(|y| (0..1920_u32).map(move |x| (x, y)))
+                .zip(&actual)
+                .all(|((x, y), p)| pixel(&input, x, y, 1920, 1080, 4_321) == *p);
+            assert!(matches, "{kind:?} differs at full HD");
+        }
+    }
+
+    #[test]
+    fn row_transitions_match_the_reference_compositor() {
+        for (w, h) in [(1, 1), (7, 5), (64, 36), (36, 64), (640, 360)] {
+            let size = (w * h) as usize;
+            let from: Vec<[u8; 4]> = (0..size)
+                .map(|i| [(i % 251) as u8, ((i * 7) % 253) as u8, (i / 13) as u8, 255])
+                .collect();
+            let to: Vec<[u8; 4]> = (0..size)
+                .map(|i| {
+                    [
+                        ((i * 11 + 3) % 255) as u8,
+                        ((i * 5 + 90) % 255) as u8,
+                        ((i * 3 + 17) % 255) as u8,
+                        255,
+                    ]
+                })
+                .collect();
+            for kind in TransitionKind::ALL {
+                if kind == TransitionKind::Fade {
+                    continue;
+                }
+                for progress in [0.0, 0.01, 0.25, 0.333, 0.5, 0.75, 0.99, 1.0] {
+                    let t = TransitionState {
+                        from: crate::InputId(1),
+                        to: crate::InputId(2),
+                        kind,
+                        start_ms: 0,
+                        duration_ms: 1000,
+                        progress,
+                        manual: true,
+                    };
+                    let actual = transition_rows(kind, progress, w, h, &from, &to).unwrap();
+                    let expected = transition_reference(&t, w, h, &from, &to).unwrap();
+                    assert!(actual == expected, "{kind:?} {w}x{h} p={progress}");
+                }
+            }
+        }
     }
 }

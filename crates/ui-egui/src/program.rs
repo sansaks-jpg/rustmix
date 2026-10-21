@@ -57,23 +57,35 @@ pub(crate) struct ProgramWorker {
     thread: Option<std::thread::JoinHandle<()>>,
 }
 impl ProgramWorker {
-    pub fn spawn(mut snapshot: Snapshot, origin: Instant, ctx: Option<egui::Context>) -> Self {
+    pub fn spawn(
+        mut snapshot: Snapshot,
+        origin: Instant,
+        ctx: Option<egui::Context>,
+    ) -> std::result::Result<Self, String> {
         let pending = Arc::new(Latest::default());
         let latest = Arc::new(Latest::default());
         let stop = Arc::new(AtomicBool::new(false));
         let (states, output, shutdown) =
             (Arc::clone(&pending), Arc::clone(&latest), Arc::clone(&stop));
-        let thread = std::thread::spawn(move || {
+        let failure_output = Arc::clone(&latest);
+        let failure_ctx = ctx.clone();
+        let thread = std::thread::Builder::new().name("rustmix-program".into()).spawn(move || {
+          let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             let mut rate = snapshot.engine.project().preferences.rate;
+            let mut renderer = ProgramRenderer::default();
+            // Reserve the initial CPU surfaces before the first live deadline.
+            // Cold allocation/downscale is startup work, not a running frame.
+            snapshot.engine.tick(u64::try_from(origin.elapsed().as_millis()).unwrap_or(u64::MAX));
+            if let Err(error) = renderer.render_full(&snapshot.engine, &snapshot.sources) {
+                output.put(Err(format!("Program initialization failed: {error}")));
+                if let Some(ctx) = &ctx { ctx.request_repaint(); }
+                return;
+            }
             let mut clock = FrameClock::at(
                 rate,
                 u64::try_from(origin.elapsed().as_nanos()).unwrap_or(u64::MAX),
             );
-            let mut renderer = ProgramRenderer::default();
-            let mut stats = VideoStats {
-                fps: rate.numerator as f64 / rate.denominator.max(1) as f64,
-                ..VideoStats::default()
-            };
+            let mut stats = VideoStats::default();
             let mut sample_start = Instant::now();
             let mut sample_frames = 0_u64;
             let mut previous_pixels: Option<Pixels> = None;
@@ -87,10 +99,7 @@ impl ProgramWorker {
                         rate,
                         u64::try_from(origin.elapsed().as_nanos()).unwrap_or(u64::MAX),
                     );
-                    stats = VideoStats {
-                        fps: rate.numerator as f64 / rate.denominator.max(1) as f64,
-                        ..VideoStats::default()
-                    };
+                    stats = VideoStats::default();
                     sample_frames = 0;
                     sample_start = Instant::now();
                 }
@@ -150,13 +159,18 @@ impl ProgramWorker {
                     clock.wait_ns(now_ns).clamp(100_000, 10_000_000),
                 ));
             }
-        });
-        Self {
+          }));
+          if result.is_err() {
+              failure_output.put(Err("Program worker stopped after an internal failure; last valid frame retained".into()));
+              if let Some(ctx) = failure_ctx { ctx.request_repaint(); }
+          }
+        }).map_err(|error| format!("Program worker could not start ({:?}); last valid frame retained", error.kind()))?;
+        Ok(Self {
             pending,
             latest,
             stop,
             thread: Some(thread),
-        }
+        })
     }
     pub fn submit(&self, snapshot: Snapshot) {
         self.pending.put(snapshot);
@@ -182,7 +196,7 @@ struct SourceKey {
     online: bool,
     config: InputConfig,
     frame: u64,
-    image: Option<(u32, u32, u64)>,
+    image: Option<(u32, u32, u64, usize)>,
     pip_generation: u64,
 }
 struct Surface {
@@ -207,6 +221,21 @@ pub(crate) struct ProgramRenderer {
     monitor_cache: Option<(Pixels, Pixels)>,
 }
 impl ProgramRenderer {
+    pub(crate) fn source_pixels(
+        &mut self,
+        id: InputId,
+        engine: &Engine,
+        sources: &HashMap<InputId, InputFx>,
+        size: [u32; 2],
+    ) -> Result<Pixels> {
+        self.surface(id, engine, sources, size, &mut Vec::new(), &mut Vec::new())
+            .map(|(pixels, _)| pixels)
+    }
+
+    pub(crate) fn retain_inputs(&mut self, project: &ProjectState) {
+        self.surfaces.retain(|id, _| project.input(*id).is_some());
+    }
+
     fn surface(
         &mut self,
         id: InputId,
@@ -243,7 +272,7 @@ impl ProgramRenderer {
             frame: if !input.online
                 || input.config.media_path.is_some()
                 || input.config.video_source.is_some()
-                || matches!(input.kind, InputKind::Color | InputKind::Graphics)
+                || !input.is_procedural_playback()
             {
                 0
             } else {
@@ -252,7 +281,7 @@ impl ProgramRenderer {
             image: fx
                 .custom_rgba
                 .as_ref()
-                .map(|(w, h, _)| (*w, *h, fx.image_generation)),
+                .map(|(w, h, pixels)| (*w, *h, fx.image_generation, Arc::as_ptr(pixels) as usize)),
             pip_generation: pip.as_ref().map_or(0, |(_, generation)| *generation),
         };
         if let Some(surface) = self.surfaces.get(&id)
@@ -431,6 +460,45 @@ mod tests {
     #![allow(clippy::unwrap_used)]
     use super::*;
     #[test]
+    fn independent_decoders_with_equal_descriptors_and_generations_keep_their_own_picture() {
+        let mut engine = Engine::new_preset(VideoStandard::default(), 0).unwrap();
+        let config = InputConfig {
+            video_source: Some(VideoSource::File {
+                path: "same.mp4".into(),
+            }),
+            ..Default::default()
+        };
+        let mut sources = HashMap::new();
+        for (id, pixel) in [
+            (InputId(1), [255, 0, 0, 255]),
+            (InputId(2), [0, 0, 255, 255]),
+        ] {
+            let mut input = engine.project().input(id).cloned().unwrap();
+            input.config = config.clone();
+            engine.execute(Command::UpdateInput(input), 0).unwrap();
+            sources.insert(
+                id,
+                InputFx {
+                    config: config.clone(),
+                    custom_rgba: Some((16, 9, Arc::new(vec![pixel; 16 * 9]))),
+                    image_generation: 1,
+                    ..Default::default()
+                },
+            );
+        }
+        let mut renderer = ProgramRenderer::default();
+        let before = renderer.render(&engine, &sources).unwrap();
+        assert_eq!(before.first(), Some(&[255, 0, 0, 255]));
+        engine.execute(Command::Cut, 0).unwrap();
+        let after = renderer.render(&engine, &sources).unwrap();
+        assert_eq!(after.first(), Some(&[0, 0, 255, 255]));
+        assert_eq!(
+            before.first(),
+            Some(&[255, 0, 0, 255]),
+            "Committed pixels stay immutable"
+        );
+    }
+    #[test]
     fn playlist_advances_without_ui_and_reports_the_control_generation() {
         let mut engine = Engine::default();
         let mut preferences = engine.project().preferences.clone();
@@ -464,7 +532,8 @@ mod tests {
             },
             Instant::now(),
             None,
-        );
+        )
+        .unwrap();
         std::thread::sleep(Duration::from_millis(350));
         let deadline = Instant::now() + Duration::from_secs(2);
         let final_frame = loop {
@@ -573,7 +642,8 @@ mod tests {
             },
             Instant::now(),
             None,
-        );
+        )
+        .unwrap();
         std::thread::sleep(Duration::from_millis(500));
         let frame = worker.take().unwrap().unwrap();
         assert!(frame.stats.rendered >= 2);

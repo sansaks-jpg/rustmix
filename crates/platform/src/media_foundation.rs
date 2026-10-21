@@ -370,6 +370,7 @@ pub struct VideoFile {
     _runtime: Runtime,
     format: VideoFormat,
     source_size: [u32; 2],
+    duration_100ns: Option<u64>,
     sequence: u64,
     ended: bool,
     pending_discontinuity: bool,
@@ -455,12 +456,20 @@ impl VideoFile {
             reader.GetCurrentMediaType(FIRST_VIDEO)
         })?;
         let format = decoded_format(&current)?;
+        let duration_100ns = unsafe {
+            reader
+                .GetPresentationAttribute(0xFFFFFFFF, &MF_PD_DURATION)
+                .ok()
+                .map(|p| p.Anonymous.Anonymous.Anonymous.uhVal)
+                .filter(|&d| d > 0)
+        };
         Ok(Self {
             reader,
             _capture: capture,
             _runtime: runtime,
             format,
             source_size,
+            duration_100ns,
             sequence: 0,
             ended: false,
             pending_discontinuity: true,
@@ -708,6 +717,14 @@ impl VideoFile {
         self.ended = false;
         self.pending_discontinuity = true;
         Ok(())
+    }
+
+    pub fn duration_100ns(&self) -> Option<u64> {
+        self.duration_100ns
+    }
+
+    pub fn duration_ms(&self) -> Option<u64> {
+        self.duration_100ns.map(|d| d / 10_000)
     }
 }
 

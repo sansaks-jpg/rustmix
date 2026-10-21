@@ -33,6 +33,7 @@ pub struct VideoControl {
     pub paused: bool,
     pub looping: bool,
     pub restart_generation: u64,
+    pub seek_ms: Option<u64>,
 }
 impl Default for VideoControl {
     fn default() -> Self {
@@ -40,6 +41,7 @@ impl Default for VideoControl {
             paused: false,
             looping: true,
             restart_generation: 0,
+            seek_ms: None,
         }
     }
 }
@@ -49,6 +51,7 @@ struct Shared {
     stop: AtomicBool,
     finished: AtomicBool,
     failure: Mutex<Option<String>>,
+    duration_ms: Mutex<Option<u64>>,
     repaint: egui::Context,
 }
 impl Shared {
@@ -87,6 +90,7 @@ impl VideoPlayer {
                 stop: AtomicBool::new(false),
                 finished: AtomicBool::new(false),
                 failure: Mutex::new(None),
+                duration_ms: Mutex::new(None),
                 repaint,
             });
             let worker = Arc::clone(&shared);
@@ -148,7 +152,13 @@ impl VideoPlayer {
     pub fn feed(&self) -> Arc<VideoFeed> {
         Arc::clone(&self.shared.feed)
     }
-    pub fn update(&self, paused: bool, looping: bool, restart_generation: u64) {
+    pub fn update(
+        &self,
+        paused: bool,
+        looping: bool,
+        restart_generation: u64,
+        seek_ms: Option<u64>,
+    ) {
         if self.shared.finished.load(Ordering::Acquire) {
             return;
         }
@@ -157,11 +167,16 @@ impl VideoPlayer {
                 paused,
                 looping,
                 restart_generation,
+                seek_ms,
             };
         } else {
             self.shared
                 .record_failure("Video control handoff failed; recreate this source");
         }
+    }
+    #[allow(dead_code)]
+    pub fn duration_ms(&self) -> Option<u64> {
+        self.shared.duration_ms.lock().ok().and_then(|guard| *guard)
     }
     pub fn stop(&self) {
         self.shared.stop.store(true, Ordering::Release);
@@ -324,6 +339,7 @@ enum ReadEvent {
 trait FrameReader {
     fn read(&mut self) -> Result<ReadEvent, String>;
     fn seek_zero(&mut self) -> Result<(), String>;
+    fn seek_100ns(&mut self, position: i64) -> Result<(), String>;
 }
 #[cfg(any(windows, test))]
 struct Step {
@@ -411,7 +427,16 @@ impl<R: FrameReader> Playback<R> {
         Ok(())
     }
     fn step(&mut self, control: VideoControl, now: u64) -> Result<Step, String> {
-        if let Some(generation) = self.restart_generation
+        if let Some(target_ms) = control.seek_ms {
+            let target_100ns = (target_ms as i64).saturating_mul(10_000);
+            let _ = self.reader.seek_100ns(target_100ns);
+            self.pending = None;
+            self.pending_observed = false;
+            self.force_discontinuity = true;
+            self.pacer.reset(Some(now));
+            self.ended = false;
+            self.poster = true;
+        } else if let Some(generation) = self.restart_generation
             && generation != control.restart_generation
         {
             self.seek_cycle(now, true)?;
@@ -702,10 +727,13 @@ mod native {
             }
         }
         fn seek_zero(&mut self) -> Result<(), String> {
+            self.seek_100ns(0)
+        }
+        fn seek_100ns(&mut self, position: i64) -> Result<(), String> {
             if self.camera {
                 Ok(())
             } else {
-                self.file.seek_100ns(0).map_err(|error| error.to_string())
+                self.file.seek_100ns(position).map_err(|error| error.to_string())
             }
         }
     }
@@ -728,6 +756,9 @@ mod native {
             VideoFile::open(std::path::Path::new(path))
         }
         .map_err(|error| error.to_string())?;
+        if !camera && let Ok(mut d) = shared.duration_ms.lock() {
+            *d = file.duration_ms();
+        }
         if shared.stop.load(Ordering::Acquire) {
             return Ok(());
         }
@@ -801,6 +832,9 @@ mod tests {
             })
         }
         fn seek_zero(&mut self) -> Result<(), String> {
+            self.seek_100ns(0)
+        }
+        fn seek_100ns(&mut self, _position: i64) -> Result<(), String> {
             self.position = 0;
             self.discontinuity = true;
             self.seeks.fetch_add(1, Ordering::Relaxed);
@@ -931,6 +965,9 @@ mod tests {
                 })
             }
             fn seek_zero(&mut self) -> Result<(), String> {
+                self.seek_100ns(0)
+            }
+            fn seek_100ns(&mut self, _position: i64) -> Result<(), String> {
                 Ok(())
             }
         }

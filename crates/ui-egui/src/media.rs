@@ -119,9 +119,20 @@ impl MediaLoader {
         {
             let path = request.path.clone();
             let (tx, rx) = mpsc::sync_channel(1);
-            std::thread::spawn(move || {
-                let _ = tx.send(decode_png(&path));
-            });
+            let spawn = std::thread::Builder::new()
+                .name("rustmix-png-decode".into())
+                .spawn(move || {
+                    let _ = tx.send(decode_png(&path));
+                });
+            if let Err(error) = spawn {
+                return Some((
+                    request.target,
+                    Err(format!(
+                        "PNG worker could not start ({:?}); current source retained",
+                        error.kind()
+                    )),
+                ));
+            }
             self.active = Some((request, rx));
         }
         let result = match self.active.as_ref()?.1.try_recv() {

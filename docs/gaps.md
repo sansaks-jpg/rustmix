@@ -1,5 +1,11 @@
 # Known gaps
 
+UI-036 narrows normal navigation to core workflows. Deferred source/output/settings
+entry points are hidden; their old menu presence is not feature readiness. CPU
+composition/GPU display and actual monitoring are separate from hardware encode,
+record/stream, A/V sync and endurance. See [current audit](core-engine-audit.md).
+
+
 UI-035: existing-panel corrections are reviewed with headless egui captures and
 regression tests. Native Windows, GPU/DPI, encoders, devices and full reference
 equivalence remain separate gates. Reference-only companion tools are absent;
