@@ -1,5 +1,15 @@
 # Verification
 
+UI-024 through UI-027 source ba3b209/run 39540613350 passes locked workspace check,
+warnings-as-errors Clippy, all 261 tests across 17 suites (137 UI, none ignored/filtered),
+release build, 13 native processes and packaging. Exact PNG/JSON, all 13 drain proofs,
+stderr, restored 1600x900 and next input viewport inspected. Native step 104 s; high-rate
+Program samples still miss 50/59.94/60 fps. Earlier acb00d7/e44050b native failures remain
+recorded; a passing later run does not establish a driver fix. Local verification was
+formatting, diff, repository/reference inventory and PowerShell syntax only. No local
+Rust compile/test/build/native launch. Full UI/DPI/hardware/endurance acceptance remains
+open; Light theme is deprioritized. See ui027-native-acceptance.md.
+
 UI-023 source 126291d/run 39452377970 passes locked workspace check, warnings-as-errors
 Clippy, all 251 tests including 127 UI, release build, all 13 native processes and packaging.
 Exact workspace/Recording PNG/JSON were inspected. New regressions check painted title/

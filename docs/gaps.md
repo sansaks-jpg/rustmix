@@ -1,5 +1,15 @@
 # Known gaps
 
+UI-024 through UI-027 selected corrections verified on ba3b209/run 39540613350:
+261 tests (137 UI), check/Clippy/build and all 13 native workflows pass; exact native
+workspace/dialog/Video images and viewport restoration reviewed. Full UI correspondence
+remains open: source-page structure/initial Generators choice, remaining typography,
+spacing and dialog navigation. Light theme is deprioritized by user instruction.
+acb00d7/e44050b input-stage24 readback/drain failures remain in the ledger; later green
+runs establish no causal GPU-driver fix. Short 50/59.94/60 fps samples still miss targets
+at 640x360. Missing encoder/capture/network backends, physical devices, DPI and endurance
+remain unqualified. See ui024/ui025/ui026 reviews and ui027-native-acceptance.md.
+
 UI-023 selected corrections accepted for 126291d/run 39452377970:251 tests including 127 UI,
 check/Clippy/build and 13 native processes pass; exact workspace/Recording PNG/JSON reviewed.
 Monitor/take alignment, compact effect containment, single-format recording navigation,

@@ -1,7 +1,7 @@
 # ADR 0026: Input category navigation and unavailable actions
 
 Date: 2026-10-21
-Status: candidate; exact hosted UI and native workflow evidence required.
+Status: selected corrections verified in ba3b209/run 39540613350; full equivalence open.
 
 Opening Add Input reconstructs the active page from InputKind. That loses the
 operator's choice because file video, PNG and colour share the Color kind, while

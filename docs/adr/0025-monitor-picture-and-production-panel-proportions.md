@@ -1,7 +1,7 @@
 # ADR 0025: Monitor picture and production panel proportions
 
 Date: 2026-10-21
-Status: candidate; hosted checks and exact native images required.
+Status: selected corrections verified in ba3b209/run 39540613350; full equivalence open.
 
 The user explicitly deprioritized Light theme and requested the remaining UI/UX.
 The accepted UI-024 native 1917x1198 capture shows 809x455 pictures vertically
@@ -23,6 +23,6 @@ Record dock panel rectangles for verification. Regress real settled layouts at
 and both group rails, six large-workspace source pictures per row, Audio workspace
 switching and saved dock restoration without exchanging Program and Preview.
 Extend the existing native smoke with a 1917x1168 client capture: the supplied
-1917x1198 screenshot includes approximately 30px of OS caption, while GPU readback
+1917x1198 screenshot includes approximately 30 px of OS caption, while GPU readback
 does not. Keep the original raster capture, strict GPU drain and cadence gates.
 Do not claim exact equivalence or a performance improvement before verification.

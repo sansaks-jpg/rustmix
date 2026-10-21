@@ -1,5 +1,12 @@
 # Roadmap
 
+- UI-024 through UI-027: selected caption/Display, monitor/transport, Production
+  proportions and source-navigation corrections verified on ba3b209/run 39540613350.
+  All 261 tests (137 UI), build and 13 native workflows pass; exact images inspected.
+  Next UI work: source-page structure, typography/spacing and dialog navigation.
+  Light theme is deprioritized. Keep GPU reliability, cadence and hardware gaps
+  separate from visual acceptance. See docs/ui027-native-acceptance.md.
+
 - UI-023: flat operator treatment, left monitor titles, centered/bounded effect controls,
   selected-format Recording page and readable form gutter accepted for source 126291d;
   run 39452377970 passes 251 tests, build and 13 native processes with exact PNG/JSON review.

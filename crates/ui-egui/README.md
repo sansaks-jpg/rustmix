@@ -1,5 +1,15 @@
 # rustmix-ui
 
+UI-024 through UI-027: shared original dialog captions/fixed footers, aligned
+Display form, fitted top-aligned monitor pictures/transport, initial 85/15 Production
+dock, retained Add Input categories and real quick media routes. Unavailable output
+actions use neutral disabled controls; Close remains usable. Existing typed commands,
+saved layouts and Program/Preview isolation are retained; no dependency/schema/backend
+change. ba3b209/run 39540613350 passes 261 tests (137 UI), check/Clippy/build and all
+13 native workflows; exact images/JSON reviewed. Only formatting/diff/inventory/script
+checks ran locally. Light theme is deprioritized; full correspondence, GPU reliability,
+cadence and hardware/endurance remain open. See docs/ui027-native-acceptance.md.
+
 UI-023: flat controls, left monitor titles, centered/bounded effect controls and the
 selected-format Recording page with 12 px form gutter are tested for source 126291d.
 Hosted run 39452377970 passes check/Clippy/all 251 tests (127 UI), release build and 13

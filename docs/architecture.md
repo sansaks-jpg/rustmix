@@ -1,5 +1,13 @@
 # Workspace architecture
 
+2026-10-21 UI-024 through UI-027: caption/geometry/category presentation remains
+inside ui-egui. The UI retains actual selected source categories instead of reconstructing
+them from a shared render kind; existing validated source commits still dispatch typed
+engine commands. Production default/reset dock proportions do not overwrite saved layouts.
+Native reference capture restores its observed 1600x900 viewport before later processes
+reuse the disposable window store. No layer/dependency/schema/backend change. See ADRs
+0024-0027 and ui027-native-acceptance.md for exact verification and unresolved GPU scope.
+
 2026-10-20 UI-020: operator layout changes stay in ui-egui. Toolbar sizing and channel orientation
 are presentation concerns; input/audio/category mutations continue through typed engine commands.
 No crate, dependency, project-schema or platform-backend change is introduced. Hosted acceptance

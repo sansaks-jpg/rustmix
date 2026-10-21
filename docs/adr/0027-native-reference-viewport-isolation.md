@@ -1,13 +1,13 @@
 # ADR 0027: Native reference viewport isolation
 
 Date: 2026-10-21
-Status: candidate; exact hosted native evidence required.
+Status: observed viewport isolation verified in ba3b209/run 39540613350; GPU reliability open.
 
-UI-024 added a final1917x1198 workspace capture to the main native smoke. All
+UI-024 added a final 1917x1198 workspace capture to the main native smoke. All
 native processes share a disposable eframe window store. The new final size is
 therefore inherited by the later source/input process, previously1600x900.
-acb00d7/run39538665307 confirms its input samples at1917x1198: main/reopen drain
-successfully, but input capture stage24 times out at150s with a pending readback.
+acb00d7/run 39538665307 confirms its input samples at 1917x1198: main/reopen drain
+successfully, but input capture stage 24 times out at 150 s with a pending readback.
 Shutdown drain then times out and wgpu Queue::drop panics, exit-1073741819.
 This demonstrates a leaked workload change; it does not establish that viewport
 size causes every historical GPU failure or that reducing it fixes the driver.

@@ -1,7 +1,7 @@
 # ADR 0024: Operator dialog chrome and Display form
 
 Date: 2026-10-20
-Status: implementation candidate; exact hosted and visual verification required.
+Status: f0b0ea4 verified; later acb00d7 native acceptance failed. See ui024 review.
 
 The supplied Settings/Recording/Input screenshots use a small left title on a
 light caption bar, a right close target and larger bottom confirmation controls.
@@ -33,3 +33,11 @@ Display control alignment plus staged Cancel/Apply; actual painted icon contrast
 in both themes; exact hosted workspace/dialog screenshots and existing complete
 native workflow. Keep all current failure, GPU-drain and cadence evidence/gates.
 Local checks remain formatting/diff/inventory only, per docs/testing.md.
+
+The exact f0b0ea4 hosted run 39537127873 passes check/Clippy, 256 tests (132 UI),
+release build, all 13 native processes and packaging; exact images were inspected.
+Captions/footers fit and the Display swatches align. acb00d7 passes code checks
+but native process exit-1073741819 prevents accepting its follow-up. Preserve
+the failure ledger and performance limitations in docs/ui024-visual-review.md.
+The user subsequently deprioritized Light theme; follow-up work targets the
+main production layout and other operator interactions.

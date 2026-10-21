@@ -1,5 +1,14 @@
 # RustMix
 
+UI-024 through UI-027 (2026-10-21): monitor pictures/transport now align at the
+top, Production gives more room to inputs, Add Input retains its selected category,
+and the quick menu opens actual Video/PNG/WAV/Microphone pages. Unsupported output
+actions are visibly unavailable. Source ba3b209/run 39540613350 passes all 261 tests
+(137 UI), check/Clippy/build and 13 native workflows; exact native images reviewed.
+Light theme is deprioritized. Full UI correspondence, intermittent hosted GPU
+reliability, high-rate cadence and hardware/endurance qualification remain open.
+See docs/ui027-native-acceptance.md for evidence and the retained failures.
+
 UI-023 (2026-10-20): flat operator controls, left monitor titles, centered/bounded
 transition controls and one selected Recording Setup page are implemented and visually
 checked on exact source 126291d. [Windows run 39452377970](https://github.com/sansaks-jpg/rustmix/actions/runs/39452377970)

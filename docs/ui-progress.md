@@ -1,5 +1,13 @@
 # UI milestone progress
 
+UI-024 through UI-027 (2026-10-21): ba3b209/run 39540613350 verifies selected
+dialog caption/Display, monitor/transport, Production proportion and source-navigation
+corrections. All 261 tests (137 UI), check/Clippy/build, 13 native processes and packaging
+pass; exact images and restoration/input viewport evidence inspected. Unavailable output
+buttons are neutral/disabled. Light theme is deprioritized. Full UI correspondence,
+intermittent GPU reliability, high-rate cadence and hardware/endurance remain open.
+Earlier failed revisions are retained in the per-change reviews; see ui027-native-acceptance.md.
+
 UI-023 (2026-10-20): source 126291d/run 39452377970 accepts selected operator/Recording
 corrections:251 tests (127 UI), check/Clippy/build,13 native processes and packaging pass;
 exact1100/1600/1920 workspace and1600 Recording PNG/JSON inspected. Long effects stay
