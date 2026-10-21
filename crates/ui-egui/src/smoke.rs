@@ -864,6 +864,28 @@ impl RustMixApp {
                 s.stage = 57;
             }
             57 if s.captured => {
+                // Native processes share the disposable eframe window store.
+                // Do not leak this additional large reference capture into the
+                // existing source/audio/video workflows' 1600x900 workload.
+                ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(egui::vec2(1600.0, 900.0)));
+                s.stage = 58;
+            }
+            58 => {
+                if (ctx.viewport_rect().size() - egui::vec2(1600.0, 900.0)).length() > 1.0 {
+                    return Err(Error::Invalid(
+                        "Reference capture did not restore the native workflow viewport".into(),
+                    ));
+                }
+                self.validate_monitor_geometry(ctx.viewport_rect().width())?;
+                std::fs::write(
+                    "artifacts/workspace-reference-restore.json",
+                    serde_json::to_vec_pretty(&serde_json::json!({
+                        "requested_points": [1600,900],
+                        "actual_points": [ctx.viewport_rect().width(),ctx.viewport_rect().height()],
+                        "pixels_per_point": ctx.pixels_per_point(),
+                        "reference_client_capture_completed": s.captured,
+                    }))?,
+                )?;
                 self.assert_smoke_state()?;
                 self.saved_revision = self.engine.project().revision;
                 ctx.send_viewport_cmd(egui::ViewportCommand::Close);
