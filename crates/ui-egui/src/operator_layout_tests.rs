@@ -90,14 +90,20 @@ fn input_general_labels_fields_header_and_navigation_use_the_available_form_widt
         let output = paint(&mut app, &ctx, size);
         app.validate_dialog_geometry(&ctx, "dialog.properties")
             .unwrap();
-        let page = app.automation["dialog.properties.page"];
+        let page = *app.automation.get("dialog.properties.page").unwrap();
         for (label, key) in [
             ("Name", "name"),
             ("Aspect Ratio", "aspect"),
             ("Category", "category"),
         ] {
-            let reserved = app.automation[&format!("dialog.properties.{key}.label")];
-            let field = app.automation[&format!("dialog.properties.{key}")];
+            let reserved = *app
+                .automation
+                .get(&format!("dialog.properties.{key}.label"))
+                .unwrap();
+            let field = *app
+                .automation
+                .get(&format!("dialog.properties.{key}"))
+                .unwrap();
             let glyph = text_in(&output.shapes, label, reserved);
             assert!(
                 (glyph.right() - reserved.right()).abs() <= 2.0,
@@ -113,11 +119,24 @@ fn input_general_labels_fields_header_and_navigation_use_the_available_form_widt
                 );
             }
         }
-        let header = app.automation["dialog.properties.sourceHeader"];
+        let header = *app
+            .automation
+            .get("dialog.properties.sourceHeader")
+            .unwrap();
         let caption = text_in(&output.shapes, "Camera C · synthetic Color bars", header);
         assert!((caption.left() - header.left()).abs() <= 2.0);
-        assert!(header.right() + 2.0 <= app.automation["dialog.properties.change"].left());
-        let general = app.automation["dialog.properties.page.General"];
+        assert!(
+            header.right() + 2.0
+                <= app
+                    .automation
+                    .get("dialog.properties.change")
+                    .unwrap()
+                    .left()
+        );
+        let general = *app
+            .automation
+            .get("dialog.properties.page.General")
+            .unwrap();
         let expected = if size.y < 700.0 {
             18.5
         } else {

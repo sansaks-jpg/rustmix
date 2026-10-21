@@ -35,3 +35,9 @@ bad gutters and overlapping Change/header. Existing native Properties captures a
 the complete14-process workflow remain mandatory. Local formatting/diff/repository
 guards pass; no local Rust compile/test/build/native launch. Hosted/native/image
 acceptance is pending; no full visual equivalence or GPU fix is claimed.
+
+a667e6e/run39552040031 passes formatting/inventory/locked workspace check but
+FAILS warnings-as-errors Clippy: six new test lookups used unchecked HashMap
+indexing. Replace them with explicit get/unwrap assertions under the existing
+test-only allowance; keep indexing warnings enabled and all assertions unchanged.
+Unit tests, release and native acceptance did not run for that candidate.
