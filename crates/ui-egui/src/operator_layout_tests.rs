@@ -103,6 +103,15 @@ fn escape_cancels_operator_drafts_without_committing_or_disturbing_a_manual_tran
         for _ in 0..5 {
             event_frame(&mut app, &ctx, vec![]);
         }
+        if app.add_open {
+            click(&mut app, &ctx, "dialog.add.video.path");
+            event_frame(
+                &mut app,
+                &ctx,
+                vec![egui::Event::Text("C:/media/not-added.mp4".into())],
+            );
+            assert!(ctx.text_edit_focused());
+        }
         event_frame(&mut app, &ctx, escape_events(false, egui::Modifiers::NONE));
         assert!(
             !app.add_open
@@ -133,14 +142,21 @@ fn escape_closes_an_open_combo_before_its_dialog_and_ignores_repeat_or_modified_
     click(&mut app, &ctx, "dialog.settings.frameRate");
     let before = app.engine.project().clone();
     assert!(egui::Popup::is_any_open(&ctx));
-    event_frame(&mut app, &ctx, escape_events(false, egui::Modifiers::NONE));
+    let mut first_press = escape_events(false, egui::Modifiers::NONE);
+    first_press.retain(|event| matches!(event, egui::Event::Key { pressed: true, .. }));
+    event_frame(&mut app, &ctx, first_press);
     assert!(app.settings, "The first Escape belongs to the open combo");
     assert!(!egui::Popup::is_any_open(&ctx));
-    event_frame(&mut app, &ctx, escape_events(true, egui::Modifiers::NONE));
+    let mut held_repeat = escape_events(true, egui::Modifiers::NONE);
+    held_repeat.retain(|event| matches!(event, egui::Event::Key { pressed: true, .. }));
+    event_frame(&mut app, &ctx, held_repeat);
     assert!(
         app.settings,
         "Holding Escape must not discard the parent dialog"
     );
+    let mut release = escape_events(false, egui::Modifiers::NONE);
+    release.retain(|event| matches!(event, egui::Event::Key { pressed: false, .. }));
+    event_frame(&mut app, &ctx, release);
     event_frame(&mut app, &ctx, escape_events(false, egui::Modifiers::CTRL));
     assert!(
         app.settings,
