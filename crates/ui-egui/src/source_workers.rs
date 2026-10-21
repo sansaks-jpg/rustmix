@@ -231,6 +231,20 @@ fn discovery_endpoint(url: &str, port: u16) -> bool {
         || url.starts_with(&format!("ws://localhost:{port}/"))
 }
 
+/// Prefer the blank page this process launched. Edge can expose extension
+/// pages with type `page`; a capture on one of those is rejected as inactive.
+fn choose_page(pages: &[Value]) -> Option<&Value> {
+    pages
+        .iter()
+        .filter(|page| page.get("type").and_then(Value::as_str) == Some("page"))
+        .min_by_key(|page| match page.get("url").and_then(Value::as_str) {
+            Some("about:blank") => 0,
+            Some(url) if url.starts_with("http://127.0.0.1") => 1,
+            Some(url) if url.starts_with("http://localhost") => 1,
+            _ => 2,
+        })
+}
+
 fn retry_discovery(error: &str) -> bool {
     error.starts_with("Browser page discovery timed out")
         || error == "Browser discovery response ended before its body"
@@ -343,9 +357,7 @@ impl Browser {
             let body = discover_pages(port, stop, &mut process)?;
             let pages: Vec<Value> =
                 serde_json::from_slice(&body).map_err(|_| "Invalid browser page list")?;
-            let ws = pages
-                .iter()
-                .find(|p| p.get("type").and_then(Value::as_str) == Some("page"))
+            let ws = choose_page(&pages)
                 .and_then(|p| p.get("webSocketDebuggerUrl"))
                 .and_then(Value::as_str)
                 .ok_or("Browser page unavailable")?;
@@ -365,6 +377,7 @@ impl Browser {
             _process: process,
             command_id: 0,
         };
+        let _ = browser.call("Page.bringToFront", json!({}));
         browser.call(
             "Emulation.setDeviceMetricsOverride",
             json!({"width":width,"height":height,"deviceScaleFactor":1,"mobile":false}),
@@ -373,7 +386,39 @@ impl Browser {
         if navigation.get("errorText").is_some() {
             return Err("Browser navigation failed".into());
         }
+        browser.wait_ready(stop)?;
         Ok(browser)
+    }
+    /// Page.navigate resolves before the first useful frame exists. Capture
+    /// would otherwise be rejected while Chromium is still committing the page.
+    fn wait_ready(&mut self, stop: &AtomicBool) -> Result<(), String> {
+        let start = Instant::now();
+        loop {
+            if stop.load(Ordering::Acquire) {
+                return Err("Browser start cancelled".to_owned());
+            }
+            if start.elapsed() >= Duration::from_secs(15) {
+                return Err("Browser page did not become ready".into());
+            }
+            match self.call(
+                "Runtime.evaluate",
+                json!({"expression":"document.readyState","returnByValue":true}),
+            ) {
+                Ok(result)
+                    if result
+                        .get("result")
+                        .and_then(|value| value.get("value"))
+                        .and_then(Value::as_str)
+                        == Some("complete") =>
+                {
+                    return Ok(());
+                }
+                Ok(_) => {}
+                Err(error) if error.contains("Browser rejected Runtime.evaluate") => {}
+                Err(error) => return Err(error),
+            }
+            thread::sleep(Duration::from_millis(100));
+        }
     }
     fn call(&mut self, method: &str, params: Value) -> Result<Value, String> {
         self.command_id = self
@@ -401,8 +446,21 @@ impl Browser {
                 let response: Value = serde_json::from_str(text.as_str())
                     .map_err(|_| "Invalid browser command response")?;
                 if response.get("id").and_then(Value::as_u64) == Some(id) {
-                    if response.get("error").is_some() {
-                        return Err("Browser rejected the capture command".into());
+                    if let Some(error) = response.get("error") {
+                        let mut detail = String::new();
+                        if let Some(message) = error.get("message").and_then(Value::as_str) {
+                            for character in message.chars().filter(|c| !c.is_control()) {
+                                if detail.len().saturating_add(character.len_utf8()) > 160 {
+                                    break;
+                                }
+                                detail.push(character);
+                            }
+                        }
+                        return Err(if detail.is_empty() {
+                            format!("Browser rejected {method}")
+                        } else {
+                            format!("Browser rejected {method}: {detail}")
+                        });
                     }
                     return response
                         .get("result")
@@ -414,18 +472,35 @@ impl Browser {
         Err("Browser event limit exceeded".into())
     }
     fn capture(&mut self) -> Result<Raster, String> {
-        let result = self.call(
-            "Page.captureScreenshot",
-            json!({"format":"png","captureBeyondViewport":false}),
-        )?;
-        let data = result
-            .get("data")
-            .and_then(Value::as_str)
-            .ok_or("Browser screenshot missing")?;
-        let bytes = base64::engine::general_purpose::STANDARD
-            .decode(data)
-            .map_err(|_| "Browser screenshot invalid")?;
-        raster(bytes, image::ImageFormat::Png)
+        let mut last_rejection = String::new();
+        for _ in 0..20 {
+            let result = match self.call(
+                "Page.captureScreenshot",
+                json!({"format":"png","captureBeyondViewport":false}),
+            ) {
+                Ok(result) => result,
+                Err(error) if error.starts_with("Browser rejected Page.captureScreenshot") => {
+                    last_rejection = error;
+                    let _ = self.call("Page.bringToFront", json!({}));
+                    thread::sleep(Duration::from_millis(150));
+                    continue;
+                }
+                Err(error) => return Err(error),
+            };
+            let data = result
+                .get("data")
+                .and_then(Value::as_str)
+                .ok_or("Browser screenshot missing")?;
+            let bytes = base64::engine::general_purpose::STANDARD
+                .decode(data)
+                .map_err(|_| "Browser screenshot invalid")?;
+            return raster(bytes, image::ImageFormat::Png);
+        }
+        Err(if last_rejection.is_empty() {
+            "Browser screenshot unavailable".into()
+        } else {
+            last_rejection
+        })
     }
 }
 
@@ -465,6 +540,7 @@ pub(super) fn run(
             last_picture = None;
             if let Some(browser) = &mut browser {
                 browser.call("Page.reload", json!({"ignoreCache":true}))?;
+                browser.wait_ready(&shared.stop)?;
             }
         }
         last_restart = Some(control.restart_generation);
@@ -546,6 +622,24 @@ mod tests {
             }
             self.0.read(out)
         }
+    }
+    #[test]
+    fn page_selection_ignores_background_pages_and_prefers_the_blank_page() {
+        let pages = vec![
+            json!({"type":"background_page","url":"chrome-extension://bg","webSocketDebuggerUrl":"ws://127.0.0.1:1/devtools/page/bg"}),
+            json!({"type":"page","url":"chrome-extension://ext/page","webSocketDebuggerUrl":"ws://127.0.0.1:1/devtools/page/ext"}),
+            json!({"type":"page","url":"about:blank","webSocketDebuggerUrl":"ws://127.0.0.1:1/devtools/page/blank"}),
+        ];
+        assert_eq!(
+            choose_page(&pages)
+                .and_then(|page| page.get("webSocketDebuggerUrl"))
+                .and_then(Value::as_str),
+            Some("ws://127.0.0.1:1/devtools/page/blank")
+        );
+        assert!(
+            choose_page(&[json!({"type":"background_page","url":"chrome-extension://bg"})])
+                .is_none()
+        );
     }
     #[test]
     fn devtools_discovery_completes_before_a_keepalive_connection_times_out() {
