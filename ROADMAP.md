@@ -1,5 +1,17 @@
 # Roadmap
 
+UI-028 through UI-031 (2026-10-21): Video-first Input Select with genuine bounded
+recent files and validation; topmost Escape/popup/repeat safety; responsive
+default widths preserving real resizing; Input Settings expanding fields,
+aligned labels/flags/colour/fit/metadata and left source caption.
+Source 56048cb/run 39556368477: locked check/Clippy, 274 tests (150 UI), release, all15 native processes and packaging pass.
+Next: source-icon semantics and remaining property/preview
+proportions/navigation. Current changes are experimental selected workflows.
+Full UI/workflow correspondence, original source-icon semantics, remaining
+source/property/preview dimensions, GPU reliability, cadence and physical/
+DPI/endurance qualification remain open. Light theme is deprioritized.
+See ADRs0028-0031 and UI-028/029/030/031 reviews for exact scope and every failed candidate.
+
 - UI-024 through UI-027: selected caption/Display, monitor/transport, Production
   proportions and source-navigation corrections verified on ba3b209/run 39540613350.
   All 261 tests (137 UI), build and 13 native workflows pass; exact images inspected.

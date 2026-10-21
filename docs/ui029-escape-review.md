@@ -1,6 +1,9 @@
 # UI-029 operator dialog keyboard review
 
-2026-10-21. Candidate; full exact-source hosted/native qualification still required.
+2026-10-21. Selected Escape workflow verified by82b6cec/run39546775770 and
+0382fa1/run39550459305; the latter passes271 tests (147 UI),14 native processes
+and packaging. Full physical keyboard/DPI, UI equivalence and GPU reliability
+qualification remain open.
 
 The shared original operator-window wrapper now uses the existing non-repeated
 key consumer for plain Escape in the topmost window. It preserves the caller's

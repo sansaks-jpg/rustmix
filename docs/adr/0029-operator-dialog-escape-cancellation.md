@@ -1,7 +1,7 @@
 # ADR 0029: Escape cancellation for operator dialogs
 
 Date: 2026-10-21
-Status: candidate; exact hosted key-event/native verification required.
+Status: accepted for the selected experimental workflow in0382fa1/run39550459305; full qualification remains open.
 
 Standard operator windows have real Cancel/X handling but no Escape dismissal.
 Use the same existing caller cancellation paths for a plain, non-repeated Escape

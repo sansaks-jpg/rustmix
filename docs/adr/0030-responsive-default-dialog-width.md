@@ -1,7 +1,7 @@
 # ADR 0030: Responsive default dialog width
 
 Date: 2026-10-21
-Status: candidate; exact hosted resize/native/image evidence required.
+Status: accepted for the selected experimental workflow in0382fa1/run39550459305; full qualification remains open.
 
 The new e3b12a9 native comparison exposes an existing width persistence gap.
 Input Select is1131px wide at1600. After resizing the parent to1917x1168 it remains

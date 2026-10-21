@@ -1,5 +1,19 @@
 # Workspace architecture
 
+UI-028 through UI-031 (2026-10-21): Video-first Input Select with genuine bounded
+recent files and validation; topmost Escape/popup/repeat safety; responsive
+default widths preserving real resizing; Input Settings expanding fields,
+aligned labels/flags/colour/fit/metadata and left source caption.
+Video history is bounded application preference state,
+selection reuses the existing probe and only OK dispatches AddInputAt. Escape
+uses existing cancellation. A validated width cache preserves operator resizing.
+General uses shared reserved labels and existing draft/typed actions. Opt-in
+core, dialog and large-layout checks are independent mandatory native processes
+loading the saved project; per-process state/readback/drain/deadline gates remain.
+No backend/layer/dependency/project or dock-format change.
+Source 56048cb/run 39556368477: locked check/Clippy, 274 tests (150 UI), release, all15 native processes and packaging pass.
+See ADRs0028-0031 and UI-028/029/030/031 reviews for exact scope and every failed candidate.
+
 2026-10-21 UI-024 through UI-027: caption/geometry/category presentation remains
 inside ui-egui. The UI retains actual selected source categories instead of reconstructing
 them from a shared render kind; existing validated source commits still dispatch typed

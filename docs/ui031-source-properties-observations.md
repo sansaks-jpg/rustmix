@@ -1,8 +1,10 @@
-# UI-031 next source-dialog observations
+# UI-031 source-dialog review
 
-2026-10-21. Baseline observations followed by a selected candidate; exact hosted
-verification is pending. Light theme remains deprioritized. Existing UI-028/029/030
-work keeps its independent acceptance ledger.
+2026-10-21. Selected workflow accepted in56048cb/run39556368477: all274 tests
+(150 UI), check/Clippy/release,15 native processes and packaging pass. Exact new
+Properties/Add/Video PNG/geometry inspected, including fully opaque captures after
+animation settling. Light theme is deprioritized; full UI/GPU/DPI/endurance remains
+open. Earlier candidate failures and acceptance evidence stay below.
 
 The supplied Add Input and Input Settings images were directly observed locally,
 then compared with98bf2eb's actual1600 native captures. No supplied image, path,
@@ -22,7 +24,7 @@ The common reference layout is a workflow guide; unavailable features must remai
 honest. This observation does not implement capture/network/encoder backends or
 qualify full UI correspondence, DPI, hardware, cadence or GPU reliability.
 
-The current candidate implements the General form, source-header and navigation
+The initial candidate implements the General form, source-header and navigation
 row corrections in ADR0031. It reuses the established reserved right-aligned label
 helper, expands the three existing controls, clips a left-aligned source caption
 before Change and scales production page rows. Existing draft/engine behavior is
@@ -69,3 +71,46 @@ harness now records stage start in that same UI clock and waits animation_time+
 clocks, deadlines, geometry and readback/drain acceptance remain unchanged. A pure
 regression rejects many early passes, clock rewind and invalid times; valid elapsed
 time is mandatory. This improves evidence timing, not GPU execution or reliability.
+
+Archive inspection complete for a72c146/run39554890819:136 original ZIP members
+retrieved selectively with CRC32 verification. All15 drain proofs pass,15 stderr
+files empty,14 stage traces/194 samples bounded and monotonic with no failed
+sample; audio/video save-reopen bytes match and actual1600 restoration and1917x1168
+Add raster proofs pass. The three independent processes take103503ms/86518ms/
+51487ms (core/dialog/layout), peak working sets132972544/110510080/159137792 bytes.
+No causal GPU fix is established by this green run.
+
+Exact current1600 Properties image directly viewed: Name/Aspect/Category are363.1px
+wide, field starts519.9, flags start520.0, colour and Image fit start519.9. Metadata
+labels end1046.1 and values start1054.1 (8px gutter); Mouse label is visibly clear
+of the left field column. Source caption starts400, Change1315.5; footer748.8..783.9
+fits. Navigation31.7px; preview287.2x161.5. The selected alignment/typing/cancellation
+workflow is accepted, while source-icon semantics and preview proportions remain
+open. All references were observed locally; no supplied artwork or screenshots
+are committed.
+
+Native step696s. Short640x360 Program samples still miss50/59.94/60 targets:
+27.7511/35.9409/33.5186fps, skipped186/203/222; UI1.7785/1.7418/1.8070fps.
+Full reference correspondence, physical input/DPI/devices, stable performance,
+GPU recovery and endurance remain unqualified. Earlier failures stay above.
+
+Archive inspection complete for56048cb/run39556368477. All274 tests across17
+suites pass (150 UI, none ignored/filtered), locked check/Clippy/release and all15
+native processes/package pass.136 original ZIP members selectively retrieved with
+CRC32 checks;15 successful drains,15 empty stderr,14 bounded monotonic traces/
+193 samples without failure. Audio/video save-reopen bytes match, exact1917x1168
+raster and observed1600x900 restoration pass. Core/dialog/layout processes take
+97476/89829/44816ms, peak working sets136499200/112009216/155287552 bytes.
+
+Exact final Properties1600, Add1600, Add1917x1168 and validated Video1600 images
+directly viewed. Dialogs are fully opaque with no observed clipping/overlap; the
+new fields/metadata/flags retain the measured geometry above. Real generated MP4
+history selection and validation are visible. Native capture now waits for actual
+UI animation time; normal app animation and engine timing are unchanged. No local
+Rust compile/test/build/native launch, no new dependency/asset or Light-theme work.
+
+Native step approximately683s. Short640x360 Program samples still miss targets:
+32.9226/35.1584/35.2870fps at50/59.94/60, skipped139/203/201; UI1.8642/1.8418/
+1.8470fps. Earlier GPU failures remain unresolved causally. Full visual/workflow
+correspondence, source-icon semantics, preview proportions, physical/DPI/devices
+and endurance remain open. This accepts the selected operator UI changes only.

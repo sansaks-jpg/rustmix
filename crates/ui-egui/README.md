@@ -1,5 +1,19 @@
 # rustmix-ui
 
+UI-028 through UI-031 (2026-10-21): Video-first Input Select with genuine bounded
+recent files and validation; topmost Escape/popup/repeat safety; responsive
+default widths preserving real resizing; Input Settings expanding fields,
+aligned labels/flags/colour/fit/metadata and left source caption.
+Source 56048cb/run 39556368477: locked check/Clippy, 274 tests (150 UI), release, all15 native processes and packaging pass.
+Changes stay in ui-egui; no dependency, backend, project/dock
+schema or engine-command change. Widget paint/key/edge-drag and native source
+workflows verified; exact selected PNG/JSON inspected. Only formatting/diff/
+inventory/script checks locally, no local Rust compile/test/build/launch.
+Full UI/workflow correspondence, original source-icon semantics, remaining
+source/property/preview dimensions, GPU reliability, cadence and physical/
+DPI/endurance qualification remain open. Light theme is deprioritized.
+See ADRs0028-0031 and UI-028/029/030/031 reviews for exact scope and every failed candidate.
+
 UI-024 through UI-027: shared original dialog captions/fixed footers, aligned
 Display form, fitted top-aligned monitor pictures/transport, initial 85/15 Production
 dock, retained Add Input categories and real quick media routes. Unavailable output

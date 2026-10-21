@@ -1,7 +1,8 @@
 # ADR 0031: Input General form proportions
 
 Date: 2026-10-21
-Status: candidate; exact hosted tests/native/images required.
+Status: selected experimental workflow and capture timing accepted in
+56048cb/run39556368477; full qualification remains open.
 
 Directly observed reference and1600 native images show narrow fixed175px Name,
 Aspect Ratio and Category controls, left-aligned labels, a centered source caption

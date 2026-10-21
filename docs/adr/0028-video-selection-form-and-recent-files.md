@@ -1,7 +1,7 @@
 # ADR 0028: Video selection form and recent files
 
 Date: 2026-10-21
-Status: candidate; exact hosted code/native/image acceptance required.
+Status: accepted for the selected experimental workflow in0382fa1/run39550459305; full qualification remains open.
 
 The supplied Add Input reference opens Video, with a dark instruction strip,
 file path and Browse on one row, a full-width scrolling recent-file list and a

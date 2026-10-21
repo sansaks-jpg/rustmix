@@ -1,7 +1,10 @@
 # UI-028 Video selection and recent files review
 
-2026-10-21. Current candidate is not yet fully verified. Earlier ba3b209 is the
-accepted native baseline; all failures below remain part of this change's record.
+2026-10-21. Selected Video form/history workflow verified in0382fa1/run39550459305;
+all271 tests (147 UI), check/Clippy/build,14 native processes and packaging pass.
+Exact1600/1917 Input Select and real video-history captures inspected. Full UI,
+backend, GPU reliability, cadence and physical/DPI/endurance qualification remain open.
+All failures below remain part of this change's record.
 
 The supplied Add Input.png was inspected directly: Video is initially selected,
 a dark instruction strip sits above a path/Browse row, the recent-file list fills
@@ -60,3 +63,11 @@ body grows vertically; that is a genuine remaining fidelity gap. ADR0030 adds
 default-width adaptation with a real custom-resize preservation test and a native
 width-proportion gate. The actual Video-source capture contains its generated
 MP4 history entry; no supplied/private reference paths were imported.
+
+0382fa1 native archive fully downloaded after one connection reset and a bounded
+retry. Exact new1600 Input Select,1917x1168 Input Select and1600 validated video
+source PNG/JSON directly viewed. The clean list and actual generated MP4 history
+row, selected state, concise metadata and disabled/enabled OK states are correct.
+All14 per-mode drain proofs pass,14 stderr files are empty, viewport restoration
+JSON observes1600x900 and subsequent modes start there. See UI-030 for measured
+width correction and remaining performance/reliability boundaries.
