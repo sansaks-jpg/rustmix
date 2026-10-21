@@ -2464,12 +2464,12 @@ impl RustMixApp {
                         let start = ui
                             .add_enabled(
                                 false,
-                                egui::Button::new(if self.stream_active {
+                                egui::Button::new(RichText::new(if self.stream_active {
                                     format!("Stop {}", self.stream_channel + 1)
                                 } else {
                                     format!("Start {}", self.stream_channel + 1)
-                                })
-                                .fill(if self.stream_active { RED } else { PROGRAM })
+                                }).color(Color32::WHITE))
+                                .fill(CHIP_BG)
                                 .min_size(Vec2::new(78.0, 22.0)),
                             )
                             .on_disabled_hover_text("Unavailable: no streaming encoder or network backend");
@@ -2567,20 +2567,15 @@ impl RustMixApp {
                 if close.clicked() {
                     close_clicked = true;
                 }
-                let save = ui.add(
+                let save = ui.add_enabled(false,
                     egui::Button::new(
                         RichText::new("Save and Close").color(Color32::WHITE).strong(),
                     )
-                    .fill(PROGRAM)
+                    .fill(CHIP_BG)
                     .min_size(Vec2::new(112.0, 29.0)),
-                );
+                ).on_disabled_hover_text("Unavailable: no streaming settings can be saved without an encoder/output backend");
                 self.automation
                     .insert("dialog.streaming.save".into(), save.rect);
-                if save.clicked() {
-                    self.notice = "Streaming backend unavailable; no settings were saved".into();
-                    self.warning = false;
-                    close_clicked = true;
-                }
             });
         });
         if close_clicked || !open {
@@ -2687,11 +2682,7 @@ impl RustMixApp {
                                         .size(18.0)
                                         .color(Color32::WHITE),
                                 )
-                                .fill(if self.mc_running {
-                                    RED
-                                } else {
-                                    PROGRAM
-                                }),
+                                .fill(CHIP_BG),
                             )
                         });
                         self.automation

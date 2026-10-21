@@ -59,6 +59,120 @@ fn click(app: &mut RustMixApp, ctx: &egui::Context, id: &str) {
 }
 
 #[test]
+fn quick_input_categories_open_their_real_pages_and_survive_cancel_reopen() {
+    let mut app = RustMixApp::headless();
+    let ctx = egui::Context::default();
+    app.theme(&ctx);
+    app.execute(Command::SetInputsPaused(true));
+    let before = app.engine.project().clone();
+    for (key, tab, field) in [
+        ("video", dialogs::VIDEO_TAB, "dialog.add.video.path"),
+        ("image", 1, "dialog.add.name"),
+        ("audio", 12, "dialog.add.audio.path"),
+        ("microphone", 13, "dialog.add.audio.capture"),
+        ("generators", 0, "dialog.add.name"),
+        ("shapes", 3, "dialog.add.name"),
+        ("bars", 6, "dialog.add.name"),
+        ("title", 14, "dialog.add.name"),
+        ("studio", 4, "dialog.add.name"),
+        ("colour", 11, "dialog.add.name"),
+        ("timer", 15, "dialog.add.name"),
+    ] {
+        click(&mut app, &ctx, "production.add.menu");
+        click(&mut app, &ctx, &format!("production.add.category.{key}"));
+        for _ in 0..4 {
+            event_frame(&mut app, &ctx, vec![]);
+        }
+        assert!(app.add_open);
+        assert_eq!(app.add_tab, tab, "Quick category {key} opened another page");
+        assert!(
+            ctx.viewport_rect()
+                .contains_rect(*app.automation.get(field).unwrap())
+        );
+        click(&mut app, &ctx, "dialog.add.cancel");
+        assert!(!app.add_open);
+        click(&mut app, &ctx, "production.add");
+        for _ in 0..4 {
+            event_frame(&mut app, &ctx, vec![]);
+        }
+        assert_eq!(app.add_tab, tab, "Add Input forgot category {key}");
+        assert!(
+            ctx.viewport_rect()
+                .contains_rect(*app.automation.get(field).unwrap())
+        );
+        click(&mut app, &ctx, "dialog.add.cancel");
+        assert_eq!(*app.engine.project(), before);
+        assert!(!app.rec_active && !app.stream_active && !app.mc_running);
+    }
+}
+
+#[test]
+fn unsupported_output_controls_have_neutral_surfaces_and_do_not_pretend_to_save_or_start() {
+    for (action, id, close) in [
+        (
+            Action::StreamingSetup,
+            "dialog.streaming.start",
+            "dialog.streaming.close",
+        ),
+        (
+            Action::StreamingSetup,
+            "dialog.streaming.save",
+            "dialog.streaming.close",
+        ),
+        (
+            Action::MultiCorder,
+            "dialog.multicorder.toggle",
+            "dialog.multicorder.close",
+        ),
+    ] {
+        let mut app = RustMixApp::headless();
+        let ctx = egui::Context::default();
+        app.theme(&ctx);
+        app.dispatch(action, &ctx);
+        for _ in 0..4 {
+            event_frame(&mut app, &ctx, vec![]);
+        }
+        let before = app.engine.project().clone();
+        let output = paint(&mut app, &ctx, Vec2::new(1600.0, 900.0));
+        let target = *app.automation.get(id).unwrap();
+        let surfaces: Vec<_> = output
+            .shapes
+            .iter()
+            .filter_map(|shape| match &shape.shape {
+                egui::Shape::Rect(rect)
+                    if target.expand(1.0).contains_rect(rect.rect)
+                        && rect.rect.area() >= target.area() * 0.7 =>
+                {
+                    Some(rect.fill)
+                }
+                _ => None,
+            })
+            .collect();
+        assert!(
+            !surfaces.is_empty(),
+            "Actual disabled button surface must be painted: {id}"
+        );
+        for fill in surfaces {
+            let [r, g, b, _] = fill.to_array();
+            assert!(
+                g <= r.max(b).saturating_add(8),
+                "Unavailable control must not advertise an active green surface: {id}, {fill:?}"
+            );
+        }
+        click(&mut app, &ctx, id);
+        assert!(
+            app.streaming_setup || app.multicorder_open,
+            "Unavailable action must not imply saving or close the setup dialog: {id}"
+        );
+        assert!(!app.rec_active && !app.stream_active && !app.mc_running && app.job.is_none());
+        assert_eq!(*app.engine.project(), before);
+        click(&mut app, &ctx, close);
+        assert!(!app.streaming_setup && !app.multicorder_open);
+        assert_eq!(*app.engine.project(), before);
+    }
+}
+
+#[test]
 fn display_labels_are_right_aligned_and_colours_share_one_row() {
     for size in [
         Vec2::new(1100.0, 700.0),

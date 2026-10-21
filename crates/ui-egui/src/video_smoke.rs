@@ -77,12 +77,12 @@ impl RustMixApp {
                 self.basic_mode = false;
                 self.execute(Command::SetInputsPaused(false));
                 self.execute(Command::SelectPreview(InputId(2)));
-                self.native_click(s, "production.add")?;
+                self.native_click(s, "production.add.menu")?;
                 s.scratch_text = Some(fixture);
                 s.stage = 1;
             }
             1 => {
-                self.native_click(s, "dialog.add.video")?;
+                self.native_click(s, "production.add.category.video")?;
                 s.stage = 2;
             }
             2 => {

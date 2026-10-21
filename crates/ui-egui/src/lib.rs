@@ -1410,15 +1410,9 @@ impl RustMixApp {
                 self.add_token = self.add_token.wrapping_add(1);
                 self.add_loading = false;
                 self.add_number = self.engine.project().inputs.len() + 1;
-                self.add_tab = match self.add_kind {
-                    InputKind::Grid => 0,
-                    InputKind::Geometry => 3,
-                    InputKind::Studio => 4,
-                    InputKind::Bars => 6,
-                    InputKind::Color => 11,
-                    InputKind::Graphics => 14,
-                    InputKind::Countdown => 15,
-                };
+                // A source's render kind does not identify its configuration
+                // page: PNG, video and solid colour all use Color. Retain the
+                // actual category selected by the operator.
                 self.add_open = true;
             }
             Action::Properties(id) => {
@@ -1823,19 +1817,23 @@ impl RustMixApp {
                 return;
             }
             let caret = caret_menu_button(ui, height, |ui| {
-                for (idx, (label, kind)) in [
-                    ("Generators / PNG", InputKind::Grid),
-                    ("Moving shapes", InputKind::Geometry),
-                    ("Colour / Bars", InputKind::Bars),
-                    ("Title / XAML", InputKind::Graphics),
-                    ("Virtual Set", InputKind::Studio),
-                    ("Solid Colour", InputKind::Color),
-                    ("Timer / Clock", InputKind::Countdown),
-                ]
-                .into_iter()
-                .enumerate()
-                {
-                    if ui.button(label).clicked() {
+                for (key, idx, label, kind) in [
+                    ("video", dialogs::VIDEO_TAB, "Video file", InputKind::Color),
+                    ("image", 1, "PNG image", InputKind::Color),
+                    ("audio", 12, "WAV audio", InputKind::Bars),
+                    ("microphone", 13, "Microphone", InputKind::Geometry),
+                    ("generators", 0, "Generators", InputKind::Grid),
+                    ("shapes", 3, "Moving shapes", InputKind::Geometry),
+                    ("bars", 6, "Reference bars", InputKind::Bars),
+                    ("title", 14, "Title", InputKind::Graphics),
+                    ("studio", 4, "Studio pattern", InputKind::Studio),
+                    ("colour", 11, "Solid colour", InputKind::Color),
+                    ("timer", 15, "Timer / Clock", InputKind::Countdown),
+                ] {
+                    let category = ui.button(label);
+                    self.automation
+                        .insert(format!("production.add.category.{key}"), category.rect);
+                    if category.clicked() {
                         self.add_tab = idx;
                         self.add_kind = kind;
                         self.add_name = label.into();
@@ -1844,6 +1842,8 @@ impl RustMixApp {
                     }
                 }
             });
+            self.automation
+                .insert("production.add.menu".into(), caret.response.rect);
             caret
                 .response
                 .on_hover_text("Quick input category selector");
