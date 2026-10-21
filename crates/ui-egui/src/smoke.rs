@@ -140,10 +140,11 @@ impl Smoke {
     }
 }
 fn native_mode_name() -> String {
-    const MODES: [&str; 14] = [
+    const MODES: [&str; 15] = [
         "--ui-smoke",
         "--ui-smoke-reopen",
         "--ui-layout-smoke",
+        "--ui-dialog-smoke",
         "--ui-input-smoke",
         "--ui-input-smoke-reopen",
         "--ui-reference-smoke",
@@ -324,6 +325,7 @@ impl RustMixApp {
             return self.smoke_reference_layout(ctx, s);
         }
         let reopen = std::env::args().any(|s| s == "--ui-smoke-reopen");
+        let dialogs_only = std::env::args().any(|arg| arg == "--ui-dialog-smoke");
         // Includes 60 idle + 35 paused native frames and 27 dialog stages on
         // hosted software graphics. Measured 2026-10-18: 329 frames in 240s
         // (~0.73 s/frame), so the full ~450-frame run needs a larger budget.
@@ -373,6 +375,16 @@ impl RustMixApp {
             return Ok(());
         }
         self.validate_monitor_geometry(ctx.viewport_rect().right())?;
+        if dialogs_only && s.stage == 0 {
+            if self.job.is_some()
+                || self.program_presented_generation != Some(self.program_generation)
+            {
+                return Ok(());
+            }
+            self.assert_smoke_state()?;
+            s.stage = 20;
+            return Ok(());
+        }
         if reopen {
             if self.job.is_some() {
                 return Ok(());
@@ -657,7 +669,11 @@ impl RustMixApp {
                 s.captured = false;
                 s.stage = 18;
             }
-            18 if s.captured => s.stage = 20,
+            18 if s.captured => {
+                self.assert_smoke_state()?;
+                self.saved_revision = self.engine.project().revision;
+                ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+            }
 
             20..=46 => {
                 let offset = s.stage - 20;

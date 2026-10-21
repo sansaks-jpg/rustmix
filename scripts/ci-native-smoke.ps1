@@ -72,6 +72,7 @@ Invoke-NativeSmoke @('--ui-smoke')
 foreach ($file in @('smoke-ok.json','workspace-1100.png','workspace-1600.png','workspace-1920.png','smoke.rustmix.json','ui-elements.json','layout-stability.json','pause-transport.json','paused-program.png')) {
     if (-not (Test-Path (Join-Path artifacts $file))) { throw "Missing native evidence: $file" }
 }
+Invoke-NativeSmoke @('--ui-dialog-smoke','artifacts/smoke.rustmix.json')
 foreach ($dialog in @('overlay-unsaved-1600','add-input-1600','input-properties-1600','settings-1600','overlay-settings-1600','recording-setup-1600','streaming-setup-1600','multicorder-1600','playlist-1600','shortcuts-1600')) {
     foreach ($suffix in @('.png','-elements.json')) {
         $evidence = Join-Path artifacts ($dialog + $suffix)

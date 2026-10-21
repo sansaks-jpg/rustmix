@@ -23,3 +23,13 @@ name-field typing followed by Escape must discard the draft; typing followed by
 OK changes only the selected source name with unchanged Program/Preview identity.
 Inspect the exact new native1600 Properties screenshot/geometry alongside the
 matching reference; full native/GPU gates remain mandatory on hosted Windows.
+
+Exact fa5e4ba images expose remaining checkbox/colour/fit and metadata alignment
+gaps. Extend the same field alignment to those controls and reserve right-aligned
+metadata labels. Preserve each actual action and the unavailable/fixed states.
+All273 tests pass for fa5e4ba, but main native's last screenshot exceeds its540s
+budget and GPU drain/drop fails. Separate its dialog-capture batch into another
+mandatory native process after loading the saved core project and a current
+Program texture. Retain all existing picture, key, pause, stability, draft/cancel,
+geometry, readback and GPU drain gates and existing per-process time limits.
+The resulting15-process workflow has no single-session/endurance or GPU-fix claim.

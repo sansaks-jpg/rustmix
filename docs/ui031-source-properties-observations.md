@@ -41,3 +41,21 @@ FAILS warnings-as-errors Clippy: six new test lookups used unchecked HashMap
 indexing. Replace them with explicit get/unwrap assertions under the existing
 test-only allowance; keep indexing warnings enabled and all assertions unchanged.
 Unit tests, release and native acceptance did not run for that candidate.
+
+fa5e4ba/run39552489406 passes check/Clippy, all273 tests (149 UI) and release.
+Native FAILED: main timed out atstage46 after698 frames/541587ms waiting for its
+last dialog readback, then its shutdown drain timed out and Queue::drop panicked,
+exit-1073741819. Process562426ms, peak working set389644288 bytes. No subsequent
+dialog/layout/reopen/media/perf acceptance for this revision. Exact Properties
+PNG/JSON inspected: Name/Aspect/Category are363.1px wide at519.9..883, labels end
+511.9 with8px gutters, source caption begins400 and Change begins1315.5. Navigation
+rows31.7px and footer fits. The photo also exposes flags/colour/fit starting left
+of the new field column and metadata labels crowding its right edge.
+
+Follow-up aligns flags/colour/fit with Name and reserves right-aligned metadata
+labels, retaining real disabled/fixed semantics. Extend actual paint/bounds tests.
+Move the existing nine dialog captures plus dirty-overlay cancellation into their
+own mandatory native process loading the saved core workflow project. Keep the
+main switch/transport/pause/stability/small/large picture checks and all screenshot,
+geometry/state/drain gates. Both retain540s deadlines and600s external limits.
+This is bounded verification scheduling; GPU reliability remains unproven.

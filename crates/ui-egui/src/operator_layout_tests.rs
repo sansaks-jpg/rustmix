@@ -137,6 +137,43 @@ fn input_general_labels_fields_header_and_navigation_use_the_available_form_widt
             .automation
             .get("dialog.properties.page.General")
             .unwrap();
+        let name_field = *app.automation.get("dialog.properties.name").unwrap();
+        for key in ["mirror", "colour", "imageFit"] {
+            let field = app
+                .automation
+                .get(&format!("dialog.properties.{key}"))
+                .unwrap();
+            assert!(
+                (field.left() - name_field.left()).abs() <= 2.0,
+                "{key} aligns with the name field"
+            );
+        }
+        if size.x >= 1600.0 {
+            for (key, label) in [
+                ("mouse", "Mouse Click Action"),
+                ("go", "GO Action"),
+                ("sourceAspect", "Source Aspect Ratio"),
+                ("previewResolution", "Preview resolution"),
+                ("programResolution", "Program resolution"),
+                ("deinterlacing", "Deinterlacing"),
+            ] {
+                let reserved = *app
+                    .automation
+                    .get(&format!("dialog.properties.metadata.{key}.label"))
+                    .unwrap();
+                let field = app
+                    .automation
+                    .get(&format!("dialog.properties.metadata.{key}"))
+                    .unwrap();
+                let glyph = text_in(&output.shapes, label, reserved);
+                assert!((glyph.right() - reserved.right()).abs() <= 2.0);
+                assert!((6.0..=10.0).contains(&(field.left() - reserved.right())));
+                assert!(
+                    glyph.left() - name_field.right() >= 20.0,
+                    "Clear separation between the form columns"
+                );
+            }
+        }
         let expected = if size.y < 700.0 {
             18.5
         } else {

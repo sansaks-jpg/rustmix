@@ -983,69 +983,69 @@ impl RustMixApp {
                                         });
                                     left_col.add_space(2.0);
                                     left_col.spacing_mut().item_spacing.y = 1.5;
-                                    left_col.add_enabled(false, egui::Checkbox::new(&mut app.prop_deinterlace, "Deinterlace Blend"));
-                                    if left_col
+                                    // This bounded margin aligns the flags with the fields above.
+                                    egui::Frame::new().inner_margin(egui::Margin {
+                                        left:(label_width+8.0).round() as i8,
+                                        ..Default::default()
+                                    }).show(left_col, |ui| {
+                                    ui.add_enabled(false, egui::Checkbox::new(&mut app.prop_deinterlace, "Deinterlace Blend"));
+                                    if ui
                                         .checkbox(&mut app.prop_sharpen, "Sharpen")
                                         .changed()
                                     {
                                         app.sync_fx_from_prop(id);
                                     }
-                                    if left_col.checkbox(&mut app.prop_mirror, "Mirror").changed() {
+                                    let mirror = ui.checkbox(&mut app.prop_mirror, "Mirror");
+                                    app.automation.insert("dialog.properties.mirror".into(),mirror.rect);
+                                    if mirror.changed() {
                                         app.sync_fx_from_prop(id);
                                     }
-                                    left_col.add_enabled_ui(false, |ui| {
+                                    ui.add_enabled_ui(false, |ui| {
                                         ui.checkbox(&mut app.prop_flatten, "Flatten Layers");
                                         ui.checkbox(&mut app.prop_auto_mix, "Automatically mix audio");
                                         ui.checkbox(&mut app.prop_auto_play, "Automatically Play with Transition");
                                         ui.checkbox(&mut app.prop_auto_restart, "Automatically Restart with Transition");
                                         ui.checkbox(&mut app.prop_auto_pause, "Automatically Pause after Transition");
                                     }).response.on_hover_text("Automatic input triggers are unavailable");
+                                    });
                                     left_col.horizontal(|ui| {
-                                        ui.label("Generator colour");
+                                        ui.spacing_mut().item_spacing.x = 8.0;
+                                        aligned_field_label(ui,"Colour",label_width);
                                         let colour = ui.color_edit_button_srgb(&mut draft.color);
                                         app.automation.insert("dialog.properties.colour".into(), colour.rect);
                                     });
                                     if let Some(fx) = app.properties_fx.as_mut() {
-                                        egui::ComboBox::from_id_salt("prop.image_fit")
-                                            .selected_text(format!("Image fit: {:?}", fx.image_fit))
-                                            .show_ui(left_col, |ui| {
+                                        left_col.horizontal(|ui| {
+                                            ui.spacing_mut().item_spacing.x = 8.0;
+                                            aligned_field_label(ui,"Image fit",label_width);
+                                        let fit = egui::ComboBox::from_id_salt("prop.image_fit")
+                                            .width(field_width)
+                                            .selected_text(format!("{:?}", fx.image_fit))
+                                            .show_ui(ui, |ui| {
                                                 for fit in [ImageFit::Contain, ImageFit::Cover, ImageFit::Stretch] {
                                                     ui.selectable_value(&mut fx.config.image_fit, fit, format!("{fit:?}"));
                                                 }
                                             });
+                                            app.automation.insert("dialog.properties.imageFit".into(),fit.response.rect);
+                                        });
                                     }
+                                    let metadata_label_width = (right_col.available_width()*0.33).clamp(110.0,180.0);
                                     egui::Grid::new("input_props_right")
                                         .num_columns(2)
                                         .spacing([8.0, 4.0])
                                         .show(right_col, |ui| {
-                                            ui.label(
-                                                RichText::new("Mouse Click Action")
-                                                    .size(11.5)
-                                                    .color(FORM_TEXT),
-                                            );
-                                            ui.label("Preview (fixed)");
-                                            ui.end_row();
-
-                                            ui.label(
-                                                RichText::new("GO Action")
-                                                    .size(11.5)
-                                                    .color(FORM_TEXT),
-                                            );
-                                            ui.label("Preview (fixed)");
-                                            ui.end_row();
-
-                                            for (k, v) in [
-                                                ("Source Aspect Ratio", "Widescreen"),
-                                                ("Preview resolution", "384x216 (demo)"),
-                                                ("Program resolution", "640x360 (demo)"),
-                                                ("Deinterlacing", "None"),
+                                            for (key, label, value) in [
+                                                ("mouse","Mouse Click Action","Preview (fixed)"),
+                                                ("go","GO Action","Preview (fixed)"),
+                                                ("sourceAspect","Source Aspect Ratio", "Widescreen"),
+                                                ("previewResolution","Preview resolution", "384x216 (demo)"),
+                                                ("programResolution","Program resolution", "640x360 (demo)"),
+                                                ("deinterlacing","Deinterlacing", "None"),
                                             ] {
-                                                ui.label(
-                                                    RichText::new(k).size(11.5).color(FORM_TEXT),
-                                                );
-                                                ui.label(
-                                                    RichText::new(v).size(11.5).color(FORM_TEXT),
-                                                );
+                                                let reserved = aligned_field_label(ui,label,metadata_label_width);
+                                                app.automation.insert(format!("dialog.properties.metadata.{key}.label"),reserved);
+                                                let text = ui.label(RichText::new(value).size(11.5).color(FORM_TEXT));
+                                                app.automation.insert(format!("dialog.properties.metadata.{key}"),text.rect);
                                                 ui.end_row();
                                             }
                                         });
