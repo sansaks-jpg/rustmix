@@ -334,7 +334,42 @@ impl RustMixApp {
     }
 }
 fn fixture_pixels(bytes: &[u8]) -> bool {
-    bytes
-        .get(0..3)
-        .is_some_and(|p| p == [25, 165, 70] || p == [175, 30, 60])
+    const GREEN: [u8; 3] = [25, 165, 70];
+    const RED: [u8; 3] = [175, 30, 60];
+    let pixels = bytes.len() / 4;
+    if pixels == 0 {
+        return false;
+    }
+    // A portrait page is letterboxed inside the landscape Program raster, so
+    // the top-left pixel is black. Require a substantial page-coloured area
+    // anywhere in the composite rather than sampling one corner.
+    let matched = bytes
+        .chunks_exact(4)
+        .filter(|pixel| pixel.get(..3).is_some_and(|rgb| rgb == GREEN || rgb == RED))
+        .count();
+    matched * 20 >= pixels
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::indexing_slicing)]
+    use super::fixture_pixels;
+
+    #[test]
+    fn fixture_pixels_finds_a_letterboxed_portrait_page_inside_program() {
+        let mut pixels = vec![0_u8; 640 * 360 * 4];
+        for y in 0..360 {
+            for x in 220..420 {
+                let offset = (y * 640 + x) * 4;
+                pixels[offset..offset + 4].copy_from_slice(&[25, 165, 70, 255]);
+            }
+        }
+        assert!(fixture_pixels(&pixels));
+        assert!(!fixture_pixels(&vec![0_u8; 640 * 360 * 4]));
+        let mut sparse = vec![0_u8; 640 * 360 * 4];
+        for offset in (0..sparse.len()).take(1000).step_by(4) {
+            sparse[offset..offset + 3].copy_from_slice(&[175, 30, 60]);
+        }
+        assert!(!fixture_pixels(&sparse));
+    }
 }
