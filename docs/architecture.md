@@ -1,5 +1,13 @@
 # Workspace architecture
 
+UI-037 conditionally renders live transport controls under Preview (PVW) and
+Program (PGM) monitors strictly for sources with duration metadata (video files,
+audio files, and timed procedural sources). Blank, black/color generators, color
+bars, graphics, cameras, and live microphone capture hide the transport bar entirely.
+The timeline bar supports interactive click-and-drag scrubbing with visual playhead
+indicators, seek tooltips, and synchronized seeking across the engine clock, Media
+Foundation video decoder, and audio clip cursors.
+
 UI-036 keeps CPU composition and wgpu monitor display explicit, shares the
 validated source renderer with the thumbnail cache, keys decoded payloads by
 generation and immutable identity, and bounds worker-start/file-retry failures.

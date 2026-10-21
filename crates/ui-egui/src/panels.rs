@@ -292,6 +292,26 @@ pub(crate) fn processed_sources(
     out
 }
 
+fn wav_file_duration_ms(path: &str) -> Option<u64> {
+    use std::io::Read;
+    let mut file = std::fs::File::open(path).ok()?;
+    let mut header = [0u8; 44];
+    file.read_exact(&mut header).ok()?;
+    if &header[0..4] != b"RIFF" || &header[8..12] != b"WAVE" {
+        return None;
+    }
+    let channels = u16::from_le_bytes([header[22], header[23]]) as u64;
+    let sample_rate = u32::from_le_bytes([header[24], header[25], header[26], header[27]]) as u64;
+    let bits_per_sample = u16::from_le_bytes([header[34], header[35]]) as u64;
+    let data_len = u32::from_le_bytes([header[40], header[41], header[42], header[43]]) as u64;
+    if channels == 0 || sample_rate == 0 || bits_per_sample == 0 {
+        return None;
+    }
+    let bytes_per_frame = channels.saturating_mul(bits_per_sample / 8).max(1);
+    let frames = data_len / bytes_per_frame;
+    Some(frames.saturating_mul(1000) / sample_rate)
+}
+
 impl RustMixApp {
     pub(crate) fn poll_program(&mut self, ctx: &egui::Context) {
         if let Some(worker) = &self.program_worker
@@ -462,6 +482,40 @@ impl RustMixApp {
         }
     }
 
+    pub(crate) fn audio_duration_ms(&self, id: InputId) -> Option<u64> {
+        let input = self.engine.project().input(id)?;
+        if let Some(AudioSource::WavFile { path }) = &input.config.audio_source {
+            return wav_file_duration_ms(path);
+        }
+        None
+    }
+
+    pub(crate) fn has_transport_controls(&self, input: &InputState) -> bool {
+        if let Some(source) = &input.config.video_source {
+            return matches!(source, VideoSource::File { .. });
+        }
+        if let Some(source) = &input.config.audio_source {
+            return matches!(source, AudioSource::WavFile { .. });
+        }
+        if matches!(
+            input.kind,
+            InputKind::Color | InputKind::Bars | InputKind::Graphics
+        ) {
+            return false;
+        }
+        let name_lower = input.name.to_ascii_lowercase();
+        if name_lower.contains("black") || name_lower.contains("blank") {
+            return false;
+        }
+        input.has_playback()
+    }
+
+    pub(crate) fn seek_source(&mut self, id: InputId, position_ms: u64) {
+        self.actions
+            .push(Action::Engine(Command::SeekInput(id, position_ms)));
+        self.seek_video(id, position_ms);
+    }
+
     /// Only procedural samples have the demo's sixty-second duration. Media
     /// reports actual worker timestamps; an unknown duration has no fill.
     fn transport_position(&self, input: &InputState) -> (u64, Option<u64>) {
@@ -469,10 +523,20 @@ impl RustMixApp {
             return (0, None);
         }
         if input.config.audio_source.is_some() {
-            return self.audio_ui.source_position(input.id).unwrap_or((0, None));
+            if let Some((pos, dur)) = self.audio_ui.source_position(input.id) {
+                return (pos, dur);
+            }
+            let pos = self
+                .engine
+                .playback(input.id)
+                .map_or(0, |clock| clock.position_ms());
+            return (pos, self.audio_duration_ms(input.id));
         }
         if input.config.video_source.is_some() {
-            return (self.video_position_ms(input.id).unwrap_or(0), None);
+            return (
+                self.video_position_ms(input.id).unwrap_or(0),
+                self.video_duration_ms(input.id),
+            );
         }
         (
             self.engine
@@ -619,7 +683,8 @@ impl RustMixApp {
             header.response.rect,
         );
         let available = ui.available_size();
-        let transport_h = 28.0;
+        let show_transport = self.has_transport_controls(&input);
+        let transport_h = if show_transport { 28.0 } else { 0.0 };
         let canvas_avail_h = (available.y - transport_h - 4.0).max(40.0);
         let width = available.x.max(16.0).min(canvas_avail_h * aspect);
         // Keep the picture directly below its source header. A tall bank has
@@ -686,143 +751,210 @@ impl RustMixApp {
         // operator monitor, native Program window, fullscreen output and future
         // recorders now show identical pixels.
 
-        // Modern live transport & timecode bar under Preview/Program monitor
-        let transport = egui::Frame::new()
-            .fill(Color32::from_rgb(22, 28, 36))
-            .corner_radius(egui::CornerRadius {
-                nw: 0,
-                ne: 0,
-                sw: 4,
-                se: 4,
-            })
-            .inner_margin(egui::Margin::symmetric(6, 2))
-            .show(ui, |ui| {
-                ui.set_min_width((available.x - 12.0).max(40.0));
-                ui.horizontal(|ui| {
-                    ui.spacing_mut().item_spacing.x = 4.0;
-                    let has_playback = input.has_playback();
-                    let is_paused = !has_playback
-                        || self.engine.inputs_paused()
-                        || self.engine.playback(id).is_some_and(|clock| {
-                            if input.is_procedural_playback() {
-                                clock.paused()
+        if show_transport {
+            // Modern live transport & timecode bar under Preview/Program monitor
+            let transport = egui::Frame::new()
+                .fill(Color32::from_rgb(22, 28, 36))
+                .corner_radius(egui::CornerRadius {
+                    nw: 0,
+                    ne: 0,
+                    sw: 4,
+                    se: 4,
+                })
+                .inner_margin(egui::Margin::symmetric(6, 2))
+                .show(ui, |ui| {
+                    ui.set_min_width((available.x - 12.0).max(40.0));
+                    ui.horizontal(|ui| {
+                        ui.spacing_mut().item_spacing.x = 4.0;
+                        let has_playback = input.has_playback();
+                        let is_paused = !has_playback
+                            || self.engine.inputs_paused()
+                            || self.engine.playback(id).is_some_and(|clock| {
+                                if input.is_procedural_playback() {
+                                    clock.paused()
+                                } else {
+                                    clock.manually_paused()
+                                }
+                            });
+                        let play_btn = ui
+                            .push_id(("source.play", program, id.0), |ui| {
+                                ui.add_enabled_ui(has_playback, |ui| {
+                                    vector_icon_button(
+                                        ui,
+                                        if is_paused {
+                                            VectorIcon::Play
+                                        } else {
+                                            VectorIcon::Pause
+                                        },
+                                        egui::vec2(20.0, 18.0),
+                                        !is_paused && has_playback,
+                                        None,
+                                    )
+                                })
+                                .inner
+                            })
+                            .inner
+                            .on_hover_text(if has_playback {
+                                "Play / Pause source playback"
                             } else {
-                                clock.manually_paused()
-                            }
-                        });
-                    let play_btn = ui
-                        .push_id(("source.play", program, id.0), |ui| {
-                            ui.add_enabled_ui(has_playback, |ui| {
-                                vector_icon_button(
-                                    ui,
-                                    if is_paused {
-                                        VectorIcon::Play
-                                    } else {
-                                        VectorIcon::Pause
-                                    },
-                                    egui::vec2(20.0, 18.0),
-                                    !is_paused && has_playback,
-                                    None,
-                                )
-                            })
-                            .inner
-                        })
-                        .inner
-                        .on_hover_text(if has_playback {
-                            "Play / Pause source playback"
-                        } else {
-                            "Static source · playback unavailable"
-                        });
-                    self.automation.insert(
-                        format!(
-                            "monitor.{}.play",
-                            if program { "program" } else { "preview" }
-                        ),
-                        play_btn.rect,
-                    );
-                    if play_btn.clicked() && has_playback {
-                        let paused = self.engine.playback(id).is_some_and(|clock| clock.paused());
-                        self.actions
-                            .push(Action::Engine(Command::SetInputPaused(id, !paused)));
-                    }
-                    let restart_btn = ui
-                        .push_id(("source.restart", program, id.0), |ui| {
-                            ui.add_enabled_ui(has_playback, |ui| {
-                                vector_icon_button(
-                                    ui,
-                                    VectorIcon::Restart,
-                                    egui::vec2(20.0, 18.0),
-                                    false,
-                                    None,
-                                )
-                            })
-                            .inner
-                        })
-                        .inner
-                        .on_hover_text(if has_playback {
-                            "Restart playback from 00:00:00"
-                        } else {
-                            "Static source · restart unavailable"
-                        });
-                    self.automation.insert(
-                        format!(
-                            "monitor.{}.restart",
-                            if program { "program" } else { "preview" }
-                        ),
-                        restart_btn.rect,
-                    );
-                    if restart_btn.clicked() && has_playback {
-                        self.actions.push(Action::Engine(Command::RestartInput(id)));
-                    }
-                    let (position, duration) = self.transport_position(&input);
-                    let minutes = position / 60_000;
-                    let sec = (position / 1000) % 60;
-                    let frm = if has_playback {
-                        rate.frame_at(position)
-                            .saturating_sub(rate.frame_at(position / 1000 * 1000))
-                    } else {
-                        0
-                    };
-                    let prog_frac = duration
-                        .filter(|duration| *duration > 0)
-                        .map_or(0.0, |duration| {
-                            (position as f32 / duration as f32).clamp(0.0, 1.0)
-                        });
-                    let bar_w = (ui.available_width() - 100.0).max(12.0);
-                    let (bar_rect, _) =
-                        ui.allocate_exact_size(egui::vec2(bar_w, 6.0), Sense::hover());
-                    ui.painter()
-                        .rect_filled(bar_rect, 3.0, Color32::from_rgb(12, 16, 22));
-                    let fill_rect = Rect::from_min_size(
-                        bar_rect.min,
-                        egui::vec2(bar_rect.width() * prog_frac, bar_rect.height()),
-                    );
-                    if has_playback && prog_frac > 0.0 {
-                        ui.painter().rect_filled(fill_rect, 3.0, color);
-                    }
-                    self.automation.insert(
-                        format!(
-                            "monitor.{}.progress",
-                            if program { "program" } else { "preview" }
-                        ),
-                        fill_rect,
-                    );
-                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        ui.label(
-                            RichText::new(format!("00:{minutes:02}:{sec:02}:{frm:02}"))
-                                .size(10.5)
-                                .color(DIM),
+                                "Static source · playback unavailable"
+                            });
+                        self.automation.insert(
+                            format!(
+                                "monitor.{}.play",
+                                if program { "program" } else { "preview" }
+                            ),
+                            play_btn.rect,
                         );
+                        if play_btn.clicked() && has_playback {
+                            let paused =
+                                self.engine.playback(id).is_some_and(|clock| clock.paused());
+                            self.actions
+                                .push(Action::Engine(Command::SetInputPaused(id, !paused)));
+                        }
+                        let restart_btn = ui
+                            .push_id(("source.restart", program, id.0), |ui| {
+                                ui.add_enabled_ui(has_playback, |ui| {
+                                    vector_icon_button(
+                                        ui,
+                                        VectorIcon::Restart,
+                                        egui::vec2(20.0, 18.0),
+                                        false,
+                                        None,
+                                    )
+                                })
+                                .inner
+                            })
+                            .inner
+                            .on_hover_text(if has_playback {
+                                "Restart playback from 00:00:00"
+                            } else {
+                                "Static source · restart unavailable"
+                            });
+                        self.automation.insert(
+                            format!(
+                                "monitor.{}.restart",
+                                if program { "program" } else { "preview" }
+                            ),
+                            restart_btn.rect,
+                        );
+                        if restart_btn.clicked() && has_playback {
+                            self.actions.push(Action::Engine(Command::RestartInput(id)));
+                        }
+                        let (position, duration) = self.transport_position(&input);
+                        let prog_frac = duration
+                            .filter(|duration| *duration > 0)
+                            .map_or(0.0, |duration| {
+                                (position as f32 / duration as f32).clamp(0.0, 1.0)
+                            });
+                        let bar_w = (ui.available_width() - 100.0).max(12.0);
+                        let (bar_rect, bar_response) = ui.allocate_exact_size(
+                            egui::vec2(bar_w, 14.0),
+                            Sense::click_and_drag(),
+                        );
+                        let track_rect = Rect::from_center_size(
+                            bar_rect.center(),
+                            egui::vec2(bar_rect.width(), 6.0),
+                        );
+                        ui.painter()
+                            .rect_filled(track_rect, 3.0, Color32::from_rgb(12, 16, 22));
+
+                        let mut active_frac = prog_frac;
+                        if (bar_response.clicked() || bar_response.dragged())
+                            && duration.is_some_and(|d| d > 0)
+                        {
+                            if let Some(mouse_pos) = bar_response.interact_pointer_pos() {
+                                let frac = ((mouse_pos.x - track_rect.left())
+                                    / track_rect.width().max(1.0))
+                                .clamp(0.0, 1.0);
+                                active_frac = frac;
+                                if let Some(dur) = duration {
+                                    let target_ms = (frac * (dur as f32)).round() as u64;
+                                    self.seek_source(id, target_ms);
+                                }
+                            }
+                        }
+
+                        let fill_rect = Rect::from_min_size(
+                            track_rect.min,
+                            egui::vec2(track_rect.width() * active_frac, track_rect.height()),
+                        );
+                        if active_frac > 0.0 {
+                            ui.painter().rect_filled(fill_rect, 3.0, color);
+                        }
+
+                        let thumb_x = track_rect.left() + track_rect.width() * active_frac;
+                        let thumb_center = egui::pos2(thumb_x, track_rect.center().y);
+                        let thumb_radius = if bar_response.dragged() || bar_response.hovered() {
+                            5.5
+                        } else {
+                            4.0
+                        };
+                        ui.painter().circle_filled(
+                            thumb_center,
+                            thumb_radius + 1.0,
+                            Color32::from_black_alpha(100),
+                        );
+                        ui.painter()
+                            .circle_filled(thumb_center, thumb_radius, Color32::WHITE);
+                        ui.painter()
+                            .circle_filled(thumb_center, thumb_radius * 0.45, color);
+
+                        if bar_response.hovered() || bar_response.dragged() {
+                            ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+                        }
+
+                        let is_dragged = bar_response.dragged();
+                        if let Some(dur) = duration.filter(|d| *d > 0) {
+                            let cur_ms = (active_frac * (dur as f32)).round() as u64;
+                            let cur_m = cur_ms / 60_000;
+                            let cur_s = (cur_ms / 1000) % 60;
+                            let tot_m = dur / 60_000;
+                            let tot_s = (dur / 1000) % 60;
+                            let _ = bar_response.on_hover_text(format!(
+                                "Seek: {cur_m:02}:{cur_s:02} / {tot_m:02}:{tot_s:02} · drag to scrub"
+                            ));
+                        }
+
+                        self.automation.insert(
+                            format!(
+                                "monitor.{}.progress",
+                                if program { "program" } else { "preview" }
+                            ),
+                            bar_rect,
+                        );
+
+                        let current_display_ms =
+                            if is_dragged && duration.is_some_and(|d| d > 0) {
+                                (active_frac * (duration.unwrap_or(0) as f32)).round() as u64
+                            } else {
+                                position
+                            };
+                        let minutes = current_display_ms / 60_000;
+                        let sec = (current_display_ms / 1000) % 60;
+                        let frm = if has_playback {
+                            rate.frame_at(current_display_ms)
+                                .saturating_sub(rate.frame_at(current_display_ms / 1000 * 1000))
+                        } else {
+                            0
+                        };
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                            ui.label(
+                                RichText::new(format!("00:{minutes:02}:{sec:02}:{frm:02}"))
+                                    .size(10.5)
+                                    .color(DIM),
+                            );
+                        });
                     });
                 });
-            });
-        self.automation.insert(
-            format!(
-                "monitor.{}.transport",
-                if program { "program" } else { "preview" }
-            ),
-            transport.response.rect,
-        );
+            self.automation.insert(
+                format!(
+                    "monitor.{}.transport",
+                    if program { "program" } else { "preview" }
+                ),
+                transport.response.rect,
+            );
+        }
     }
 
     pub(crate) fn switcher(&mut self, ui: &mut egui::Ui) {

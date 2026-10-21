@@ -1,5 +1,11 @@
 # Known gaps
 
+UI-037 aligns PVW and PGM monitor transport controls with professional switcher (vMix)
+behavior: playback transport (play/pause, restart, progress/seek bar, timecode) is
+hidden for blank, black, color generators, color bars, graphics, live cameras, and
+microphones. Video/audio sources with duration metadata display transport controls
+and support interactive click-and-drag timeline scrubbing.
+
 UI-036 narrows normal navigation to core workflows. Deferred source/output/settings
 entry points are hidden; their old menu presence is not feature readiness. CPU
 composition/GPU display and actual monitoring are separate from hardware encode,
