@@ -36,6 +36,10 @@ feature claims must distinguish `not started`, `stub`, `experimental`, `tested`,
 
 ### 0.1 Rules for agentic work
 
+- **Owner branch policy (2026-10-21):** use `main` for ongoing work. Existing
+  branch history has been consolidated into `main`; create another feature branch
+  only if the owner explicitly requests it. Preserve uncommitted work in existing worktrees.
+
 - **Inspect first.** Read this file, `README.md`, `ROADMAP.md`, `docs/gaps.md`,
   `docs/architecture.md`, `docs/testing.md`, the touched crate's README, and the current tests,
   *if those paths exist*. If not, create the minimal missing documentation only when needed.
