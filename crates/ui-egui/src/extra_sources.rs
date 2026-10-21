@@ -382,7 +382,15 @@ mod tests {
             index: 0,
         });
         app.sync_input_cache();
+        let id = app.engine.project().inputs[0].id;
+        app.input_fx.entry(id).or_default().custom_rgba =
+            Some((1, 1, Arc::new(vec![[25, 165, 70, 255]])));
         app.poll_video(&ctx);
+        assert!(
+            app.input_fx[&id].custom_rgba.is_none(),
+            "Stopped live sources must not retain an apparently live picture"
+        );
+        assert!(app.input_fx[&id].image_generation > 0);
         assert!(app.video_players.is_empty());
         let id = app.engine.project().inputs[0].id;
         assert!(

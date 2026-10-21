@@ -141,6 +141,7 @@ impl RustMixApp {
         self.armed_sources
             .retain(|id| self.engine.project().input(*id).is_some());
         let mut desired: Vec<(InputId, VideoSource, bool)> = Vec::new();
+        let mut changed = false;
         {
             let project = self.engine.project();
             for input in &project.inputs {
@@ -153,7 +154,10 @@ impl RustMixApp {
                         desired.push((input.id, source.clone(), input.online));
                     } else {
                         let fx = self.input_fx.entry(input.id).or_default();
-                        fx.custom_rgba = None;
+                        if fx.custom_rgba.take().is_some() {
+                            fx.image_generation = fx.image_generation.wrapping_add(1);
+                            changed = true;
+                        }
                         fx.image_pending = false;
                         fx.image_error =
                             Some("Stopped. Use Start source in Input Settings.".into());
@@ -169,7 +173,6 @@ impl RustMixApp {
                 .any(|(input, path, _)| input == id && path == &slot.source)
         });
         let paused_all = self.engine.inputs_paused();
-        let mut changed = false;
         for (id, path, online) in &desired {
             let clock = self.engine.playback(*id);
             let control = clock.map_or((true, false, 0), |clock| {
