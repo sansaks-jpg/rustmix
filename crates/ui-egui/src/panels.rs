@@ -329,6 +329,7 @@ impl RustMixApp {
                     self.last_program_full = Arc::clone(&frame.full_pixels);
                     self.program_full_size = frame.program_size;
                     self.upload_program(ctx, frame.pixels);
+                    self.upload_program_full(ctx);
                     self.program_presented_generation = Some(frame.generation);
                 }
                 Ok(_) => {} // A frame from before the latest command cannot undo it.
@@ -437,6 +438,43 @@ impl RustMixApp {
                 self.thumbnail_pixels.insert(input.id, processed);
             }
         }
+        let preview_id = p.preview;
+        if p.input(preview_id).is_some() {
+            let monitor_size = p.preferences.video_standard().monitor_size();
+            if let Ok(processed) = self.preview_renderer.source_pixels(
+                preview_id,
+                &self.engine,
+                &self.input_fx,
+                monitor_size,
+            ) && !self
+                .preview_pixels
+                .as_ref()
+                .is_some_and(|old| Arc::ptr_eq(old, &processed) || old == &processed)
+            {
+                let image = colour_image(
+                    [monitor_size[0] as usize, monitor_size[1] as usize],
+                    &processed,
+                );
+                if let Some(texture) = &mut self.preview_texture {
+                    if texture.size() == [monitor_size[0] as usize, monitor_size[1] as usize] {
+                        update_texture_image(texture, image);
+                    } else {
+                        self.preview_texture = Some(ctx.load_texture(
+                            "preview.monitor",
+                            image,
+                            egui::TextureOptions::LINEAR,
+                        ));
+                    }
+                } else {
+                    self.preview_texture = Some(ctx.load_texture(
+                        "preview.monitor",
+                        image,
+                        egui::TextureOptions::LINEAR,
+                    ));
+                }
+                self.preview_pixels = Some(processed);
+            }
+        }
         if self.program_worker.is_none() {
             match self.program_renderer.render(&self.engine, &self.input_fx) {
                 Ok(pixels) => self.upload_program(ctx, pixels),
@@ -479,6 +517,31 @@ impl RustMixApp {
         self.program_pixels = Some(pixels);
         if self.program_output.is_open() {
             ctx.request_repaint_of(program_output::viewport_id());
+        }
+    }
+
+    pub(crate) fn upload_program_full(&mut self, ctx: &egui::Context) {
+        if !self.program_output.is_open() || self.last_program_full.is_empty() {
+            return;
+        }
+        let [w, h] = self.program_full_size;
+        if w == 0 || h == 0 || self.last_program_full.len() != (w as usize) * (h as usize) {
+            return;
+        }
+        let image = colour_image([w as usize, h as usize], &self.last_program_full);
+        if let Some(texture) = &mut self.program_full_texture {
+            if texture.size() == [w as usize, h as usize] {
+                update_texture_image(texture, image);
+            } else {
+                self.program_full_texture = Some(ctx.load_texture(
+                    "program.output_full",
+                    image,
+                    egui::TextureOptions::LINEAR,
+                ));
+            }
+        } else {
+            self.program_full_texture =
+                Some(ctx.load_texture("program.output_full", image, egui::TextureOptions::LINEAR));
         }
     }
 
@@ -701,7 +764,9 @@ impl RustMixApp {
         let texture = if program {
             self.program_texture.as_ref()
         } else {
-            self.textures.get(&id)
+            self.preview_texture
+                .as_ref()
+                .or_else(|| self.textures.get(&id))
         };
         if let Some(texture) = texture {
             ui.painter().image(

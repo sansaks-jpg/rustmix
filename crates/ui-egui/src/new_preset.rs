@@ -199,6 +199,10 @@ impl RustMixApp {
                 self.sync_input_cache();
                 self.program_pixels = None;
                 self.program_texture = None;
+                self.program_full_texture = None;
+                self.preview_texture = None;
+                self.preview_pixels = None;
+                self.preview_renderer = program::ProgramRenderer::default();
                 self.last_program_rgba.clear();
                 self.last_program_full = Arc::new(Vec::new());
                 self.program_full_size = [0, 0];

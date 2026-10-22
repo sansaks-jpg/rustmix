@@ -57,9 +57,9 @@ pub(crate) fn decode_png(path: &Path) -> std::result::Result<DecodedPng, String>
         .decode()
         .map_err(|e| format!("PNG could not be decoded (4096px / 64 MiB limits): {e}"))?;
     let original_size = [image.width(), image.height()];
-    // Cache the actual prototype raster, not an unbounded original per source.
+    // Cache the Full HD raster (1920x1080), preserving crisp clarity for overlays and stills.
     let raster = image
-        .resize(640, 360, image::imageops::FilterType::Triangle)
+        .resize(1920, 1080, image::imageops::FilterType::Triangle)
         .to_rgba8();
     let pixels = raster.pixels().map(|p| p.0).collect();
     Ok(DecodedPng {
@@ -167,7 +167,7 @@ mod tests {
         let decoded = decode_png(&path).unwrap();
         assert_eq!(decoded.original_size, [1, 1]);
         assert_eq!(decoded.width, decoded.height);
-        assert!(decoded.pixels.len() <= 640 * 360);
+        assert!(decoded.pixels.len() <= 1920 * 1080);
         assert!(decoded.pixels.iter().all(|p| *p == [255, 0, 0, 128]));
         let huge = dir.path().join("too-wide.png");
         image::save_buffer(&huge, &vec![0; 4097 * 4], 4097, 1, image::ColorType::Rgba8).unwrap();

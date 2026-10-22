@@ -26,8 +26,8 @@ use windows::{
 pub const MAX_VIDEO_WIDTH: u32 = 4096;
 pub const MAX_VIDEO_HEIGHT: u32 = 2160;
 pub const MAX_VIDEO_BUFFER_BYTES: usize = 64 * 1024 * 1024;
-const REFERENCE_WIDTH: u32 = 640;
-const REFERENCE_HEIGHT: u32 = 360;
+const REFERENCE_WIDTH: u32 = 1920;
+const REFERENCE_HEIGHT: u32 = 1080;
 const FIRST_VIDEO: u32 = MF_SOURCE_READER_FIRST_VIDEO_STREAM.0 as u32;
 const ALL_STREAMS: u32 = MF_SOURCE_READER_ALL_STREAMS.0 as u32;
 
@@ -378,7 +378,7 @@ pub struct VideoFile {
 }
 
 impl VideoFile {
-    /// Open a local `.mp4` file and request RGB32 downscaled to at most 640x360.
+    /// Open a local `.mp4` file and request RGB32 downscaled to at most 1920x1080 (Full HD).
     /// A processor may reject resizing; then a bounded native-size RGB32
     /// fallback is attempted and `format()` exposes the actual returned raster.
     pub fn open(path: &Path) -> Result<Self> {

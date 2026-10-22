@@ -533,6 +533,10 @@ pub struct RustMixApp {
     thumbnail_pixels: HashMap<InputId, Arc<Vec<[u8; 4]>>>,
     thumbnail_renderer: program::ProgramRenderer,
     pub(crate) program_texture: Option<egui::TextureHandle>,
+    pub(crate) program_full_texture: Option<egui::TextureHandle>,
+    pub(crate) preview_texture: Option<egui::TextureHandle>,
+    pub(crate) preview_pixels: Option<Arc<Vec<[u8; 4]>>>,
+    pub(crate) preview_renderer: program::ProgramRenderer,
     pub(crate) last_program_rgba: Vec<u8>,
     /// Latest full-resolution Program surface for output/measurement consumers.
     pub(crate) last_program_full: Arc<Vec<[u8; 4]>>,
@@ -831,6 +835,10 @@ impl RustMixApp {
             thumbnail_pixels: HashMap::new(),
             thumbnail_renderer: program::ProgramRenderer::default(),
             program_texture: None,
+            program_full_texture: None,
+            preview_texture: None,
+            preview_pixels: None,
+            preview_renderer: program::ProgramRenderer::default(),
             last_program_rgba: Vec::new(),
             last_program_full: Arc::new(Vec::new()),
             program_full_size: [0, 0],
@@ -2364,7 +2372,11 @@ impl RustMixApp {
         for action in std::mem::take(&mut self.actions) {
             self.dispatch(action, &ctx);
         }
-        self.program_output.show(&ctx, self.program_texture.clone());
+        let out_texture = self
+            .program_full_texture
+            .clone()
+            .or_else(|| self.program_texture.clone());
+        self.program_output.show(&ctx, out_texture);
         // Scripted hosted runs stay deterministic: the periodic recovery
         // checkpoint would otherwise race the harness's explicit saves for the
         // single file-job slot and add disk writes to the perf cadence.
@@ -2450,6 +2462,9 @@ impl eframe::App for RustMixApp {
         self.textures.clear();
         self.thumbnail_pixels.clear();
         self.program_texture = None;
+        self.program_full_texture = None;
+        self.preview_texture = None;
+        self.preview_pixels = None;
         self.properties_texture = None;
         self.add_preview = None;
         self.overlay_preview = None;

@@ -43,7 +43,7 @@ fn raster(bytes: Vec<u8>, format: image::ImageFormat) -> Result<Raster, String> 
     let image = reader
         .decode()
         .map_err(|_| "Image cannot be decoded within raster limits")?
-        .resize(640, 360, image::imageops::FilterType::Triangle)
+        .resize(1920, 1080, image::imageops::FilterType::Triangle)
         .to_rgba8();
     Ok((
         image.width(),
