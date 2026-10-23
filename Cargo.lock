@@ -3007,6 +3007,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "rustmix-automation"
+version = "0.1.0"
+dependencies = [
+ "rustmix-engine",
+ "thiserror 2.0.21",
+]
+
+[[package]]
 name = "rustmix-engine"
 version = "0.1.0"
 dependencies = [

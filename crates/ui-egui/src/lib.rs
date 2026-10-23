@@ -1528,7 +1528,24 @@ impl RustMixApp {
                 self.properties = self.engine.project().input(id).cloned();
                 self.input_page = InputPage::Audio;
             }
-            Action::RequestRemove(id) => self.close_input(id),
+            Action::RequestRemove(id) => {
+                if self.engine.project().is_blank_template()
+                    || self.engine.project().inputs.len() <= 1
+                {
+                    // The single remaining input resets the session to the
+                    // blank template; there is nothing left to protect or
+                    // confirm.
+                    self.close_input(id);
+                } else {
+                    // Destructive removal always confirms first. The dialog
+                    // rechecks live protection on every frame while it is
+                    // open, so a take after opening keeps the input safe.
+                    match self.engine.enabled(&Command::RemoveInput(id)) {
+                        Ok(()) => self.confirm_remove_input = Some(id),
+                        Err(error) => self.say(error.to_string(), true),
+                    }
+                }
+            }
             Action::Settings => {
                 self.settings = true;
                 self.settings_page = SettingsPage::Display;
