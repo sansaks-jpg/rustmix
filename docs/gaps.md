@@ -1,5 +1,32 @@
 # Known gaps
 
+UI-039 (2026-10-24) aligns the fundamental switcher feature set with the verified
+reference study (installed vMix 29.0.0.48, SHA-256 `05a67e53c184d8547d2668cac3814dce34cd40e4cb0fa3e6df28acdd5a57fad5`;
+existing mapping in `rustmix-reference/vmix` re-verified against the binary — identity,
+777 control functions, 20 transition effects, 40 input types, 16 overlay channels,
+4-slot defaults and the 9-bus audio matrix all confirmed):
+- Transition catalog completed from 12 to the reference 20 effects, adding Zoom, Fly,
+  CrossZoom, FlyRotate, Cube, CubeZoom, Merge and AlphaFade as shared per-pixel CPU
+  renderers (exact endpoints by construction; cube family passes through an honest
+  edge-on black midpoint). Fresh sessions now open with the reference default slots:
+  Fade 500 ms, Merge 1000, Wipe 1000, Merge 1000.
+- Audio routing widened from 3 to the reference 9 buses (Master, A–G, Headphones):
+  per-input nine-way sends, mix-minus guest returns on any bus, external outputs
+  routable to any bus, project schema 11 migration pads schema ≤10 files with idle
+  defaults while preserving every authored route.
+- Mixer shows Master always; other bus strips surface only when routed to an external
+  output or touched (reference behavior). Beyond Master, bus strips hold honest zero
+  meters — per-bus metering is not implemented. Full HD performance of the eight new
+  per-pixel effects is not yet benchmarked (the opt-in release benchmark still covers
+  the original effect set).
+- Verification: 128 engine tests, 11 platform tests (with generated MP4 fixture) and
+  177 of 184 UI tests pass; strict Clippy and fmt clean; `rustmix.exe` debug build OK.
+  The 7 failing UI tests are a **pre-existing in-flight breakage, not from this
+  change**: an uncommitted edit starts the dock as `DockState::new(vec![Panel::Inputs])`
+  without `Panel::Overlays`. Proven by positive control — applying only that one line
+  at HEAD `abc2473` (where all 184 UI tests pass) reproduces the same failures. The
+  line and the failing tests are left for the owner's in-flight work.
+
 UI-038 (2026-10-22) completes workspace regression audit, engine zero-copy optimization, and Full HD 60 FPS performance verification:
 - 321 workspace tests pass (126 engine, 11 platform, 184 UI), zero failures, zero warnings on strict Clippy.
 - Full HD 1080p 60 FPS CPU composition benchmarks verified: all render operations (Cut 1.66 ms, Overlay 3.11 ms, Downscale 4.57 ms, Wipes/Slides 2.15–2.40 ms, Fade 6.85 ms, Procedural 0.18–7.30 ms) complete within <50% of the 16.67 ms frame budget.

@@ -87,6 +87,26 @@ fn playback(data: &mut [f32], consumer: &mut PcmConsumer, counters: &Counters) {
 }
 
 #[cfg(any(windows, test))]
+fn playback_i16(data: &mut [i16], consumer: &mut PcmConsumer, counters: &Counters) {
+    let mut frames = data.chunks_exact_mut(2);
+    for frame in &mut frames {
+        let incoming = consumer.pop().unwrap_or_else(|_| {
+            counters.starved.fetch_add(1, Ordering::Relaxed);
+            [0.0; 2]
+        });
+        for (out, value) in frame.iter_mut().zip(incoming) {
+            let s = safe_sample(value, counters);
+            *out = (s * 32767.0) as i16;
+        }
+        counters.frames.fetch_add(1, Ordering::Relaxed);
+    }
+    for sample in frames.into_remainder() {
+        *sample = 0;
+        counters.rejected.fetch_add(1, Ordering::Relaxed);
+    }
+}
+
+#[cfg(any(windows, test))]
 fn capture(data: &[f32], channels: usize, producer: &mut PcmProducer, counters: &Counters) {
     if !(1..=2).contains(&channels) {
         counters.rejected.fetch_add(1, Ordering::Relaxed);
@@ -127,21 +147,30 @@ impl OutputStream {
         {
             use cpal::traits::DeviceTrait;
             let device = native::find(device_id, Direction::Playback)?;
-            let config = native::playback_config(&device)?;
+            let (config, format) = native::playback_config(&device)?;
             let (producer, mut consumer) = rtrb::RingBuffer::new(RING_FRAMES);
             let counters = Arc::new(Counters::default());
             let callback = Arc::clone(&counters);
             let faults = Arc::clone(&counters);
-            let stream = device
-                .build_output_stream(
+            let stream = match format {
+                cpal::SampleFormat::I16 => device.build_output_stream(
+                    config,
+                    move |data: &mut [i16], _| playback_i16(data, &mut consumer, &callback),
+                    move |_| {
+                        faults.errors.fetch_add(1, Ordering::Relaxed);
+                    },
+                    Some(std::time::Duration::from_secs(2)),
+                ),
+                _ => device.build_output_stream(
                     config,
                     move |data: &mut [f32], _| playback(data, &mut consumer, &callback),
                     move |_| {
                         faults.errors.fetch_add(1, Ordering::Relaxed);
                     },
                     Some(std::time::Duration::from_secs(2)),
-                )
-                .map_err(native::error)?;
+                ),
+            }
+            .map_err(native::error)?;
             Ok((Self { stream, counters }, producer))
         }
         #[cfg(not(windows))]
@@ -283,34 +312,53 @@ mod native {
             && range.min_sample_rate() <= SAMPLE_RATE
             && range.max_sample_rate() >= SAMPLE_RATE
     }
-    pub(super) fn playback_config(device: &cpal::Device) -> Result<cpal::StreamConfig> {
-        device
-            .supported_output_configs()
-            .map_err(error)?
-            .take(256)
-            .find(|range| supported(range, 2))
-            .and_then(|range| range.try_with_sample_rate(SAMPLE_RATE))
-            .map(|config| config.config())
-            .ok_or_else(|| {
-                AudioError::Unavailable(
-                    "Device requires an unsupported format; select 48 kHz f32 stereo output".into(),
-                )
-            })
+    pub(super) fn playback_config(
+        device: &cpal::Device,
+    ) -> Result<(cpal::StreamConfig, cpal::SampleFormat)> {
+        if let Ok(configs) = device.supported_output_configs() {
+            let list: Vec<_> = configs.take(256).collect();
+            for range in &list {
+                if range.channels() == 2
+                    && range.min_sample_rate() <= SAMPLE_RATE
+                    && range.max_sample_rate() >= SAMPLE_RATE
+                    && let Some(config) = range.try_with_sample_rate(SAMPLE_RATE)
+                {
+                    return Ok((config.config(), config.sample_format()));
+                }
+            }
+            for range in &list {
+                if range.channels() == 2 {
+                    let rate = SAMPLE_RATE.clamp(range.min_sample_rate(), range.max_sample_rate());
+                    if let Some(config) = range.try_with_sample_rate(rate) {
+                        return Ok((config.config(), config.sample_format()));
+                    }
+                }
+            }
+        }
+        let default_config = device.default_output_config().map_err(error)?;
+        Ok((default_config.config(), default_config.sample_format()))
     }
     pub(super) fn capture_config(device: &cpal::Device) -> Result<cpal::StreamConfig> {
-        device
-            .supported_input_configs()
-            .map_err(error)?
-            .take(256)
-            .find(|range| supported(range, 1) || supported(range, 2))
-            .and_then(|range| range.try_with_sample_rate(SAMPLE_RATE))
-            .map(|config| config.config())
-            .ok_or_else(|| {
-                AudioError::Unavailable(
-                    "Device requires an unsupported format; select 48 kHz f32 mono/stereo capture"
-                        .into(),
-                )
-            })
+        if let Ok(configs) = device.supported_input_configs() {
+            let list: Vec<_> = configs.take(256).collect();
+            for range in &list {
+                if (supported(range, 1) || supported(range, 2))
+                    && let Some(config) = range.try_with_sample_rate(SAMPLE_RATE)
+                {
+                    return Ok(config.config());
+                }
+            }
+            for range in &list {
+                if range.channels() <= 2 {
+                    let rate = SAMPLE_RATE.clamp(range.min_sample_rate(), range.max_sample_rate());
+                    if let Some(config) = range.try_with_sample_rate(rate) {
+                        return Ok(config.config());
+                    }
+                }
+            }
+        }
+        let default_config = device.default_input_config().map_err(error)?;
+        Ok(default_config.config())
     }
 }
 

@@ -432,8 +432,22 @@ impl Worker {
             .iter()
             .filter(|input| input.has_audio())
             .count();
-        if count == 0 || count > MAX_AUDIO_SOURCES {
-            return Err("Monitoring requires between 1 and 32 configured audio inputs".into());
+        if count > MAX_AUDIO_SOURCES {
+            return Err("Monitoring supports up to 32 configured audio inputs".into());
+        }
+        if count == 0 {
+            let drained = std::mem::take(&mut self.sources);
+            for source in &drained {
+                self.retire_capture(source);
+            }
+            let config = MixerConfig::default();
+            if config != self.config {
+                self.mixer
+                    .apply_config(&config)
+                    .map_err(|error| error.to_string())?;
+                self.config = config;
+            }
+            return Ok(());
         }
         let mut old: Vec<Option<SessionSource>> = self.sources.drain(..).map(Some).collect();
         let mut sources = Vec::new();
@@ -468,7 +482,7 @@ impl Worker {
                     kind,
                     block: self.silence.clone(),
                     paused: false,
-                    looping: true,
+                    looping: false,
                     online: input.online,
                     restart_generation: 0,
                     error,
@@ -525,9 +539,10 @@ impl Worker {
             muted: bus.muted,
             solo: bus.solo,
         });
-        if !sources
-            .iter()
-            .any(|source| !matches!(source.kind, SourceKind::Unavailable))
+        if !sources.is_empty()
+            && !sources
+                .iter()
+                .any(|source| !matches!(source.kind, SourceKind::Unavailable))
         {
             return Err(sources
                 .first()
@@ -682,15 +697,44 @@ fn open_source(
         AudioSource::WavFile { path } => match load_clip(path) {
             Ok(cursor) => Ok(SourceKind::Clip(cursor)),
             Err(e) => {
-                let lower = path.to_lowercase();
-                if lower.ends_with(".mp4") || lower.ends_with(".mov") || lower.ends_with(".mkv") {
-                    Ok(SourceKind::Clip(ClipCursor {
-                        frames: Vec::new(),
-                        position: 0,
-                        ended: false,
-                    }))
-                } else {
-                    Err(e)
+                #[cfg(windows)]
+                {
+                    match rustmix_platform::media_foundation::decode_media_audio(path) {
+                        Ok(frames) if !frames.is_empty() => Ok(SourceKind::Clip(ClipCursor {
+                            frames,
+                            position: 0,
+                            ended: false,
+                        })),
+                        _ => {
+                            let lower = path.to_lowercase();
+                            if lower.ends_with(".mp4")
+                                || lower.ends_with(".mov")
+                                || lower.ends_with(".mkv")
+                            {
+                                Ok(SourceKind::Clip(ClipCursor {
+                                    frames: Vec::new(),
+                                    position: 0,
+                                    ended: false,
+                                }))
+                            } else {
+                                Err(e)
+                            }
+                        }
+                    }
+                }
+                #[cfg(not(windows))]
+                {
+                    let lower = path.to_lowercase();
+                    if lower.ends_with(".mp4") || lower.ends_with(".mov") || lower.ends_with(".mkv")
+                    {
+                        Ok(SourceKind::Clip(ClipCursor {
+                            frames: Vec::new(),
+                            position: 0,
+                            ended: false,
+                        }))
+                    } else {
+                        Err(e)
+                    }
                 }
             }
         },

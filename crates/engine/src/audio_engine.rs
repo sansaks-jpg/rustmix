@@ -10,7 +10,11 @@ use crate::{InputId, Result, invalid};
 
 pub const SAMPLE_RATE: u32 = 48_000;
 pub const BLOCK_FRAMES: usize = 256;
-pub const BUS_COUNT: usize = 3;
+/// The reference routing matrix: Master, buses A–G and Headphones.
+pub const BUS_COUNT: usize = 9;
+/// Labels for the nine-bus matrix, in mix index order.
+pub const BUS_LABELS: [&str; BUS_COUNT] =
+    ["Master", "A", "B", "C", "D", "E", "F", "G", "Headphones"];
 pub const GUEST_RETURN_COUNT: usize = 2;
 pub const MAX_AUDIO_SOURCES: usize = 32;
 /// Five milliseconds at 48 kHz, applied independently of block boundaries.
@@ -77,15 +81,27 @@ impl<'a> AudioInputBatch<'a> {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AudioBus {
     Master,
-    AuxA,
-    AuxB,
+    BusA,
+    BusB,
+    BusC,
+    BusD,
+    BusE,
+    BusF,
+    BusG,
+    Headphones,
 }
 impl AudioBus {
     pub fn index(self) -> usize {
         match self {
             Self::Master => 0,
-            Self::AuxA => 1,
-            Self::AuxB => 2,
+            Self::BusA => 1,
+            Self::BusB => 2,
+            Self::BusC => 3,
+            Self::BusD => 4,
+            Self::BusE => 5,
+            Self::BusF => 6,
+            Self::BusG => 7,
+            Self::Headphones => 8,
         }
     }
 }
@@ -98,7 +114,8 @@ pub struct SourceConfig {
     pub pan: f32,
     pub muted: bool,
     pub solo: bool,
-    /// Independent Master/Aux A/Aux B sends; mute and solo gate all sends.
+    /// Independent sends to Master and buses A–G plus Headphones; mute and
+    /// solo gate all sends.
     pub sends: [bool; BUS_COUNT],
 }
 impl SourceConfig {
@@ -109,7 +126,7 @@ impl SourceConfig {
             pan: 0.0,
             muted: false,
             solo: false,
-            sends: [true, false, false],
+            sends: [true, false, false, false, false, false, false, false, false],
         }
     }
 }

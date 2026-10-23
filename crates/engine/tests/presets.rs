@@ -182,3 +182,43 @@ fn native_camera_format_and_portrait_browser_roundtrip_and_reject_bad_modes() {
     assert_eq!(engine.project().program, before.program);
     assert_eq!(engine.project().preview, before.preview);
 }
+
+#[test]
+fn schema_ten_projects_gain_the_nine_bus_matrix_without_losing_authored_routes() {
+    // A real schema-10 save carries three buses and three-wide input sends.
+    // Loading it must keep every authored route and idle-default the rest.
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("schema-10.json");
+    let mut legacy = serde_json::to_value(ProjectState::demo()).unwrap();
+    legacy["schema"] = 10.into();
+    let buses = legacy["buses"].as_array().unwrap()[..3].to_vec();
+    legacy["buses"] = serde_json::Value::Array(buses);
+    for bus in legacy["buses"].as_array_mut().unwrap() {
+        bus["sends"] = serde_json::json!([true, false, false]);
+    }
+    legacy["buses"][1]["gain_db"] = (-6.0).into();
+    for input in legacy["inputs"].as_array_mut().unwrap() {
+        input["audio"]["sends"] = serde_json::json!([true, true, false]);
+    }
+    let original = serde_json::to_vec(&legacy).unwrap();
+    std::fs::write(&path, &original).unwrap();
+    let migrated = persistence::load(&path).unwrap();
+    assert_eq!(migrated.schema, SCHEMA);
+    assert_eq!(migrated.buses.len(), 9);
+    assert_eq!(migrated.buses[1].gain_db, -6.0);
+    assert!(
+        migrated.buses[3..]
+            .iter()
+            .all(|bus| *bus == AudioChannel::default())
+    );
+    for input in &migrated.inputs {
+        assert!(input.audio.sends[0] && input.audio.sends[1]);
+        assert!(!input.audio.sends[2]);
+        assert!(input.audio.sends[3..].iter().all(|send| !send));
+    }
+    persistence::save(&path, &migrated).unwrap();
+    assert_eq!(
+        std::fs::read(persistence::backup_path(&path, 1)).unwrap(),
+        original
+    );
+}

@@ -524,6 +524,181 @@ pub fn program_from_sources(
     Ok(out)
 }
 
+/// Nearest-neighbour surface sample in normalised [0,1) coordinates with a
+/// fallback colour outside the raster. Pixel centres are sampled, so an
+/// identity mapping reproduces the source exactly.
+fn sample_surface(
+    surface: &[[u8; 4]],
+    w: u32,
+    h: u32,
+    su: f32,
+    sv: f32,
+    fallback: [u8; 4],
+) -> [u8; 4] {
+    if !(0.0..1.0).contains(&su) || !(0.0..1.0).contains(&sv) {
+        return fallback;
+    }
+    let x = (su * w as f32) as u32;
+    let y = (sv * h as f32) as u32;
+    let index = (y.min(h.saturating_sub(1)))
+        .saturating_mul(w)
+        .saturating_add(x.min(w.saturating_sub(1)));
+    surface.get(index as usize).copied().unwrap_or(fallback)
+}
+
+/// The pair of full-raster surfaces a transition composes, with their size.
+struct TransitionSurfaces<'a> {
+    w: u32,
+    h: u32,
+    from: &'a [[u8; 4]],
+    to: &'a [[u8; 4]],
+}
+
+/// Scaled, rotated and composited transition effects shared by the production
+/// compositor and the per-pixel test oracle. All geometry is normalised, so
+/// the same formula drives every raster size. Progress 0 and 1 return the
+/// source and target pixel exactly regardless of float rounding.
+fn scaled_transition_pixel(
+    kind: TransitionKind,
+    progress: f32,
+    x: u32,
+    y: u32,
+    surfaces: &TransitionSurfaces<'_>,
+) -> Result<[u8; 4]> {
+    let TransitionSurfaces { w, h, from, to } = *surfaces;
+    let p = if progress.is_finite() {
+        progress.clamp(0.0, 1.0)
+    } else {
+        0.0
+    };
+    let index = (y as usize)
+        .saturating_mul(w as usize)
+        .saturating_add(x as usize);
+    let black = [0, 0, 0, 255];
+    let truncated = || invalid("Transition surface truncated");
+    if p <= 0.0 {
+        return from.get(index).copied().ok_or_else(truncated);
+    }
+    if p >= 1.0 {
+        return to.get(index).copied().ok_or_else(truncated);
+    }
+    let u = (x as f32 + 0.5) / w as f32;
+    let v = (y as f32 + 0.5) / h as f32;
+    let from_pixel = from.get(index).copied().ok_or_else(truncated)?;
+    let to_pixel = to.get(index).copied().ok_or_else(truncated)?;
+    Ok(match kind {
+        // The incoming surface starts twice full-frame scale and settles while
+        // dissolving over the outgoing picture.
+        TransitionKind::Zoom => {
+            let s = 2.0 - p;
+            let sampled = sample_surface(to, w, h, 0.5 + (u - 0.5) * s, 0.5 + (v - 0.5) * s, black);
+            blend(from_pixel, sampled, p)
+        }
+        // The outgoing picture zooms in as the incoming zooms out; a dissolve
+        // with two opposing scale trajectories.
+        TransitionKind::CrossZoom => {
+            let s_from = 1.0 + p;
+            let s_to = 2.0 - p;
+            let outgoing = sample_surface(
+                from,
+                w,
+                h,
+                0.5 + (u - 0.5) * s_from,
+                0.5 + (v - 0.5) * s_from,
+                black,
+            );
+            let incoming = sample_surface(
+                to,
+                w,
+                h,
+                0.5 + (u - 0.5) * s_to,
+                0.5 + (v - 0.5) * s_to,
+                black,
+            );
+            blend(outgoing, incoming, p)
+        }
+        // The incoming surface flies in from the bottom-right corner, growing
+        // from half to full scale on the way.
+        TransitionKind::Fly | TransitionKind::FlyRotate => {
+            let s = 0.5 + 0.5 * p;
+            let cx = 1.0 - 0.5 * p;
+            let cy = 1.0 - 0.5 * p;
+            let (du, dv) = (u - cx, v - cy);
+            let (su, sv) = if kind == TransitionKind::FlyRotate {
+                let theta = p * std::f32::consts::FRAC_PI_6;
+                let (sin, cos) = theta.sin_cos();
+                (
+                    0.5 + (du * cos + dv * sin) / s,
+                    0.5 + (-du * sin + dv * cos) / s,
+                )
+            } else {
+                (0.5 + du / s, 0.5 + dv / s)
+            };
+            let sampled = sample_surface(to, w, h, su, sv, black);
+            blend(from_pixel, sampled, p)
+        }
+        // A cube face rotation about the vertical axis: the outgoing face
+        // narrows to its edge, then the incoming face opens from it. Faces at
+        // exact profile are black, which is the honest midpoint of a cube turn.
+        TransitionKind::Cube | TransitionKind::CubeZoom => {
+            let face = if p < 0.5 {
+                1.0 - 2.0 * p
+            } else {
+                2.0 * p - 1.0
+            };
+            if face <= f32::EPSILON {
+                return Ok(black);
+            }
+            let su = 0.5 + (u - 0.5) / face;
+            let squash = if kind == TransitionKind::CubeZoom {
+                1.0 - 0.5 * (1.0 - (2.0 * p - 1.0).abs())
+            } else {
+                1.0
+            };
+            let sv = 0.5 + (v - 0.5) / squash;
+            if p < 0.5 {
+                sample_surface(from, w, h, su, sv, black)
+            } else {
+                sample_surface(to, w, h, su, sv, black)
+            }
+        }
+        // The reference Merge: the outgoing frame recedes towards the left
+        // shrinking while the incoming frame advances from the right growing,
+        // each fading through the midpoint.
+        TransitionKind::Merge => {
+            let s_out = 1.0 - 0.5 * p;
+            let out_cx = 0.5 * p;
+            let s_in = 0.5 + 0.5 * p;
+            let in_cx = 1.0 - 0.5 * p;
+            let outgoing = sample_surface(
+                from,
+                w,
+                h,
+                out_cx + (u - out_cx) / s_out,
+                0.5 + (v - 0.5) / s_out,
+                black,
+            );
+            let incoming = sample_surface(
+                to,
+                w,
+                h,
+                in_cx + (u - in_cx) / s_in,
+                0.5 + (v - 0.5) / s_in,
+                black,
+            );
+            let base = blend(black, outgoing, (1.5 * (1.0 - p)).min(1.0));
+            blend(base, incoming, (1.5 * p).min(1.0))
+        }
+        // A dissolve that follows the target's own alpha coverage: opaque
+        // regions of the incoming picture arrive early, transparent regions
+        // stay on the outgoing picture until the end.
+        TransitionKind::AlphaFade => {
+            blend(from_pixel, to_pixel, p * f32::from(to_pixel[3]) / 255.0)
+        }
+        _ => return Err(invalid("Effect is not a scaled transition")),
+    })
+}
+
 /// Geometric transitions assembled from contiguous row slices. Masks use the
 /// same floating-point predicates as the per-pixel reference compositor, so
 /// the boundary pixels are identical; the copy itself is a `memcpy` per run.
@@ -614,6 +789,21 @@ fn transition_rows<'a>(
                     row(to, y - boundary)
                 };
                 out.extend_from_slice(source.ok_or_else(truncated)?);
+            }
+        }
+        TransitionKind::Zoom
+        | TransitionKind::Fly
+        | TransitionKind::CrossZoom
+        | TransitionKind::FlyRotate
+        | TransitionKind::Cube
+        | TransitionKind::CubeZoom
+        | TransitionKind::Merge
+        | TransitionKind::AlphaFade => {
+            let surfaces = TransitionSurfaces { w, h, from, to };
+            for y in 0..h {
+                for x in 0..w {
+                    out.push(scaled_transition_pixel(kind, progress, x, y, &surfaces)?);
+                }
             }
         }
     }
@@ -736,6 +926,13 @@ fn transition_reference(
                             .copied()
                             .ok_or_else(|| invalid("Slide surface truncated"))?
                     }
+                    _ => scaled_transition_pixel(
+                        t.kind,
+                        t.progress,
+                        x,
+                        y,
+                        &TransitionSurfaces { w, h, from, to },
+                    )?,
                 };
             }
             out.push(color);

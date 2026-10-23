@@ -127,7 +127,7 @@ pub struct AudioChannel {
     pub gain_db: f32,
     pub muted: bool,
     pub solo: bool,
-    pub sends: [bool; 3],
+    pub sends: [bool; audio_engine::BUS_COUNT],
 }
 impl Default for AudioChannel {
     fn default() -> Self {
@@ -135,7 +135,8 @@ impl Default for AudioChannel {
             gain_db: 0.0,
             muted: false,
             solo: false,
-            sends: [true, false, false],
+            // Inputs route to Master by default, matching the reference mixer.
+            sends: [true, false, false, false, false, false, false, false, false],
         }
     }
 }
@@ -238,6 +239,8 @@ pub struct WorkspaceState {
     pub name: String,
     pub dock_json: String,
 }
+/// Schema 11 widens the audio routing matrix to the reference nine buses
+/// (Master, A–G, Headphones); older projects are padded with idle defaults.
 /// Schema 10 adds scan/field order and exact native camera format descriptors.
 /// Schema 9 adds Photos, Browser and camera descriptors.
 /// Schema 7 adds typed audio-only source descriptors.
@@ -245,7 +248,12 @@ pub struct WorkspaceState {
 /// (routing and configuration); schema 5 replaced the four-overlay array with
 /// the sixteen-channel production bank; 1–9 load through the persistence
 /// migration.
-pub const SCHEMA: u32 = 10;
+pub const SCHEMA: u32 = 11;
+/// The nine-bus routing matrix with idle defaults; a missing `buses` field
+/// deserialises to this rather than failing the whole project.
+pub fn default_buses() -> [AudioChannel; audio_engine::BUS_COUNT] {
+    std::array::from_fn(|_| AudioChannel::default())
+}
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ProjectState {
     pub schema: u32,
@@ -259,7 +267,8 @@ pub struct ProjectState {
     pub transition_slots: [TransitionSlot; 4],
     #[serde(default = "default_playlists")]
     pub playlists: Vec<Playlist>,
-    pub buses: [AudioChannel; 3],
+    #[serde(default = "default_buses")]
+    pub buses: [AudioChannel; audio_engine::BUS_COUNT],
     pub overlays: OverlayBank,
     pub outputs: ExternalOutputBank,
     pub preferences: Preferences,
@@ -346,6 +355,63 @@ impl ProjectState {
             },
         }
     }
+    pub fn blank_template() -> Self {
+        let placeholder = InputState {
+            id: InputId(1),
+            name: "Blank".into(),
+            kind: InputKind::Color,
+            color: [0, 0, 0],
+            online: true,
+            audio: AudioChannel {
+                muted: true,
+                ..Default::default()
+            },
+            config: InputConfig::default(),
+            category: None,
+        };
+        Self {
+            schema: SCHEMA,
+            name: "Default production".into(),
+            revision: 0,
+            inputs: vec![placeholder],
+            program: InputId(1),
+            preview: InputId(1),
+            duration_ms: 1000,
+            transition_slots: default_transition_slots(),
+            playlists: default_playlists(),
+            buses: std::array::from_fn(|_| AudioChannel::default()),
+            outputs: ExternalOutputBank::default(),
+            overlays: OverlayBank::demo(),
+            preferences: Preferences {
+                width: 1920,
+                height: 1080,
+                rate: VideoStandard::default().rate,
+                scan: ScanMode::Progressive,
+                high_contrast: false,
+                ui_scale: 1.0,
+                shortcuts: true,
+                key_bindings: default_key_bindings(),
+                categories: default_categories(),
+                ui_theme: UiTheme::Dark,
+                preview_color: default_preview_color(),
+                program_color: default_program_color(),
+            },
+            workspace: WorkspaceState {
+                name: "Production".into(),
+                dock_json: String::new(),
+            },
+        }
+    }
+    pub fn is_blank_template(&self) -> bool {
+        self.inputs.len() == 1
+            && self.inputs.first().is_some_and(|i| {
+                i.kind == InputKind::Color
+                    && i.color == [0, 0, 0]
+                    && i.config.video_source.is_none()
+                    && i.config.audio_source.is_none()
+                    && i.config.media_path.is_none()
+            })
+    }
     pub fn input(&self, id: InputId) -> Option<&InputState> {
         self.inputs.iter().find(|s| s.id == id)
     }
@@ -372,8 +438,8 @@ impl ProjectState {
             )));
         }
         valid_text(&self.name, 120)?;
-        if !(2..=32).contains(&self.inputs.len()) {
-            return Err(invalid("A project needs 2–32 inputs"));
+        if !(1..=32).contains(&self.inputs.len()) {
+            return Err(invalid("A project needs 1–32 inputs"));
         }
         let mut ids = HashSet::new();
         for input in &self.inputs {
@@ -457,9 +523,17 @@ pub enum TransitionKind {
     VerticalSlideReverse,
     BarnDoor,
     RollerDoor,
+    Zoom,
+    Fly,
+    CrossZoom,
+    FlyRotate,
+    Cube,
+    CubeZoom,
+    Merge,
+    AlphaFade,
 }
 impl TransitionKind {
-    pub const ALL: [Self; 12] = [
+    pub const ALL: [Self; 20] = [
         Self::Cut,
         Self::Fade,
         Self::Wipe,
@@ -472,6 +546,14 @@ impl TransitionKind {
         Self::VerticalSlideReverse,
         Self::BarnDoor,
         Self::RollerDoor,
+        Self::Zoom,
+        Self::Fly,
+        Self::CrossZoom,
+        Self::FlyRotate,
+        Self::Cube,
+        Self::CubeZoom,
+        Self::Merge,
+        Self::AlphaFade,
     ];
     pub fn label(self) -> &'static str {
         match self {
@@ -487,6 +569,14 @@ impl TransitionKind {
             Self::VerticalSlideReverse => "Vertical slide reverse",
             Self::BarnDoor => "Barn door",
             Self::RollerDoor => "Roller door",
+            Self::Zoom => "Zoom",
+            Self::Fly => "Fly",
+            Self::CrossZoom => "Cross zoom",
+            Self::FlyRotate => "Fly rotate",
+            Self::Cube => "Cube",
+            Self::CubeZoom => "Cube zoom",
+            Self::Merge => "Merge",
+            Self::AlphaFade => "Alpha fade",
         }
     }
 }
@@ -921,21 +1011,27 @@ impl Engine {
         config: InputConfig,
         index: usize,
     ) -> Result<InputId> {
-        if index > project.inputs.len() || project.inputs.len() >= 32 {
-            return Err(invalid(
-                "Choose an available input position (maximum 32 inputs)",
-            ));
-        }
-        let id = project
-            .inputs
-            .iter()
-            .map(|i| i.id.0)
-            .max()
-            .and_then(|i| i.checked_add(1))
-            .map(InputId)
-            .ok_or_else(|| invalid("Input ID limit reached"))?;
+        let (id, target_index) = if project.is_blank_template() {
+            project.inputs.clear();
+            (InputId(1), 0)
+        } else {
+            if index > project.inputs.len() || project.inputs.len() >= 32 {
+                return Err(invalid(
+                    "Choose an available input position (maximum 32 inputs)",
+                ));
+            }
+            let next_id = project
+                .inputs
+                .iter()
+                .map(|i| i.id.0)
+                .max()
+                .and_then(|i| i.checked_add(1))
+                .map(InputId)
+                .ok_or_else(|| invalid("Input ID limit reached"))?;
+            (next_id, index)
+        };
         project.inputs.insert(
-            index,
+            target_index,
             InputState {
                 id,
                 name,
@@ -945,11 +1041,15 @@ impl Engine {
                 color: [37, 160, 183],
                 online: true,
                 audio: AudioChannel {
-                    muted: true,
+                    muted: false,
                     ..Default::default()
                 },
             },
         );
+        if project.inputs.len() == 1 {
+            project.program = id;
+            project.preview = id;
+        }
         Ok(id)
     }
     pub fn project(&self) -> &ProjectState {
@@ -1048,8 +1148,22 @@ impl Engine {
                     "Take this input out of Program and Preview before removing it",
                 ))
             }
-            Command::RemoveInput(_) if self.project.inputs.len() <= 2 => {
-                Err(invalid("Keep at least two inputs"))
+            Command::RemoveInput(id) => {
+                if self.project.is_blank_template() {
+                    Err(invalid("The default blank placeholder cannot be closed"))
+                } else if self.project.input(*id).is_none() {
+                    Err(invalid("Input not found"))
+                } else if self.playlist_run.as_ref().is_some_and(|run| {
+                    self.project
+                        .playlists
+                        .iter()
+                        .find(|p| p.id == run.id)
+                        .is_some_and(|p| p.items.iter().any(|item| item.input == *id))
+                }) {
+                    Err(invalid("Stop the playlist before removing its inputs"))
+                } else {
+                    Ok(())
+                }
             }
             Command::AddInput { .. } | Command::AddInputAt { .. } | Command::DuplicateInput(_)
                 if self.project.inputs.len() >= 32 =>
@@ -1108,17 +1222,6 @@ impl Engine {
             Command::PlaylistNext | Command::PlaylistPrevious => self
                 .playlist_step_index(matches!(command, Command::PlaylistNext))
                 .map(|_| ()),
-            Command::RemoveInput(id)
-                if self.playlist_run.as_ref().is_some_and(|run| {
-                    self.project
-                        .playlists
-                        .iter()
-                        .find(|p| p.id == run.id)
-                        .is_some_and(|p| p.items.iter().any(|item| item.input == *id))
-                }) =>
-            {
-                Err(invalid("Stop the playlist before removing its inputs"))
-            }
             Command::SetOverlay(slot, _) if *slot >= overlays::STANDARD_CHANNELS => {
                 Err(invalid("Overlay channel not found"))
             }
@@ -1190,6 +1293,10 @@ impl Engine {
             playlist_run = None;
         }
         let mut affected = Vec::new();
+        let is_add_input = matches!(
+            command,
+            Command::AddInput { .. } | Command::AddInputAt { .. } | Command::DuplicateInput(_)
+        );
         let transport = command.clone();
         match command {
             Command::SelectPreview(id) => {
@@ -1402,6 +1509,35 @@ impl Engine {
                         affected.push(input.id);
                     }
                 }
+                if next.inputs.is_empty() {
+                    let placeholder = InputState {
+                        id: InputId(1),
+                        name: "Blank".into(),
+                        kind: InputKind::Color,
+                        color: [0, 0, 0],
+                        online: true,
+                        audio: AudioChannel {
+                            muted: true,
+                            ..Default::default()
+                        },
+                        config: InputConfig::default(),
+                        category: None,
+                    };
+                    next.inputs.push(placeholder);
+                    next.program = InputId(1);
+                    next.preview = InputId(1);
+                } else {
+                    if next.program == id
+                        && let Some(first) = next.inputs.first()
+                    {
+                        next.program = first.id;
+                    }
+                    if next.preview == id
+                        && let Some(second) = next.inputs.get(1).or_else(|| next.inputs.first())
+                    {
+                        next.preview = second.id;
+                    }
+                }
                 affected.push(id);
             }
             Command::ApplyInput { mut input, audio } => {
@@ -1535,13 +1671,17 @@ impl Engine {
         self.playback
             .retain(|id, _| self.project.input(*id).is_some());
         for input in &self.project.inputs {
-            self.playback.entry(input.id).or_insert_with(|| {
+            let clock = self.playback.entry(input.id).or_insert_with(|| {
                 let mut clock = playback::PlaybackClock::new(now.max(self.last_ms));
                 if input.id != self.project.program {
                     clock.set_paused(true);
                 }
+                clock.set_looping(false);
                 clock
             });
+            if affected.contains(&input.id) && is_add_input {
+                clock.set_looping(false);
+            }
         }
         match transport {
             Command::Cut => {

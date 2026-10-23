@@ -25,6 +25,7 @@ struct WavResult {
 #[derive(Default)]
 pub(crate) struct AudioUi {
     pub(crate) open: bool,
+    pub(crate) auto_start_monitoring: bool,
     session: Option<AudioSession>,
     status: Option<SessionStatus>,
     last_revision: Option<u64>,
@@ -155,6 +156,19 @@ fn validate_wav(path: PathBuf) -> std::result::Result<WavInfo, String> {
 
 impl RustMixApp {
     pub(crate) fn poll_audio(&mut self, _ctx: &egui::Context) {
+        if self.audio_ui.session.is_none()
+            && !self.audio_ui.stopping
+            && self.audio_ui.auto_start_monitoring
+            && self.smoke.is_none()
+        {
+            self.audio_ui.stopping = false;
+            self.audio_ui.last_revision = Some(self.engine.project().revision);
+            self.audio_ui.session = Some(AudioSession::spawn(
+                self.engine.clone(),
+                self.audio_ui.output_device.clone(),
+                _ctx.clone(),
+            ));
+        }
         if let Some(session) = &self.audio_ui.session {
             let revision = self.engine.project().revision;
             if self.audio_ui.last_revision != Some(revision) && !self.audio_ui.stopping {
@@ -168,6 +182,7 @@ impl RustMixApp {
                     self.audio_ui.session = None;
                     self.audio_ui.stopping = false;
                     self.audio_ui.last_revision = None;
+                    self.audio_ui.auto_start_monitoring = false;
                 }
             }
         }
@@ -571,6 +586,7 @@ impl RustMixApp {
                 });
             });
         if start && self.audio_ui.session.is_none() {
+            self.audio_ui.auto_start_monitoring = true;
             self.audio_ui.status = None;
             self.audio_ui.stopping = false;
             self.audio_ui.last_revision = Some(self.engine.project().revision);
@@ -581,6 +597,7 @@ impl RustMixApp {
             ));
         }
         if stop && let Some(session) = &self.audio_ui.session {
+            self.audio_ui.auto_start_monitoring = false;
             self.audio_ui.stopping = true;
             session.request_stop();
         }

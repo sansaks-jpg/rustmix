@@ -122,7 +122,7 @@ fn source_management_routing_and_validation() {
     input.name = "Renamed".into();
     input.audio.muted = true;
     input.audio.solo = true;
-    input.audio.sends = [false, true, false];
+    input.audio.sends = [false, true, false, false, false, false, false, false, false];
     e.execute(Command::UpdateInput(input.clone()), 0).unwrap();
     e.execute(Command::SetInputAudio(id, input.audio), 0)
         .unwrap();
@@ -146,7 +146,7 @@ fn audio_controls_remain_independent_during_transition() {
         .unwrap();
     let mut audio = e.project().inputs[0].audio.clone();
     audio.gain_db = -18.0;
-    audio.sends = [true, true, false];
+    audio.sends = [true, true, false, false, false, false, false, false, false];
     e.execute(Command::SetInputAudio(InputId(1), audio), 100)
         .unwrap();
     assert_eq!(e.project().inputs[0].audio.gain_db, -18.0);
@@ -163,7 +163,7 @@ fn stale_source_properties_cannot_reset_audio_routes() {
         gain_db: -21.0,
         muted: true,
         solo: false,
-        sends: [false, true, true],
+        sends: [false, true, true, false, false, false, false, false, false],
     };
     e.execute(Command::SetInputAudio(properties.id, audio.clone()), 0)
         .unwrap();

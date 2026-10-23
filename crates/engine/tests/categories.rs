@@ -106,7 +106,9 @@ fn schema_roundtrip_and_all_legacy_migrations_preserve_backups() {
         assert!(migrated.inputs.iter().all(|input| input.category.is_none()));
         assert_eq!(
             migrated.transition_slots[0].duration_ms,
-            if version < 3 { 650 } else { 1000 }
+            // Schema 1–2 inherit the legacy project duration; schema 3 keeps
+            // the stored slots, whose first slot is the 500 ms reference Fade.
+            if version < 3 { 650 } else { 500 }
         );
         persistence::save(&path, &migrated).unwrap();
         assert_eq!(

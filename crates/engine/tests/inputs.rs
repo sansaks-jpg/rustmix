@@ -212,3 +212,136 @@ fn loaded_project_origins_and_reusable_surfaces_do_not_accumulate_old_time_or_bu
     assert!(render::source_into(input, 0, 36, 0, &mut pixels).is_err());
     assert_eq!(pixels, before);
 }
+
+#[test]
+fn blank_template_default_state_and_replacement_on_add() {
+    let mut engine = Engine::from_project(ProjectState::blank_template()).unwrap();
+    assert!(engine.project().is_blank_template());
+    assert_eq!(engine.project().inputs.len(), 1);
+    assert_eq!(engine.project().inputs[0].name, "Blank");
+    assert_eq!(engine.project().inputs[0].color, [0, 0, 0]);
+
+    // Placeholder cannot be closed directly
+    assert!(engine.execute(Command::RemoveInput(InputId(1)), 0).is_err());
+
+    // When first input is added, it replaces the placeholder at index 0 (leftmost)
+    let added_id = engine
+        .execute(
+            Command::AddInputAt {
+                name: "First Input".into(),
+                kind: InputKind::Color,
+                config: InputConfig::default(),
+                index: 0,
+            },
+            0,
+        )
+        .unwrap()
+        .affected[0];
+
+    assert!(!engine.project().is_blank_template());
+    assert_eq!(engine.project().inputs.len(), 1);
+    assert_eq!(engine.project().inputs[0].id, added_id);
+    assert_eq!(engine.project().inputs[0].name, "First Input");
+    assert_eq!(engine.project().program, added_id);
+    assert_eq!(engine.project().preview, added_id);
+    // Added inputs are unmuted by default
+    assert!(!engine.project().inputs[0].audio.muted);
+    // Added inputs do not loop automatically
+    assert!(!engine.playback(added_id).unwrap().looping());
+
+    // Add a second input
+    let second_id = engine
+        .execute(
+            Command::AddInputAt {
+                name: "Second Input".into(),
+                kind: InputKind::Color,
+                config: InputConfig::default(),
+                index: 1,
+            },
+            0,
+        )
+        .unwrap()
+        .affected[0];
+    assert_eq!(engine.project().inputs.len(), 2);
+    assert_eq!(engine.project().inputs[1].id, second_id);
+    assert!(!engine.playback(second_id).unwrap().looping());
+
+    // Switch Preview to second
+    engine
+        .execute(Command::SelectPreview(second_id), 0)
+        .unwrap();
+    assert_eq!(engine.project().preview, second_id);
+
+    // Switch Program and Preview to second_id
+    engine
+        .execute(Command::SelectPreview(second_id), 0)
+        .unwrap();
+    engine.execute(Command::Cut, 0).unwrap();
+    engine
+        .execute(Command::SelectPreview(second_id), 0)
+        .unwrap();
+
+    // Now added_id is neither on Program nor Preview, so it can be removed
+    engine.execute(Command::RemoveInput(added_id), 0).unwrap();
+    assert_eq!(engine.project().inputs.len(), 1);
+    assert_eq!(engine.project().inputs[0].id, second_id);
+    assert_eq!(engine.project().program, second_id);
+    assert_eq!(engine.project().preview, second_id);
+}
+
+#[test]
+fn blank_template_lifecycle_and_non_looping_behavior() {
+    let blank = ProjectState::blank_template();
+    assert!(blank.is_blank_template());
+    assert_eq!(blank.inputs.len(), 1);
+
+    let mut engine = Engine::from_project(blank).unwrap();
+    assert!(engine.project().is_blank_template());
+
+    // Adding dynamic input replaces blank placeholder
+    let res = engine
+        .execute(
+            Command::AddInputAt {
+                name: "Clip 1".into(),
+                kind: InputKind::Color,
+                config: InputConfig {
+                    video_source: Some(VideoSource::File {
+                        path: "demo.mp4".into(),
+                    }),
+                    ..InputConfig::default()
+                },
+                index: 0,
+            },
+            0,
+        )
+        .unwrap();
+
+    let id1 = res.affected[0];
+    assert_eq!(engine.project().inputs.len(), 1);
+    assert_eq!(engine.project().inputs[0].id, id1);
+    assert!(!engine.project().is_blank_template());
+    assert!(!engine.playback(id1).unwrap().looping());
+
+    // Add another video input
+    let res2 = engine
+        .execute(
+            Command::AddInputAt {
+                name: "Clip 2".into(),
+                kind: InputKind::Color,
+                config: InputConfig {
+                    video_source: Some(VideoSource::File {
+                        path: "demo2.mp4".into(),
+                    }),
+                    ..InputConfig::default()
+                },
+                index: 1,
+            },
+            0,
+        )
+        .unwrap();
+
+    let id2 = res2.affected[0];
+    assert_eq!(engine.project().inputs.len(), 2);
+    assert_eq!(engine.project().inputs[1].id, id2);
+    assert!(!engine.playback(id2).unwrap().looping());
+}

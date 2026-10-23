@@ -99,7 +99,7 @@ fn external_output_configuration_validates_bounds_and_buses() {
             .is_err()
     );
     invalid = config.clone();
-    invalid.audio_bus = Some(3);
+    invalid.audio_bus = Some(9);
     assert!(
         engine
             .enabled(&Command::SetExternalOutputConfig(1, invalid))
@@ -252,7 +252,7 @@ fn invalid_combined_output_never_commits_a_partial_route_or_configuration() {
         },
         ExternalOutput {
             config: ExternalOutputConfig {
-                audio_bus: Some(3),
+                audio_bus: Some(9),
                 ..sample_config()
             },
             ..valid.clone()
@@ -347,7 +347,7 @@ fn output_validation_covers_config_boundaries_without_cross_field_masking() {
             ..sample_config()
         },
         ExternalOutputConfig {
-            audio_bus: Some(3),
+            audio_bus: Some(9),
             ..sample_config()
         },
         ExternalOutputConfig {

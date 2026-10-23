@@ -15,16 +15,26 @@ impl TransitionSlot {
     }
 }
 pub fn default_transition_slots() -> [TransitionSlot; 4] {
+    // The observed reference switcher opens every fresh session with these
+    // four slots: Fade at 500 ms, then Merge, Wipe and Merge at 1000 ms.
     [
-        TransitionKind::Fade,
-        TransitionKind::Slide,
-        TransitionKind::Wipe,
-        TransitionKind::VerticalWipe,
+        TransitionSlot {
+            kind: TransitionKind::Fade,
+            duration_ms: 500,
+        },
+        TransitionSlot {
+            kind: TransitionKind::Merge,
+            duration_ms: 1000,
+        },
+        TransitionSlot {
+            kind: TransitionKind::Wipe,
+            duration_ms: 1000,
+        },
+        TransitionSlot {
+            kind: TransitionKind::Merge,
+            duration_ms: 1000,
+        },
     ]
-    .map(|kind| TransitionSlot {
-        kind,
-        duration_ms: 1000,
-    })
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

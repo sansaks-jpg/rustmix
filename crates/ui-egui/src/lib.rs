@@ -454,6 +454,9 @@ impl Panel {
 }
 
 fn default_dock(audio_focus: bool) -> DockState<Panel> {
+    // The saved-layout validator (workspace::decode) and the dock round-trip
+    // tests require all three panels: Inputs and Overlays share the main
+    // leaf, Audio splits right. Dropping Overlays breaks every restore.
     let mut dock = DockState::new(vec![Panel::Inputs, Panel::Overlays]);
     dock.main_surface_mut().split_right(
         NodeIndex::root(),
@@ -789,12 +792,18 @@ impl RustMixApp {
                 cc.egui_ctx.set_fonts(fonts);
             }
         }
-        if (app.smoke.is_none() || std::env::args().any(|s| s == "--ui-preset-smoke"))
-            && !std::env::args().any(|s| s == "--ui-perf")
-            && app.job.is_none()
-        {
+        if std::env::args().any(|s| s == "--ui-preset-smoke") {
             app.initialize_blank_startup(&cc.egui_ctx);
+        } else if app.smoke.is_none()
+            && !std::env::args().any(|s| s.ends_with(".rustmix.json"))
+            && let Ok(blank_engine) = Engine::from_project(ProjectState::blank_template())
+        {
+            app.engine = blank_engine;
+            app.input_fx.clear();
+            app.sync_input_cache();
+            app.theme(&cc.egui_ctx);
         }
+        app.audio_ui.auto_start_monitoring = true;
         match program::ProgramWorker::spawn(
             program::Snapshot {
                 generation: app.program_generation,
@@ -1519,10 +1528,7 @@ impl RustMixApp {
                 self.properties = self.engine.project().input(id).cloned();
                 self.input_page = InputPage::Audio;
             }
-            Action::RequestRemove(id) => match self.engine.enabled(&Command::RemoveInput(id)) {
-                Ok(()) => self.confirm_remove_input = Some(id),
-                Err(error) => self.say(error.to_string(), true),
-            },
+            Action::RequestRemove(id) => self.close_input(id),
             Action::Settings => {
                 self.settings = true;
                 self.settings_page = SettingsPage::Display;
@@ -2259,6 +2265,12 @@ impl RustMixApp {
         self.poll_extra_source();
         self.poll_video(&ctx);
         self.poll_extended_output(&ctx);
+        let dropped = ctx.input(|i| i.raw.dropped_files.clone());
+        for file in dropped {
+            if let Some(path) = file.path {
+                self.handle_dropped_file(&path, &ctx);
+            }
+        }
         self.shortcuts(&ctx);
         self.refresh_textures(&ctx);
         let dialog_busy = self.add_open
@@ -2408,6 +2420,148 @@ impl RustMixApp {
         }
         if self.profile.is_some() {
             self.profile_step(&ctx);
+        }
+    }
+
+    pub(crate) fn close_input(&mut self, id: InputId) {
+        if self.engine.project().is_blank_template() {
+            return;
+        }
+
+        if self.engine.project().inputs.len() <= 1 {
+            let blank = ProjectState::blank_template();
+            if let Ok(blank_engine) = Engine::from_project(blank) {
+                self.engine = blank_engine;
+                self.input_fx.clear();
+                self.sync_input_cache();
+                self.close_properties();
+                self.submit_program();
+                return;
+            }
+        }
+
+        let other_id = self
+            .engine
+            .project()
+            .inputs
+            .iter()
+            .find(|i| i.id != id)
+            .map(|i| i.id);
+
+        if let Some(other) = other_id {
+            if self.engine.project().program == id {
+                let _ = self.try_execute(Command::TakeInput(other));
+            }
+            if self.engine.project().preview == id {
+                let _ = self.try_execute(Command::SelectPreview(other));
+            }
+        }
+
+        if self.try_execute(Command::RemoveInput(id)).is_some() {
+            self.input_fx.remove(&id);
+            self.submit_program();
+            if self.properties.as_ref().is_some_and(|input| input.id == id) {
+                self.close_properties();
+            }
+        }
+    }
+
+    pub(crate) fn handle_dropped_file(&mut self, path: &Path, ctx: &egui::Context) {
+        let Some(ext) = path
+            .extension()
+            .and_then(|e| e.to_str())
+            .map(|s| s.to_lowercase())
+        else {
+            self.say("Dropped file has no extension".into(), true);
+            return;
+        };
+        let path_str = path.to_string_lossy().to_string();
+        let name = path
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or("Input")
+            .to_string();
+
+        let is_blank = self.engine.project().is_blank_template();
+        let index = if is_blank {
+            0
+        } else {
+            self.engine.project().inputs.len()
+        };
+
+        match ext.as_str() {
+            "mp4" | "mov" | "mkv" | "avi" | "webm" => {
+                let config = InputConfig {
+                    video_source: Some(VideoSource::File {
+                        path: path_str.clone(),
+                    }),
+                    audio_source: Some(AudioSource::WavFile {
+                        path: path_str.clone(),
+                    }),
+                    ..InputConfig::default()
+                };
+                if self
+                    .try_execute(Command::AddInputAt {
+                        name,
+                        kind: InputKind::Color,
+                        config,
+                        index,
+                    })
+                    .is_some()
+                {
+                    self.submit_program();
+                    ctx.request_repaint();
+                }
+            }
+            "png" | "jpg" | "jpeg" | "bmp" => {
+                let config = InputConfig {
+                    media_path: Some(path_str.clone()),
+                    ..InputConfig::default()
+                };
+                if let Some(result) = self.try_execute(Command::AddInputAt {
+                    name,
+                    kind: InputKind::Color,
+                    config,
+                    index,
+                }) && let Some(id) = result.affected.first()
+                {
+                    self.media_loader.enqueue(
+                        path.to_path_buf(),
+                        media::MediaTarget::Restore {
+                            id: *id,
+                            path: path_str,
+                        },
+                    );
+                    self.submit_program();
+                    ctx.request_repaint();
+                }
+            }
+            "wav" | "mp3" => {
+                let config = InputConfig {
+                    audio_source: Some(AudioSource::WavFile {
+                        path: path_str.clone(),
+                    }),
+                    ..InputConfig::default()
+                };
+                if self
+                    .try_execute(Command::AddInputAt {
+                        name,
+                        kind: InputKind::Color,
+                        config,
+                        index,
+                    })
+                    .is_some()
+                {
+                    self.submit_program();
+                    ctx.request_repaint();
+                }
+            }
+            "json" if path_str.ends_with(".rustmix.json") => {
+                self.start_load(Some(path.to_path_buf()));
+            }
+            _ => {
+                self.say(format!("Unsupported file format: .{ext}"), true);
+            }
         }
     }
 }

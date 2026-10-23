@@ -29,6 +29,7 @@ pub const MAX_VIDEO_BUFFER_BYTES: usize = 64 * 1024 * 1024;
 const REFERENCE_WIDTH: u32 = 1920;
 const REFERENCE_HEIGHT: u32 = 1080;
 const FIRST_VIDEO: u32 = MF_SOURCE_READER_FIRST_VIDEO_STREAM.0 as u32;
+const FIRST_AUDIO: u32 = MF_SOURCE_READER_FIRST_AUDIO_STREAM.0 as u32;
 const ALL_STREAMS: u32 = MF_SOURCE_READER_ALL_STREAMS.0 as u32;
 
 #[derive(Debug)]
@@ -1236,4 +1237,181 @@ fn sample_pixels(sample: &IMFSample, format: VideoFormat) -> Result<Vec<[u8; 4]>
             )
         }
     }
+}
+
+pub const MAX_AUDIO_DECODE_FRAMES: usize = 48_000 * 3600; // 1 hour max audio frames
+
+/// Synchronously decode audio from a media file (MP4, etc.) to 48kHz stereo float PCM frames.
+pub fn decode_media_audio(path: &str) -> std::result::Result<Vec<[f32; 2]>, String> {
+    let path_ref = Path::new(path);
+    if !path_ref.is_file() {
+        return Err("Media file does not exist or is not a regular file".into());
+    }
+
+    let runtime = Runtime::start().map_err(|e| e.to_string())?;
+
+    let wide: Vec<u16> = path.encode_utf16().chain(Some(0)).collect();
+
+    let mut processing = None;
+    // SAFETY: Output attributes slot lives through the call.
+    mf("audio source reader attributes", unsafe {
+        MFCreateAttributes(&mut processing, 2)
+    })
+    .map_err(|e| e.to_string())?;
+    let processing =
+        processing.ok_or_else(|| "Missing audio source reader attributes".to_string())?;
+
+    // SAFETY: Processing attributes are live on this MTA COM thread.
+    unsafe {
+        mf(
+            "audio reader low latency",
+            processing.SetUINT32(&MF_LOW_LATENCY, 1),
+        )
+        .map_err(|e| e.to_string())?;
+    }
+
+    // SAFETY: wide is a valid NUL-terminated wide string path. Reader interface is exclusively managed here.
+    let reader = mf("open media source for audio", unsafe {
+        MFCreateSourceReaderFromURL(PCWSTR(wide.as_ptr()), &processing)
+    })
+    .map_err(|e| e.to_string())?;
+
+    // SAFETY: Reader interface is live and on the current COM worker thread.
+    unsafe {
+        mf(
+            "disable streams",
+            reader.SetStreamSelection(ALL_STREAMS, false),
+        )
+        .map_err(|e| e.to_string())?;
+        mf(
+            "select audio stream",
+            reader.SetStreamSelection(FIRST_AUDIO, true),
+        )
+        .map_err(|e| e.to_string())?;
+    }
+
+    // Configure audio output type: 48kHz, 2 channels, 32-bit float
+    // SAFETY: MFCreateMediaType creates an owned IMFMediaType on this MTA thread.
+    let audio_type =
+        mf("create audio media type", unsafe { MFCreateMediaType() }).map_err(|e| e.to_string())?;
+
+    // SAFETY: audio_type is live and valid on this thread. Reader takes its own reference.
+    unsafe {
+        mf(
+            "set major audio type",
+            audio_type.SetGUID(&MF_MT_MAJOR_TYPE, &MFMediaType_Audio),
+        )
+        .map_err(|e| e.to_string())?;
+        mf(
+            "set audio float subtype",
+            audio_type.SetGUID(&MF_MT_SUBTYPE, &MFAudioFormat_Float),
+        )
+        .map_err(|e| e.to_string())?;
+        mf(
+            "set audio channels",
+            audio_type.SetUINT32(&MF_MT_AUDIO_NUM_CHANNELS, 2),
+        )
+        .map_err(|e| e.to_string())?;
+        mf(
+            "set audio sample rate",
+            audio_type.SetUINT32(&MF_MT_AUDIO_SAMPLES_PER_SECOND, 48000),
+        )
+        .map_err(|e| e.to_string())?;
+        mf(
+            "set audio bits",
+            audio_type.SetUINT32(&MF_MT_AUDIO_BITS_PER_SAMPLE, 32),
+        )
+        .map_err(|e| e.to_string())?;
+        mf(
+            "set audio block alignment",
+            audio_type.SetUINT32(&MF_MT_AUDIO_BLOCK_ALIGNMENT, 8),
+        )
+        .map_err(|e| e.to_string())?;
+        mf(
+            "set audio avg bytes",
+            audio_type.SetUINT32(&MF_MT_AUDIO_AVG_BYTES_PER_SECOND, 48000 * 8),
+        )
+        .map_err(|e| e.to_string())?;
+
+        mf(
+            "set current audio media type",
+            reader.SetCurrentMediaType(FIRST_AUDIO, None, &audio_type),
+        )
+        .map_err(|e| e.to_string())?;
+    }
+
+    let mut frames: Vec<[f32; 2]> = Vec::new();
+    loop {
+        let mut flags = 0_u32;
+        let mut timestamp = 0_i64;
+        let mut sample = None;
+        let mut stream_index = 0_u32;
+
+        // SAFETY: Out pointers live through the synchronous ReadSample call on this COM thread.
+        unsafe {
+            let res = reader.ReadSample(
+                FIRST_AUDIO,
+                0,
+                Some(&mut stream_index),
+                Some(&mut flags),
+                Some(&mut timestamp),
+                Some(&mut sample),
+            );
+            if res.is_err() {
+                break;
+            }
+        }
+
+        if (flags & MF_SOURCE_READERF_ENDOFSTREAM.0 as u32) != 0 {
+            break;
+        }
+
+        let Some(sample) = sample else {
+            continue;
+        };
+
+        // SAFETY: sample is live on this COM thread.
+        let buffer = match unsafe { sample.ConvertToContiguousBuffer() } {
+            Ok(buf) => buf,
+            Err(_) => break,
+        };
+
+        let mut start = std::ptr::null_mut();
+        let mut maximum = 0_u32;
+        let mut current = 0_u32;
+
+        // SAFETY: buffer is live; start, maximum, current slots live through Lock.
+        let lock_res = unsafe { buffer.Lock(&mut start, Some(&mut maximum), Some(&mut current)) };
+        if lock_res.is_err() {
+            break;
+        }
+
+        let _guard = LockedBuffer(&buffer);
+
+        if !start.is_null() && current >= 8 {
+            let sample_bytes = current as usize;
+            let stereo_frames = sample_bytes / 8;
+            if frames.len().saturating_add(stereo_frames) > MAX_AUDIO_DECODE_FRAMES {
+                break;
+            }
+
+            let float_ptr = start as *const f32;
+            let float_count = stereo_frames.saturating_mul(2);
+            // SAFETY: LockedBuffer promises readable storage of at least `current` bytes, which is `float_count * sizeof(f32)`.
+            let slice = unsafe { std::slice::from_raw_parts(float_ptr, float_count) };
+
+            for chunk in slice.chunks_exact(2) {
+                let left = chunk.first().copied().unwrap_or(0.0);
+                let right = chunk.get(1).copied().unwrap_or(0.0);
+                let l = if left.is_finite() { left } else { 0.0 };
+                let r = if right.is_finite() { right } else { 0.0 };
+                frames.push([l, r]);
+            }
+        }
+    }
+
+    drop(reader);
+    drop(runtime);
+
+    Ok(frames)
 }

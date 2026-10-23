@@ -62,6 +62,37 @@ fn decode(bytes: &[u8]) -> Result<ProjectState> {
             serde_json::to_value(crate::ExternalOutputBank::default())?,
         );
     }
+    // Schema 11 widened the routing matrix from three to nine buses. Pad any
+    // shorter persisted arrays — project buses and every input's sends — with
+    // idle defaults so older projects load without touching authored routes.
+    if schema < 11 {
+        let pad_sends = |channel: &mut serde_json::Value| {
+            if let Some(sends) = channel
+                .as_object_mut()
+                .and_then(|object| object.get_mut("sends"))
+                .and_then(|sends| sends.as_array_mut())
+            {
+                while sends.len() < crate::audio_engine::BUS_COUNT {
+                    sends.push(false.into());
+                }
+            }
+        };
+        if let Some(buses) = object.get_mut("buses").and_then(|b| b.as_array_mut()) {
+            while buses.len() < crate::audio_engine::BUS_COUNT {
+                buses.push(serde_json::to_value(crate::AudioChannel::default())?);
+            }
+            for bus in buses.iter_mut() {
+                pad_sends(bus);
+            }
+        }
+        if let Some(inputs) = object.get_mut("inputs").and_then(|i| i.as_array_mut()) {
+            for input in inputs {
+                if let Some(audio) = input.as_object_mut().and_then(|o| o.get_mut("audio")) {
+                    pad_sends(audio);
+                }
+            }
+        }
+    }
     object.insert("schema".into(), SCHEMA.into());
     let mut p: ProjectState = serde_json::from_value(value)?;
     // Older descriptors retain source IDs, routing and layout. New production

@@ -5,13 +5,15 @@ build with original code, controls and branding; not affiliated with vMix.
 
 ## Current core
 
-- Independent Preview and Program, Cut/Fade, T-bar, fade to black, existing CPU
-  transitions, caption overlays and per-input processing.
+- Independent Preview and Program, Cut, T-bar, fade to black, twenty CPU transitions
+  across four configurable slots (fresh sessions open with Fade 500 ms, Merge, Wipe,
+  Merge at 1000 ms), caption overlays and per-input processing.
 - PNG, local MP4 video, colour/test generators, camera descriptors, local WAV and
   microphone inputs. Files/devices are validated; camera hardware is unqualified.
-- Sample-based 48 kHz stereo Master/Aux A/Aux B routing, gain/mute/sends and
-  explicitly started Windows local monitoring. Master peak levels are measured;
-  per-input peak metering is unavailable. Startup audio is off.
+- Sample-based 48 kHz stereo routing across nine buses (Master, A–G, Headphones) with
+  per-input sends, gain/mute/solo and explicitly started Windows local monitoring.
+  Master peak levels are measured; per-input and per-bus metering is unavailable.
+  Startup audio is off.
 - Input grid, multiview, native Program window, explicit extended-display routing,
   playlists, keyboard controls and editable layout.
 - Versioned project save/load, validated atomic replacement, journal and rotating

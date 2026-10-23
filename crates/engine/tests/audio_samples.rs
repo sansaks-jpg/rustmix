@@ -20,7 +20,7 @@ fn close(a: f32, b: f32) {
 #[test]
 fn impulses_route_to_independent_buses_without_crosstalk() {
     let mut source = SourceConfig::new(InputId(1));
-    source.sends = [false, true, false];
+    source.sends = [false, true, false, false, false, false, false, false, false];
     let mut mixer = mixer(vec![source]);
     let mut samples = [[0.0; 2]; BLOCK_FRAMES];
     samples[0] = [0.5, -0.25];
@@ -70,7 +70,7 @@ fn parameter_changes_ramp_mute_pan_and_routing_without_a_step() {
     assert_eq!(output.buses[0][RAMP_FRAMES - 1], [0.0; 2]);
     config.sources[0].muted = false;
     config.sources[0].pan = -1.0;
-    config.sources[0].sends = [false, false, true];
+    config.sources[0].sends = [false, false, true, false, false, false, false, false, false];
     mixer.apply_config(&config).unwrap();
     mixer.render(&batch, &mut output);
     assert_eq!(output.buses[2][BLOCK_FRAMES - 1], [0.5, 0.0]);
@@ -80,14 +80,14 @@ fn parameter_changes_ramp_mute_pan_and_routing_without_a_step() {
 #[test]
 fn two_guest_returns_exclude_their_own_source_and_respect_independent_bus_sends() {
     let mut first = SourceConfig::new(InputId(1));
-    first.sends = [true, true, false];
+    first.sends = [true, true, false, false, false, false, false, false, false];
     let mut second = SourceConfig::new(InputId(2));
-    second.sends = [true, true, false];
+    second.sends = [true, true, false, false, false, false, false, false, false];
     let config = MixerConfig {
         sources: vec![first, second],
         guest_returns: [
             Some(GuestReturn {
-                bus: AudioBus::AuxA,
+                bus: AudioBus::BusA,
                 exclude: InputId(1),
             }),
             Some(GuestReturn {
@@ -124,7 +124,7 @@ fn solo_mute_clipping_and_underrun_have_explicit_sample_results_and_metrics() {
     first.solo = true;
     first.gain_db = 12.0;
     let mut second = SourceConfig::new(InputId(2));
-    second.sends = [false, true, false];
+    second.sends = [false, true, false, false, false, false, false, false, false];
     let mut mixer = mixer(vec![first, second]);
     let block = block([0.75, -0.75]);
     let sources = [SourceBlock {

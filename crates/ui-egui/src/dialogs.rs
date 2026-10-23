@@ -1057,11 +1057,12 @@ impl RustMixApp {
                                     .text("Gain (dB)"),
                             );
                             ui.horizontal(|ui| {
-                                for (route, label) in draft
-                                    .audio
-                                    .sends
-                                    .iter_mut()
-                                    .zip(["MASTER", "BUS A", "BUS B"])
+                                const ROUTE_LABELS: [&str; rustmix_engine::audio_engine::BUS_COUNT] =
+                                    [
+                                        "MASTER", "BUS A", "BUS B", "BUS C", "BUS D", "BUS E",
+                                        "BUS F", "BUS G", "HEADPHONES",
+                                    ];
+                                for (route, label) in draft.audio.sends.iter_mut().zip(ROUTE_LABELS)
                                 {
                                     ui.checkbox(route, label);
                                 }

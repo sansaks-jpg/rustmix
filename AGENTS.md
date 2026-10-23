@@ -11,6 +11,42 @@
 > **Primary target:** Windows 10/11 x86-64. Portability to Linux/macOS is architectural, not an
 > excuse to delay a reliable Windows product.
 
+## 0.0 Current repository state (verified 2026-10-24)
+
+Section 3's layout is the *target* architecture. The workspace that actually exists today has
+four members; do not reference other crates from §3 in build instructions:
+
+| Member | Crate | Role |
+|---|---|---|
+| `crates/engine` | `rustmix-engine` | Headless core: validated state/commands, rational timing, CPU rendering, audio sample mixing. Dependencies: serde, serde_json, thiserror, tempfile only. |
+| `crates/platform` | `rustmix-platform` | Windows Media Foundation / WASAPI / display FFI (`windows` 0.62, `cpal` 0.18, `rtrb` ring buffers). The only crate permitting `unsafe` — it overrides the workspace lints with its own table (`unsafe_code = "deny"`, audited allow sites). |
+| `crates/ui-egui` | `rustmix-ui` | egui/eframe 0.35 + egui_dock operator UI; depends on engine + platform; dispatches typed commands only. |
+| `apps/rustmix` | `rustmix` | Thin binary launcher (`test = false`). |
+
+- **Toolchain:** edition 2024, MSRV 1.94 (verified with 1.94.1 on Windows). Workspace lints
+  forbid `unsafe_code` (except platform) and deny `unwrap_used`, `expect_used`, `panic`,
+  `todo`, `unimplemented`, `indexing_slicing` — runtime code must compile under them.
+- **Verified developer commands** (owner-authorized local checks; see README "Windows build
+  and verification"): `cargo fmt --all -- --check`; `cargo clippy --workspace --all-targets
+  --locked -- -D warnings`; `cargo test --workspace --all-targets --locked`;
+  `cargo build -p rustmix --locked`.
+- **Test fixture gotcha:** platform decoder tests require the generated original MP4 fixture
+  in `artifacts/`, produced by `scripts/ci-video-fixture.ps1` (downloads a hash-pinned ffmpeg
+  build as an external test oracle only — never a runtime dependency). Without it those tests
+  cannot run; do not report them as passing.
+- **CI gotcha:** `.github/workflows/windows.yml` compiles and packages the unsigned portable
+  `.exe` **without running automated tests**; testing is local/manual per owner instruction.
+  Helper scripts live in `scripts/` (`check-repository.ps1`, `check-reference-coverage.ps1`,
+  `ci-native-smoke.ps1`, `collect-notices.ps1`); there is no `xtask` yet.
+- **Docs conventions:** `docs/testing.md` opens with the owner-instruction ledger — newer
+  UI-0XX entries supersede older ones (UI-036 currently supersedes UI-035's build
+  restriction). The `docs/ui0XX-*.md` files are per-session verification ledgers, not specs.
+  Newest ADR: `docs/adr/0036-core-cpu-gpu-audit.md`. Before touching sensitive areas also
+  read `docs/gaps.md`, `docs/architecture.md`, and `docs/feature-matrix.md`.
+- **Working tree:** uncommitted in-progress modifications on `main` are normal in this repo;
+  the owner branch policy requires preserving them — never discard, reset, or stash-drop
+  existing work.
+
 ## 0. Authority, mission, and definition of success
 
 This file is the highest-priority **repository instruction** for agents. The instruction hierarchy
