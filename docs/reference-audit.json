@@ -1,2138 +1,2138 @@
 {
-  "schema": 2,
-  "date": "2026-10-19",
-  "task": "UI-012-reference-audit",
-  "all_features_match": false,
-  "scope": "Evidence-classified capability audit, not production or exact protocol/pixel parity",
-  "reference": {
-    "root": "C:\\Users\\WORKPLUS\\Documents\\WEB\\rustmix-reference\\vmix",
-    "version": "29.0.0.48 (pinned study, not a current-version claim)",
-    "feature_map_sha256": "b3e385517b978b93748672c3edb8151bafd18b13c67b1857848487fcebb60d4b",
-    "catalogue_sha256": "379cfd07783db092af185e9b0ea9c655e1a4edcee1a24624372d1fbe0797dc50",
-    "observed_shortcut_functions": 777,
-    "protocol_compatible_functions": 0,
-    "protocol_reason": "No HTTP/XML/TCP/WebSocket endpoint exists; the 777 shortcut names are not a wire-function denominator",
-    "function_names_sha256": "804ae58059d823e96dffef86c9c2053c6fad5f746ccf5228ecc89643af4a99da",
-    "catalogue_kind": "Shortcut metadata vocabulary; not the accepted HTTP vocabulary (trace-log T11)",
-    "parsed_unique_shortcut_function_names": 777,
-    "wire_contract_qualified": false
+ "schema": 2,
+ "date": "2026-10-19",
+ "task": "UI-012-reference-audit",
+ "all_features_match": false,
+ "scope": "Evidence-classified capability audit, not production or exact protocol/pixel parity",
+ "reference": {
+  "root": "C:\\Users\\WORKPLUS\\Documents\\WEB\\rustmix-reference\\vmix",
+  "version": "29.0.0.48 (pinned study, not a current-version claim)",
+  "feature_map_sha256": "b3e385517b978b93748672c3edb8151bafd18b13c67b1857848487fcebb60d4b",
+  "catalogue_sha256": "379cfd07783db092af185e9b0ea9c655e1a4edcee1a24624372d1fbe0797dc50",
+  "observed_shortcut_functions": 777,
+  "protocol_compatible_functions": 0,
+  "protocol_reason": "No HTTP/XML/TCP/WebSocket endpoint exists; the 777 shortcut names are not a wire-function denominator",
+  "function_names_sha256": "804ae58059d823e96dffef86c9c2053c6fad5f746ccf5228ecc89643af4a99da",
+  "catalogue_kind": "Shortcut metadata vocabulary; not the accepted HTTP vocabulary (trace-log T11)",
+  "parsed_unique_shortcut_function_names": 777,
+  "wire_contract_qualified": false
+ },
+ "runtime_evidence": {
+  "run": "https://github.com/sansaks-jpg/rustmix/actions/runs/39111788801",
+  "code": "a01f498",
+  "tests_passed": 75,
+  "tests_failed": 0,
+  "platform": "Windows Server 20348, Rust 1.94.1 MSVC x64, hosted Microsoft Hyper-V Video",
+  "hardware_qualified": false,
+  "cadence_qualified": false,
+  "cadence_actual_fps": [
+   28.57066276698104,
+   38.74915311909491,
+   34.456512844761505
+  ],
+  "cadence_target_fps": [
+   50,
+   59.94005994005994,
+   60
+  ],
+  "raster": [
+   640,
+   360
+  ],
+  "native_processes_passed": 5,
+  "actual_screenshots": 20,
+  "native_evidence_artifact": 12130639014,
+  "windows_package_artifact": 12130624284,
+  "cadence_skipped_frames": [
+   177,
+   175,
+   212
+  ],
+  "reviewed_captures": [
+   "input-basic.png",
+   "workspace-1600.png",
+   "input-reopened.png",
+   "input-playlist.png",
+   "input-keyboard.png"
+  ],
+  "save_reopen_byte_identical": true,
+  "native_stderr_empty": true
+ },
+ "areas": [
+  {
+   "id": 1,
+   "name": "Preview / Program",
+   "status": "experimental",
+   "conformance": "partial",
+   "source_evidence": [
+    "crates/engine/src/lib.rs"
+   ],
+   "test_files": [
+    "crates/engine/tests/workflow.rs"
+   ],
+   "scope": "Independent Preview, Program, explicit Cut/Take and source exchange",
+   "gap": "Synthetic/PNG reference raster only; no qualified broadcast output"
   },
-  "runtime_evidence": {
-    "run": "https://github.com/sansaks-jpg/rustmix/actions/runs/39111788801",
-    "code": "a01f498",
-    "tests_passed": 75,
-    "tests_failed": 0,
-    "platform": "Windows Server 20348, Rust 1.94.1 MSVC x64, hosted Microsoft Hyper-V Video",
-    "hardware_qualified": false,
-    "cadence_qualified": false,
-    "cadence_actual_fps": [
-      28.57066276698104,
-      38.74915311909491,
-      34.456512844761505
-    ],
-    "cadence_target_fps": [
-      50,
-      59.94005994005994,
-      60
-    ],
-    "raster": [
-      640,
-      360
-    ],
-    "native_processes_passed": 5,
-    "actual_screenshots": 20,
-    "native_evidence_artifact": 12130639014,
-    "windows_package_artifact": 12130624284,
-    "cadence_skipped_frames": [
-      177,
-      175,
-      212
-    ],
-    "reviewed_captures": [
-      "input-basic.png",
-      "workspace-1600.png",
-      "input-reopened.png",
-      "input-playlist.png",
-      "input-keyboard.png"
-    ],
-    "save_reopen_byte_identical": true,
-    "native_stderr_empty": true
+  {
+   "id": 2,
+   "name": "Transitions",
+   "status": "experimental",
+   "conformance": "partial",
+   "source_evidence": [
+    "crates/engine/src/render.rs"
+   ],
+   "test_files": [
+    "crates/engine/tests/transitions.rs"
+   ],
+   "scope": "Four independent saved slots and 12 CPU effects",
+   "gap": "8 observed effects and stingers absent; no vendor-pixel parity or GPU parity"
   },
-  "areas": [
-    {
-      "id": 1,
-      "name": "Preview / Program",
-      "status": "experimental",
-      "conformance": "partial",
-      "source_evidence": [
-        "crates/engine/src/lib.rs"
-      ],
-      "test_files": [
-        "crates/engine/tests/workflow.rs"
-      ],
-      "scope": "Independent Preview, Program, explicit Cut/Take and source exchange",
-      "gap": "Synthetic/PNG reference raster only; no qualified broadcast output"
-    },
-    {
-      "id": 2,
-      "name": "Transitions",
-      "status": "experimental",
-      "conformance": "partial",
-      "source_evidence": [
-        "crates/engine/src/render.rs"
-      ],
-      "test_files": [
-        "crates/engine/tests/transitions.rs"
-      ],
-      "scope": "Four independent saved slots and 12 CPU effects",
-      "gap": "8 observed effects and stingers absent; no vendor-pixel parity or GPU parity"
-    },
-    {
-      "id": 3,
-      "name": "Inputs",
-      "status": "experimental",
-      "conformance": "partial",
-      "source_evidence": [
-        "crates/ui-egui/src/media.rs"
-      ],
-      "test_files": [
-        "crates/engine/tests/inputs.rs"
-      ],
-      "scope": "Seven own generators plus bounded external PNG",
-      "gap": "40 observed wire types are not 40 working backends; video/capture/network/browser absent"
-    },
-    {
-      "id": 4,
-      "name": "Overlays",
-      "status": "experimental",
-      "conformance": "partial",
-      "source_evidence": [
-        "crates/engine/src/lib.rs"
-      ],
-      "test_files": [
-        "crates/ui-egui/src/smoke.rs"
-      ],
-      "scope": "Four Program title panels and staged text/position edits",
-      "gap": "Title/enabled/position only; misleading advanced scratch controls removed; no source overlays/stingers, per-channel effects/timing/alpha/transforms."
-    },
-    {
-      "id": 5,
-      "name": "Multiview",
-      "status": "experimental",
-      "conformance": "partial",
-      "source_evidence": [
-        "crates/ui-egui/src/panels.rs"
-      ],
-      "test_files": [
-        "crates/ui-egui/src/smoke.rs"
-      ],
-      "scope": "In-app Split and full source grid layouts",
-      "gap": "No two independent multiview outputs or all five observed layout contracts"
-    },
-    {
-      "id": 6,
-      "name": "Titles / GT graphics",
-      "status": "experimental",
-      "conformance": "partial",
-      "source_evidence": [
-        "crates/ui-egui/src/panels.rs"
-      ],
-      "test_files": [
-        "crates/ui-egui/src/smoke.rs"
-      ],
-      "scope": "Original title/subtitle panels and generated graphics",
-      "gap": "No GT/XAML compatibility, animation templates, ticker or editable production clock"
-    },
-    {
-      "id": 7,
-      "name": "Audio mixer / matrix",
-      "status": "stub",
-      "conformance": "partial",
-      "source_evidence": [
-        "crates/engine/src/audio.rs"
-      ],
-      "test_files": [
-        "crates/engine/tests/workflow.rs"
-      ],
-      "scope": "Gain/mute/solo and Master/A/B meter-control simulation",
-      "gap": "No sample blocks, device audio, nine destinations, DSP, mix-minus or AV sync"
-    },
-    {
-      "id": 8,
-      "name": "Routing / external outputs",
-      "status": "experimental",
-      "conformance": "partial",
-      "source_evidence": [
-        "crates/engine/src/output.rs",
-        "crates/engine/src/lib.rs",
-        "crates/ui-egui/src/dialogs.rs"
-      ],
-      "test_files": [
-        "crates/engine/tests/outputs.rs",
-        "crates/ui-egui/src/smoke.rs"
-      ],
-      "scope": "Four source/configuration records, atomic complete-slot command, staged editor and schema-6 persistence; source review only, runtime acceptance pending",
-      "gap": "No external frame sink, device enumeration, SDI, virtual camera, NDI, OMT or SRT backend; no live output or protocol/hardware qualification"
-    },
-    {
-      "id": 9,
-      "name": "Streaming",
-      "status": "not_started",
-      "conformance": "missing",
-      "source_evidence": [
-        "crates/ui-egui/src/lib.rs"
-      ],
-      "test_files": [
-        "crates/ui-egui/src/smoke.rs"
-      ],
-      "scope": "Unavailable starts remain gated",
-      "gap": "No encoder, RTMP/RTMPS transport, profiles, reconnect or five destinations"
-    },
-    {
-      "id": 10,
-      "name": "Recording",
-      "status": "not_started",
-      "conformance": "missing",
-      "source_evidence": [
-        "crates/ui-egui/src/lib.rs"
-      ],
-      "test_files": [
-        "crates/ui-egui/src/smoke.rs"
-      ],
-      "scope": "Unavailable starts remain gated",
-      "gap": "No Program recording, independent WAV, splitting, recovery or two recording outputs"
-    },
-    {
-      "id": 11,
-      "name": "Replay",
-      "status": "not_started",
-      "conformance": "missing",
-      "source_evidence": [
-        "Cargo.toml"
-      ],
-      "test_files": [],
-      "scope": "None",
-      "gap": "No replay storage, camera channels, events, marks, speed control or exports"
-    },
-    {
-      "id": 12,
-      "name": "PTZ camera control",
-      "status": "not_started",
-      "conformance": "missing",
-      "source_evidence": [
-        "Cargo.toml"
-      ],
-      "test_files": [],
-      "scope": "None",
-      "gap": "No VISCA/vendor/UVC PTZ provider, movement or presets"
-    },
-    {
-      "id": 13,
-      "name": "Shortcuts / MIDI / surfaces",
-      "status": "experimental",
-      "conformance": "partial",
-      "source_evidence": [
-        "crates/engine/src/shortcuts.rs"
-      ],
-      "test_files": [
-        "crates/ui-egui/src/smoke.rs"
-      ],
-      "scope": "Saved keyboard action/key/modifier mappings with validation and repeat/focus guards",
-      "gap": "No MIDI, activators, controllers, voice or 19 input trigger events"
-    },
-    {
-      "id": 14,
-      "name": "Presets / sessions",
-      "status": "experimental",
-      "conformance": "partial",
-      "source_evidence": [
-        "crates/engine/src/persistence.rs"
-      ],
-      "test_files": [
-        "crates/engine/tests/inputs.rs"
-      ],
-      "scope": "Own schema6 with schema1-5 migration, atomic settings/saves, backups and checkpoints; new output migration tests prepared, not run",
-      "gap": "Previous hosted schema5 acceptance does not verify schema6; no .vmix interoperability, media packaging or power-loss qualification"
-    },
-    {
-      "id": 15,
-      "name": "Settings",
-      "status": "experimental",
-      "conformance": "partial",
-      "source_evidence": [
-        "crates/ui-egui/src/dialogs.rs"
-      ],
-      "test_files": [
-        "crates/ui-egui/src/smoke.rs"
-      ],
-      "scope": "Validated preferences, categories/theme/colors and one atomic name/preferences apply; unavailable scaffolds explicitly read-only",
-      "gap": "256 observed properties are not implemented; theme/color/display and advanced fields include unavailable/scaffold controls"
-    },
-    {
-      "id": 16,
-      "name": "HTTP / TCP / WebSocket API",
-      "status": "not_started",
-      "conformance": "missing",
-      "source_evidence": [
-        "Cargo.toml"
-      ],
-      "test_files": [],
-      "scope": "Headless typed Rust commands only",
-      "gap": "No HTTP listener, XML state document, public function dispatcher, TCP or WebSocket protocol"
-    },
-    {
-      "id": 17,
-      "name": "Scripting",
-      "status": "not_started",
-      "conformance": "missing",
-      "source_evidence": [
-        "Cargo.toml"
-      ],
-      "test_files": [],
-      "scope": "None",
-      "gap": "No scripts, timers, runtime sandbox or script permissions"
-    },
-    {
-      "id": 18,
-      "name": "Data sources",
-      "status": "not_started",
-      "conformance": "missing",
-      "source_evidence": [
-        "Cargo.toml"
-      ],
-      "test_files": [],
-      "scope": "None",
-      "gap": "No database/CSV/JSON/browser/social connector or live title binding"
-    },
-    {
-      "id": 19,
-      "name": "Browser inputs",
-      "status": "not_started",
-      "conformance": "missing",
-      "source_evidence": [
-        "Cargo.toml"
-      ],
-      "test_files": [],
-      "scope": "None",
-      "gap": "No embedded browser engine or texture/audio integration"
-    },
-    {
-      "id": 20,
-      "name": "Virtual sets",
-      "status": "not_started",
-      "conformance": "missing",
-      "source_evidence": [
-        "crates/engine/src/render.rs"
-      ],
-      "test_files": [],
-      "scope": "Procedural studio picture is a generator",
-      "gap": "Not a composited camera/talent/virtual-set workflow; no imported set assets"
-    },
-    {
-      "id": 21,
-      "name": "Video call / guests",
-      "status": "not_started",
-      "conformance": "missing",
-      "source_evidence": [
-        "Cargo.toml"
-      ],
-      "test_files": [],
-      "scope": "None",
-      "gap": "No WebRTC, guest sessions, consent workflow or mix-minus return"
-    },
-    {
-      "id": 22,
-      "name": "Voice control",
-      "status": "not_started",
-      "conformance": "missing",
-      "source_evidence": [
-        "Cargo.toml"
-      ],
-      "test_files": [],
-      "scope": "None",
-      "gap": "No speech engine, microphone source or confidence/test behavior"
-    },
-    {
-      "id": 23,
-      "name": "Tally lights",
-      "status": "not_started",
-      "conformance": "missing",
-      "source_evidence": [
-        "Cargo.toml"
-      ],
-      "test_files": [],
-      "scope": "None",
-      "gap": "No hardware/network tally backend or controller status"
-    },
-    {
-      "id": 24,
-      "name": "Statistics / diagnostics",
-      "status": "experimental",
-      "conformance": "partial",
-      "source_evidence": [
-        "crates/ui-egui/src/profile.rs"
-      ],
-      "test_files": [
-        "crates/ui-egui/src/program.rs"
-      ],
-      "scope": "Measured reference Program cadence, process memory and local status counters",
-      "gap": "Hosted cadence targets failed; no full media/QoS/GPU/AV/hardware diagnostics"
-    },
-    {
-      "id": 25,
-      "name": "Production clocks",
-      "status": "stub",
-      "conformance": "partial",
-      "source_evidence": [
-        "crates/engine/src/render.rs"
-      ],
-      "test_files": [
-        "crates/engine/tests/workflow.rs"
-      ],
-      "scope": "Fixed one-minute procedural countdown and independent source transports",
-      "gap": "No editable production clock/countdown engine or title countdown API"
-    },
-    {
-      "id": 26,
-      "name": "VST3 audio plugins",
-      "status": "not_started",
-      "conformance": "missing",
-      "source_evidence": [
-        "Cargo.toml"
-      ],
-      "test_files": [],
-      "scope": "None",
-      "gap": "No real audio/plugin hosting or license-reviewed VST3 adapter"
-    },
-    {
-      "id": 27,
-      "name": "NDI",
-      "status": "not_started",
-      "conformance": "missing",
-      "source_evidence": [
-        "Cargo.toml"
-      ],
-      "test_files": [],
-      "scope": "None",
-      "gap": "No SDK/runtime integration, sender, receiver or passthrough recording"
-    },
-    {
-      "id": 28,
-      "name": "OMT",
-      "status": "not_started",
-      "conformance": "missing",
-      "source_evidence": [
-        "Cargo.toml"
-      ],
-      "test_files": [],
-      "scope": "None",
-      "gap": "No protocol/runtime adapter, input or output"
-    },
-    {
-      "id": 29,
-      "name": "Color correction / LUT",
-      "status": "experimental",
-      "conformance": "partial",
-      "source_evidence": [
-        "crates/ui-egui/src/panels.rs"
-      ],
-      "test_files": [
-        "crates/ui-egui/src/smoke.rs"
-      ],
-      "scope": "Persisted lift/gain/saturation, mirror/sharpen, approximate chroma key and PIP",
-      "gap": "No full CC family, LUT/masks, ten-layer crop/rotation/animation graph or color-managed GPU pipeline"
-    },
-    {
-      "id": 30,
-      "name": "Social / cloud destinations",
-      "status": "not_started",
-      "conformance": "missing",
-      "source_evidence": [
-        "Cargo.toml"
-      ],
-      "test_files": [],
-      "scope": "None",
-      "gap": "No authenticated provider integration; no credentials requested or internet Program sent"
-    }
-  ],
-  "input_types": [
-    {
-      "name": "Video",
-      "status": "not_started",
-      "conformance": "missing",
-      "scope": "No corresponding working source backend",
-      "wire_compatible": false
-    },
-    {
-      "name": "VideoList",
-      "status": "not_started",
-      "conformance": "missing",
-      "scope": "No corresponding working source backend",
-      "wire_compatible": false
-    },
-    {
-      "name": "VideoLoop",
-      "status": "not_started",
-      "conformance": "missing",
-      "scope": "No corresponding working source backend",
-      "wire_compatible": false
-    },
-    {
-      "name": "Image",
-      "status": "experimental",
-      "conformance": "partial",
-      "scope": "External PNG only; no generic still-image format parity",
-      "wire_compatible": false
-    },
-    {
-      "name": "Photos",
-      "status": "not_started",
-      "conformance": "missing",
-      "scope": "No corresponding working source backend",
-      "wire_compatible": false
-    },
-    {
-      "name": "ImageSequence",
-      "status": "not_started",
-      "conformance": "missing",
-      "scope": "No corresponding working source backend",
-      "wire_compatible": false
-    },
-    {
-      "name": "AudioFile",
-      "status": "not_started",
-      "conformance": "missing",
-      "scope": "No corresponding working source backend",
-      "wire_compatible": false
-    },
-    {
-      "name": "Audio",
-      "status": "not_started",
-      "conformance": "missing",
-      "scope": "No corresponding working source backend",
-      "wire_compatible": false
-    },
-    {
-      "name": "DVD",
-      "status": "not_started",
-      "conformance": "missing",
-      "scope": "No corresponding working source backend",
-      "wire_compatible": false
-    },
-    {
-      "name": "PowerPoint",
-      "status": "not_started",
-      "conformance": "missing",
-      "scope": "No corresponding working source backend",
-      "wire_compatible": false
-    },
-    {
-      "name": "Flash",
-      "status": "not_started",
-      "conformance": "missing",
-      "scope": "No corresponding working source backend",
-      "wire_compatible": false
-    },
-    {
-      "name": "Xaml",
-      "status": "not_started",
-      "conformance": "missing",
-      "scope": "No corresponding working source backend",
-      "wire_compatible": false
-    },
-    {
-      "name": "Waveform",
-      "status": "not_started",
-      "conformance": "missing",
-      "scope": "No corresponding working source backend",
-      "wire_compatible": false
-    },
-    {
-      "name": "Capture",
-      "status": "not_started",
-      "conformance": "missing",
-      "scope": "No corresponding working source backend",
-      "wire_compatible": false
-    },
-    {
-      "name": "DesktopCapture",
-      "status": "not_started",
-      "conformance": "missing",
-      "scope": "No corresponding working source backend",
-      "wire_compatible": false
-    },
-    {
-      "name": "NDI",
-      "status": "not_started",
-      "conformance": "missing",
-      "scope": "No corresponding working source backend",
-      "wire_compatible": false
-    },
-    {
-      "name": "OMT",
-      "status": "not_started",
-      "conformance": "missing",
-      "scope": "No corresponding working source backend",
-      "wire_compatible": false
-    },
-    {
-      "name": "SRT",
-      "status": "not_started",
-      "conformance": "missing",
-      "scope": "No corresponding working source backend",
-      "wire_compatible": false
-    },
-    {
-      "name": "VLC",
-      "status": "not_started",
-      "conformance": "missing",
-      "scope": "No corresponding working source backend",
-      "wire_compatible": false
-    },
-    {
-      "name": "Stream",
-      "status": "not_started",
-      "conformance": "missing",
-      "scope": "No corresponding working source backend",
-      "wire_compatible": false
-    },
-    {
-      "name": "Zoom",
-      "status": "not_started",
-      "conformance": "missing",
-      "scope": "No corresponding working source backend",
-      "wire_compatible": false
-    },
-    {
-      "name": "VideoCall",
-      "status": "not_started",
-      "conformance": "missing",
-      "scope": "No corresponding working source backend",
-      "wire_compatible": false
-    },
-    {
-      "name": "Telestrator",
-      "status": "not_started",
-      "conformance": "missing",
-      "scope": "No corresponding working source backend",
-      "wire_compatible": false
-    },
-    {
-      "name": "Browser",
-      "status": "not_started",
-      "conformance": "missing",
-      "scope": "No corresponding working source backend",
-      "wire_compatible": false
-    },
-    {
-      "name": "Title",
-      "status": "experimental",
-      "conformance": "partial",
-      "scope": "Own Program title panels, not a general title/template input",
-      "wire_compatible": false
-    },
-    {
-      "name": "GT",
-      "status": "not_started",
-      "conformance": "missing",
-      "scope": "No corresponding working source backend",
-      "wire_compatible": false
-    },
-    {
-      "name": "Colour",
-      "status": "experimental",
-      "conformance": "partial",
-      "scope": "Own solid-color generator",
-      "wire_compatible": false
-    },
-    {
-      "name": "VirtualSet",
-      "status": "not_started",
-      "conformance": "missing",
-      "scope": "No corresponding working source backend",
-      "wire_compatible": false
-    },
-    {
-      "name": "Virtual",
-      "status": "not_started",
-      "conformance": "missing",
-      "scope": "No corresponding working source backend",
-      "wire_compatible": false
-    },
-    {
-      "name": "Mix",
-      "status": "not_started",
-      "conformance": "missing",
-      "scope": "No corresponding working source backend",
-      "wire_compatible": false
-    },
-    {
-      "name": "Output",
-      "status": "not_started",
-      "conformance": "missing",
-      "scope": "No corresponding working source backend",
-      "wire_compatible": false
-    },
-    {
-      "name": "Preview",
-      "status": "not_started",
-      "conformance": "missing",
-      "scope": "No corresponding working source backend",
-      "wire_compatible": false
-    },
-    {
-      "name": "Blank",
-      "status": "not_started",
-      "conformance": "missing",
-      "scope": "No corresponding working source backend",
-      "wire_compatible": false
-    },
-    {
-      "name": "Placeholder",
-      "status": "not_started",
-      "conformance": "missing",
-      "scope": "No corresponding working source backend",
-      "wire_compatible": false
-    },
-    {
-      "name": "Signal",
-      "status": "experimental",
-      "conformance": "partial",
-      "scope": "Own procedural color bars",
-      "wire_compatible": false
-    },
-    {
-      "name": "VideoDelay",
-      "status": "not_started",
-      "conformance": "missing",
-      "scope": "No corresponding working source backend",
-      "wire_compatible": false
-    },
-    {
-      "name": "ProductionClocks",
-      "status": "not_started",
-      "conformance": "missing",
-      "scope": "No corresponding working source backend",
-      "wire_compatible": false
-    },
-    {
-      "name": "Replay",
-      "status": "not_started",
-      "conformance": "missing",
-      "scope": "No corresponding working source backend",
-      "wire_compatible": false
-    },
-    {
-      "name": "ReplayPreview",
-      "status": "not_started",
-      "conformance": "missing",
-      "scope": "No corresponding working source backend",
-      "wire_compatible": false
-    },
-    {
-      "name": "ReplayOverlay",
-      "status": "not_started",
-      "conformance": "missing",
-      "scope": "No corresponding working source backend",
-      "wire_compatible": false
-    }
-  ],
-  "transitions": [
-    {
-      "name": "Fade",
-      "status": "experimental",
-      "conformance": "partial",
-      "engine_variant": "Fade",
-      "scope": "Own CPU algorithm with endpoint/direction tests; no cross-vendor pixel parity"
-    },
-    {
-      "name": "Zoom",
-      "status": "not_started",
-      "conformance": "missing",
-      "engine_variant": null,
-      "scope": "No implementation; must not alias to another effect"
-    },
-    {
-      "name": "Wipe",
-      "status": "experimental",
-      "conformance": "partial",
-      "engine_variant": "Wipe",
-      "scope": "Own CPU algorithm with endpoint/direction tests; no cross-vendor pixel parity"
-    },
-    {
-      "name": "Slide",
-      "status": "experimental",
-      "conformance": "partial",
-      "engine_variant": "Slide",
-      "scope": "Own CPU algorithm with endpoint/direction tests; no cross-vendor pixel parity"
-    },
-    {
-      "name": "Fly",
-      "status": "not_started",
-      "conformance": "missing",
-      "engine_variant": null,
-      "scope": "No implementation; must not alias to another effect"
-    },
-    {
-      "name": "CrossZoom",
-      "status": "not_started",
-      "conformance": "missing",
-      "engine_variant": null,
-      "scope": "No implementation; must not alias to another effect"
-    },
-    {
-      "name": "FlyRotate",
-      "status": "not_started",
-      "conformance": "missing",
-      "engine_variant": null,
-      "scope": "No implementation; must not alias to another effect"
-    },
-    {
-      "name": "Cube",
-      "status": "not_started",
-      "conformance": "missing",
-      "engine_variant": null,
-      "scope": "No implementation; must not alias to another effect"
-    },
-    {
-      "name": "CubeZoom",
-      "status": "not_started",
-      "conformance": "missing",
-      "engine_variant": null,
-      "scope": "No implementation; must not alias to another effect"
-    },
-    {
-      "name": "VerticalWipe",
-      "status": "experimental",
-      "conformance": "partial",
-      "engine_variant": "VerticalWipe",
-      "scope": "Own CPU algorithm with endpoint/direction tests; no cross-vendor pixel parity"
-    },
-    {
-      "name": "VerticalSlide",
-      "status": "experimental",
-      "conformance": "partial",
-      "engine_variant": "VerticalSlide",
-      "scope": "Own CPU algorithm with endpoint/direction tests; no cross-vendor pixel parity"
-    },
-    {
-      "name": "Merge",
-      "status": "not_started",
-      "conformance": "missing",
-      "engine_variant": null,
-      "scope": "No implementation; must not alias to another effect"
-    },
-    {
-      "name": "WipeReverse",
-      "status": "experimental",
-      "conformance": "partial",
-      "engine_variant": "WipeReverse",
-      "scope": "Own CPU algorithm with endpoint/direction tests; no cross-vendor pixel parity"
-    },
-    {
-      "name": "SlideReverse",
-      "status": "experimental",
-      "conformance": "partial",
-      "engine_variant": "SlideReverse",
-      "scope": "Own CPU algorithm with endpoint/direction tests; no cross-vendor pixel parity"
-    },
-    {
-      "name": "VerticalWipeReverse",
-      "status": "experimental",
-      "conformance": "partial",
-      "engine_variant": "VerticalWipeReverse",
-      "scope": "Own CPU algorithm with endpoint/direction tests; no cross-vendor pixel parity"
-    },
-    {
-      "name": "VerticalSlideReverse",
-      "status": "experimental",
-      "conformance": "partial",
-      "engine_variant": "VerticalSlideReverse",
-      "scope": "Own CPU algorithm with endpoint/direction tests; no cross-vendor pixel parity"
-    },
-    {
-      "name": "BarnDoor",
-      "status": "experimental",
-      "conformance": "partial",
-      "engine_variant": "BarnDoor",
-      "scope": "Own CPU algorithm with endpoint/direction tests; no cross-vendor pixel parity"
-    },
-    {
-      "name": "RollerDoor",
-      "status": "experimental",
-      "conformance": "partial",
-      "engine_variant": "RollerDoor",
-      "scope": "Own CPU algorithm with endpoint/direction tests; no cross-vendor pixel parity"
-    },
-    {
-      "name": "AlphaFade",
-      "status": "not_started",
-      "conformance": "missing",
-      "engine_variant": null,
-      "scope": "No implementation; must not alias to another effect"
-    },
-    {
-      "name": "Cut",
-      "status": "experimental",
-      "conformance": "partial",
-      "engine_variant": "Cut",
-      "scope": "Own CPU algorithm with endpoint/direction tests; no cross-vendor pixel parity"
-    }
-  ],
-  "overlay_channels": [
-    {
-      "channel": 1,
-      "kind": "standard",
-      "status": "experimental",
-      "conformance": "partial",
-      "scope": "Title-panel channel: 16-channel bank, Program render, UI, F-key and persistence are real; no source overlay, per-channel effects, timing or alpha"
-    },
-    {
-      "channel": 2,
-      "kind": "standard",
-      "status": "experimental",
-      "conformance": "partial",
-      "scope": "Title-panel channel: 16-channel bank, Program render, UI, F-key and persistence are real; no source overlay, per-channel effects, timing or alpha"
-    },
-    {
-      "channel": 3,
-      "kind": "standard",
-      "status": "experimental",
-      "conformance": "partial",
-      "scope": "Title-panel channel: 16-channel bank, Program render, UI, F-key and persistence are real; no source overlay, per-channel effects, timing or alpha"
-    },
-    {
-      "channel": 4,
-      "kind": "standard",
-      "status": "experimental",
-      "conformance": "partial",
-      "scope": "Title-panel channel: 16-channel bank, Program render, UI, F-key and persistence are real; no source overlay, per-channel effects, timing or alpha"
-    },
-    {
-      "channel": 5,
-      "kind": "standard",
-      "status": "experimental",
-      "conformance": "partial",
-      "scope": "Title-panel channel: 16-channel bank, Program render, UI, F-key and persistence are real; no source overlay, per-channel effects, timing or alpha"
-    },
-    {
-      "channel": 6,
-      "kind": "standard",
-      "status": "experimental",
-      "conformance": "partial",
-      "scope": "Title-panel channel: 16-channel bank, Program render, UI, F-key and persistence are real; no source overlay, per-channel effects, timing or alpha"
-    },
-    {
-      "channel": 7,
-      "kind": "standard",
-      "status": "experimental",
-      "conformance": "partial",
-      "scope": "Title-panel channel: 16-channel bank, Program render, UI, F-key and persistence are real; no source overlay, per-channel effects, timing or alpha"
-    },
-    {
-      "channel": 8,
-      "kind": "standard",
-      "status": "experimental",
-      "conformance": "partial",
-      "scope": "Title-panel channel: 16-channel bank, Program render, UI, F-key and persistence are real; no source overlay, per-channel effects, timing or alpha"
-    },
-    {
-      "channel": 9,
-      "kind": "stinger",
-      "status": "stub",
-      "conformance": "partial",
-      "scope": "Model, SetStinger/Trigger/Stop commands and cut-point Program/Preview exchange only; no stinger clip compositing, timing raster or effects"
-    },
-    {
-      "channel": 10,
-      "kind": "stinger",
-      "status": "stub",
-      "conformance": "partial",
-      "scope": "Model, SetStinger/Trigger/Stop commands and cut-point Program/Preview exchange only; no stinger clip compositing, timing raster or effects"
-    },
-    {
-      "channel": 11,
-      "kind": "stinger",
-      "status": "stub",
-      "conformance": "partial",
-      "scope": "Model, SetStinger/Trigger/Stop commands and cut-point Program/Preview exchange only; no stinger clip compositing, timing raster or effects"
-    },
-    {
-      "channel": 12,
-      "kind": "stinger",
-      "status": "stub",
-      "conformance": "partial",
-      "scope": "Model, SetStinger/Trigger/Stop commands and cut-point Program/Preview exchange only; no stinger clip compositing, timing raster or effects"
-    },
-    {
-      "channel": 13,
-      "kind": "stinger",
-      "status": "stub",
-      "conformance": "partial",
-      "scope": "Model, SetStinger/Trigger/Stop commands and cut-point Program/Preview exchange only; no stinger clip compositing, timing raster or effects"
-    },
-    {
-      "channel": 14,
-      "kind": "stinger",
-      "status": "stub",
-      "conformance": "partial",
-      "scope": "Model, SetStinger/Trigger/Stop commands and cut-point Program/Preview exchange only; no stinger clip compositing, timing raster or effects"
-    },
-    {
-      "channel": 15,
-      "kind": "stinger",
-      "status": "stub",
-      "conformance": "partial",
-      "scope": "Model, SetStinger/Trigger/Stop commands and cut-point Program/Preview exchange only; no stinger clip compositing, timing raster or effects"
-    },
-    {
-      "channel": 16,
-      "kind": "stinger",
-      "status": "stub",
-      "conformance": "partial",
-      "scope": "Model, SetStinger/Trigger/Stop commands and cut-point Program/Preview exchange only; no stinger clip compositing, timing raster or effects"
-    }
-  ],
-  "audio_destinations": [
-    {
-      "name": "Master",
-      "status": "stub",
-      "conformance": "partial",
-      "scope": "Control/meter simulation only; no samples or device sound"
-    },
-    {
-      "name": "Headphones",
-      "status": "not_started",
-      "conformance": "missing",
-      "scope": "No bus/device implementation"
-    },
-    {
-      "name": "A",
-      "status": "stub",
-      "conformance": "partial",
-      "scope": "Control/meter simulation only; no samples or device sound"
-    },
-    {
-      "name": "B",
-      "status": "stub",
-      "conformance": "partial",
-      "scope": "Control/meter simulation only; no samples or device sound"
-    },
-    {
-      "name": "C",
-      "status": "not_started",
-      "conformance": "missing",
-      "scope": "No bus/device implementation"
-    },
-    {
-      "name": "D",
-      "status": "not_started",
-      "conformance": "missing",
-      "scope": "No bus/device implementation"
-    },
-    {
-      "name": "E",
-      "status": "not_started",
-      "conformance": "missing",
-      "scope": "No bus/device implementation"
-    },
-    {
-      "name": "F",
-      "status": "not_started",
-      "conformance": "missing",
-      "scope": "No bus/device implementation"
-    },
-    {
-      "name": "G",
-      "status": "not_started",
-      "conformance": "missing",
-      "scope": "No bus/device implementation"
-    }
-  ],
-  "constraints": [
-    "Reference enums/catalogues prove an exposed name or contract, not a working source/encoder/plugin backend",
-    "Reference Rust crates are a domain/API study and explicitly declare unavailable vendor backends; they are not a proven broadcast engine",
-    "A green functional CI run does not make all reference features present or qualify performance",
-    "No proprietary assets, extracted binary code or unapproved runtime dependency is imported",
-    "Latest trace-log corrections override earlier reference summaries; shortcut names, accepted HTTP functions and state models are distinct evidence sets"
-  ],
-  "ui_workflows": [
-    {
-      "id": "basic",
-      "name": "Basic / Advanced presentation",
-      "status": "experimental",
-      "conformance": "partial",
-      "scope": "Independent persisted UI mode; Basic retains both monitors, Quick Play, input selection/cut/overlays 1-4, Add Input, audio mixer and lock. Does not change Program or multiview choice.",
-      "gap": "Hosted widget/native Basic correction passed; overlays/audio/inputs retain the general prototype limitations. Global-mode restore has source coverage only; native save/reopen verifies project configuration. The existing lock suppresses production keys; a complete pointer/layout lock contract is unverified."
-    },
-    {
-      "id": "playlist",
-      "name": "Named input playlist",
-      "status": "experimental",
-      "conformance": "partial",
-      "scope": "1-16 saved lists, at most 128 items, independent effects/hold times, reorder, loop/manual/selected start/clear-on-start, start/stop/next/previous and offline alarms.",
-      "gap": "Explicit synthetic/PNG holds only; no file-duration inference, video end events, pause/seek or media playback engine."
-    },
-    {
-      "id": "shortcuts",
-      "name": "Keyboard bindings / palette",
-      "status": "experimental",
-      "conformance": "partial",
-      "scope": "Validated persisted logical key/modifier/action mappings, focus/repeat guards and quick action palette.",
-      "gap": "At most 64 bindings and the implemented engine action subset; no 777-function dispatcher, MIDI or control surfaces."
-    },
-    {
-      "id": "slots",
-      "name": "Four transition slots",
-      "status": "experimental",
-      "conformance": "partial",
-      "scope": "Each saved slot has a real CPU effect and duration; in-flight transition pins its configuration.",
-      "gap": "12 of 20 observed effects; no stingers/GPU equivalence or vendor-pixel parity."
-    },
-    {
-      "id": "tbar",
-      "name": "Manual T-bar",
-      "status": "experimental",
-      "conformance": "partial",
-      "scope": "First slot selects manual effect/duration; gesture pins effect/duration/start, reverses and commits endpoint once.",
-      "gap": "UI-013 regression pending; CPU raster only, no hardware controller qualification."
-    },
-    {
-      "id": "properties",
-      "name": "Input Settings transactions",
-      "status": "experimental",
-      "conformance": "partial",
-      "scope": "Staged persisted PNG/generator effects, Cancel discard, bounded loading/relink, duplicate and source lifecycle.",
-      "gap": "No ten-layer transform/crop/rotation animation graph, full color tools or real video/device properties."
-    },
-    {
-      "id": "categories",
-      "name": "Input category filter",
-      "status": "experimental",
-      "conformance": "partial",
-      "scope": "Schema4 stable per-input category assignment, six standard plus sixteen editable custom definitions, context-menu assignment and real category filters.",
-      "gap": "UI-013 hosted acceptance pending; no vendor pixel/protocol parity claim."
-    },
-    {
-      "id": "search",
-      "name": "Input search",
-      "status": "experimental",
-      "conformance": "partial",
-      "scope": "Staged Input Search dialog with OK/Cancel, case-insensitive title/type/number filtering and no implicit switching.",
-      "gap": "UI-013 hosted acceptance pending; at most48 query characters, no remote search protocol."
-    },
-    {
-      "id": "theme",
-      "name": "Theme and Preview/Program colors",
-      "status": "experimental",
-      "conformance": "partial",
-      "scope": "Original persisted Dark/Light appearance and RGB Preview/Program roles; colors reach monitor headers and source selection.",
-      "gap": "UI-013 hosted acceptance pending; operator/media cards retain dark surfaces, vendor theme list/pixel parity and physical DPI are unqualified."
-    },
-    {
-      "id": "fullscreen",
-      "name": "Fullscreen Program outputs",
-      "status": "stub",
-      "conformance": "partial",
-      "scope": "Fullscreen expands the application window; routed-output menu explicitly says unavailable.",
-      "gap": "No independent Program-only monitor window, two routed fullscreen outputs, display selection or hotplug handling."
-    },
-    {
-      "id": "audio_panel",
-      "name": "Audio Mixer pane toggle",
-      "status": "experimental",
-      "conformance": "partial",
-      "scope": "Actual Audio Mixer hide/show with complete previous dock restoration; saves retain the complete layout.",
-      "gap": "UI-013 hosted acceptance pending; changes to the temporary hidden layout are not persisted; no physical monitoring/audio backend."
-    },
-    {
-      "id": "settings",
-      "name": "Settings categories and fields",
-      "status": "experimental",
-      "conformance": "partial",
-      "scope": "Atomic name/preferences apply, staged categories/theme/keys, explicit read-only unavailable display/output scaffolds.",
-      "gap": "UI-013 hosted acceptance pending. Most of256 declared reference properties have no backend and cannot be configured."
-    }
-  ],
-  "shortcut_function_inventory": {
-    "status": "experimental",
-    "conformance": "partial",
-    "scope": "777 observed shortcut identifiers; configurable RustMix bindings implement a limited typed-action subset. T11 proves this vocabulary differs from HTTP; it is not a 777-function API compatibility target.",
-    "groups": [
-      {
-        "name": "Layer / position / scale / crop / effects (per-input)",
-        "functions": [
-          "SetLayer",
-          "SetLayerAnimated",
-          "LayerOnOff",
-          "LayerOn",
-          "LayerOff",
-          "SetLayer1Zoom",
-          "SetLayer1PanX",
-          "SetLayer1PanY",
-          "SetLayer1X",
-          "SetLayer1Y",
-          "SetLayer1Width",
-          "SetLayer1Height",
-          "SetLayer1Rectangle",
-          "SetLayer1CropX1",
-          "SetLayer1CropY1",
-          "SetLayer1CropX2",
-          "SetLayer1CropY2",
-          "SetLayer1Crop",
-          "SetLayer2Zoom",
-          "SetLayer2PanX",
-          "SetLayer2PanY",
-          "SetLayer2X",
-          "SetLayer2Y",
-          "SetLayer2Width",
-          "SetLayer2Height",
-          "SetLayer2Rectangle",
-          "SetLayer2CropX1",
-          "SetLayer2CropY1",
-          "SetLayer2CropX2",
-          "SetLayer2CropY2",
-          "SetLayer2Crop",
-          "SetLayer3Zoom",
-          "SetLayer3PanX",
-          "SetLayer3PanY",
-          "SetLayer3X",
-          "SetLayer3Y",
-          "SetLayer3Width",
-          "SetLayer3Height",
-          "SetLayer3Rectangle",
-          "SetLayer3CropX1",
-          "SetLayer3CropY1",
-          "SetLayer3CropX2",
-          "SetLayer3CropY2",
-          "SetLayer3Crop",
-          "SetLayer4Zoom",
-          "SetLayer4PanX",
-          "SetLayer4PanY",
-          "SetLayer4X",
-          "SetLayer4Y",
-          "SetLayer4Width",
-          "SetLayer4Height",
-          "SetLayer4Rectangle",
-          "SetLayer4CropX1",
-          "SetLayer4CropY1",
-          "SetLayer4CropX2",
-          "SetLayer4CropY2",
-          "SetLayer4Crop",
-          "SetLayer5Zoom",
-          "SetLayer5PanX",
-          "SetLayer5PanY",
-          "SetLayer5X",
-          "SetLayer5Y",
-          "SetLayer5Width",
-          "SetLayer5Height",
-          "SetLayer5Rectangle",
-          "SetLayer5CropX1",
-          "SetLayer5CropY1",
-          "SetLayer5CropX2",
-          "SetLayer5CropY2",
-          "SetLayer5Crop",
-          "SetLayer6Zoom",
-          "SetLayer6PanX",
-          "SetLayer6PanY",
-          "SetLayer6X",
-          "SetLayer6Y",
-          "SetLayer6Width",
-          "SetLayer6Height",
-          "SetLayer6Rectangle",
-          "SetLayer6CropX1",
-          "SetLayer6CropY1",
-          "SetLayer6CropX2",
-          "SetLayer6CropY2",
-          "SetLayer6Crop",
-          "SetLayer7Zoom",
-          "SetLayer7PanX",
-          "SetLayer7PanY",
-          "SetLayer7X",
-          "SetLayer7Y",
-          "SetLayer7Width",
-          "SetLayer7Height",
-          "SetLayer7Rectangle",
-          "SetLayer7CropX1",
-          "SetLayer7CropY1",
-          "SetLayer7CropX2",
-          "SetLayer7CropY2",
-          "SetLayer7Crop",
-          "SetLayer8Zoom",
-          "SetLayer8PanX",
-          "SetLayer8PanY",
-          "SetLayer8X",
-          "SetLayer8Y",
-          "SetLayer8Width",
-          "SetLayer8Height",
-          "SetLayer8Rectangle",
-          "SetLayer8CropX1",
-          "SetLayer8CropY1",
-          "SetLayer8CropX2",
-          "SetLayer8CropY2",
-          "SetLayer8Crop",
-          "SetLayer9Zoom",
-          "SetLayer9PanX",
-          "SetLayer9PanY",
-          "SetLayer9X",
-          "SetLayer9Y",
-          "SetLayer9Width",
-          "SetLayer9Height",
-          "SetLayer9Rectangle",
-          "SetLayer9CropX1",
-          "SetLayer9CropY1",
-          "SetLayer9CropX2",
-          "SetLayer9CropY2",
-          "SetLayer9Crop",
-          "SetLayer10Zoom",
-          "SetLayer10PanX",
-          "SetLayer10PanY",
-          "SetLayer10X",
-          "SetLayer10Y",
-          "SetLayer10Width",
-          "SetLayer10Height",
-          "SetLayer10Rectangle",
-          "SetLayer10CropX1",
-          "SetLayer10CropY1",
-          "SetLayer10CropX2",
-          "SetLayer10CropY2",
-          "SetLayer10Crop",
-          "SetLayerDynamicZoom",
-          "SetLayerDynamicPanX",
-          "SetLayerDynamicPanY",
-          "SetLayerDynamicX",
-          "SetLayerDynamicY",
-          "SetLayerDynamicWidth",
-          "SetLayerDynamicHeight",
-          "SetLayerDynamicRectangle",
-          "SetLayerDynamicCropX1",
-          "SetLayerDynamicCropY1",
-          "SetLayerDynamicCropX2",
-          "SetLayerDynamicCropY2",
-          "SetLayerDynamicCrop"
-        ],
-        "declared_count": 148
-      },
-      {
-        "name": "Transition / stinger",
-        "functions": [
-          "FadeToBlack",
-          "Transition1",
-          "Transition2",
-          "Transition3",
-          "Transition4",
-          "Stinger1",
-          "Stinger2",
-          "Stinger3",
-          "Stinger4",
-          "Stinger5",
-          "Stinger6",
-          "Stinger7",
-          "Stinger8",
-          "SetStingerGTInput1",
-          "SetStingerGTInput2",
-          "SetStingerGTInput3",
-          "SetStingerGTInput4",
-          "SetStingerGTInput5",
-          "SetStingerGTInput6",
-          "SetStingerGTInput7",
-          "SetStingerGTInput8",
-          "CutDirect",
-          "SetTransitionEffect1",
-          "SetTransitionEffect2",
-          "SetTransitionEffect3",
-          "SetTransitionEffect4",
-          "SetTransitionDuration1",
-          "SetTransitionDuration2",
-          "SetTransitionDuration3",
-          "SetTransitionDuration4"
-        ],
-        "declared_count": 30
-      },
-      {
-        "name": "Preview / program routing",
-        "functions": [
-          "PreviewInputNext",
-          "PreviewInputPrevious",
-          "PreviewInput",
-          "ActiveInput",
-          "PreviewOverlayInput1",
-          "PreviewOverlayInput2",
-          "PreviewOverlayInput3",
-          "PreviewOverlayInput4",
-          "PreviewOverlayInput5",
-          "PreviewOverlayInput6",
-          "PreviewOverlayInput7",
-          "PreviewOverlayInput8"
-        ],
-        "declared_count": 12
-      },
-      {
-        "name": "Overlay channels",
-        "functions": [
-          "OverlayInput1",
-          "OverlayInput1Off",
-          "OverlayInput1In",
-          "OverlayInput1Out",
-          "OverlayInput1Zoom",
-          "OverlayInput1Last",
-          "OverlayInput2",
-          "OverlayInput2Off",
-          "OverlayInput2In",
-          "OverlayInput2Out",
-          "OverlayInput2Zoom",
-          "OverlayInput2Last",
-          "OverlayInput3",
-          "OverlayInput3Off",
-          "OverlayInput3In",
-          "OverlayInput3Out",
-          "OverlayInput3Zoom",
-          "OverlayInput3Last",
-          "OverlayInput4",
-          "OverlayInput4Off",
-          "OverlayInput4In",
-          "OverlayInput4Out",
-          "OverlayInput4Zoom",
-          "OverlayInput4Last",
-          "OverlayInput5",
-          "OverlayInput5Off",
-          "OverlayInput5In",
-          "OverlayInput5Out",
-          "OverlayInput5Zoom",
-          "OverlayInput5Last",
-          "OverlayInput6",
-          "OverlayInput6Off",
-          "OverlayInput6In",
-          "OverlayInput6Out",
-          "OverlayInput6Zoom",
-          "OverlayInput6Last",
-          "OverlayInput7",
-          "OverlayInput7Off",
-          "OverlayInput7In",
-          "OverlayInput7Out",
-          "OverlayInput7Zoom",
-          "OverlayInput7Last",
-          "OverlayInput8",
-          "OverlayInput8Off",
-          "OverlayInput8In",
-          "OverlayInput8Out",
-          "OverlayInput8Zoom",
-          "OverlayInput8Last",
-          "OverlayInputAllOff"
-        ],
-        "declared_count": 49
-      },
-      {
-        "name": "Replay",
-        "functions": [
-          "ReplayStartRecording",
-          "ReplayStopRecording",
-          "ReplayStartStopRecording",
-          "ReplayMarkIn",
-          "ReplayMarkInLive",
-          "ReplayMarkInRecorded",
-          "ReplayMarkOut",
-          "ReplayMarkInOut",
-          "ReplayMarkInOutLive",
-          "ReplayMarkInOutRecorded",
-          "ReplayMarkInOutLiveFuture",
-          "ReplayMarkInRecordedNow",
-          "ReplayMarkCancel",
-          "ReplayToggleQuadMode",
-          "ReplayQuadModeOn",
-          "ReplayQuadModeOff",
-          "ReplaySelectChannelAB",
-          "ReplaySelectChannelA",
-          "ReplaySelectChannelB",
-          "ReplaySwapChannels",
-          "ReplaySetChannelAToBTimecode",
-          "ReplaySetChannelBToATimecode",
-          "ReplaySetChannelAToBTimecodeAndCamera",
-          "ReplaySetChannelBToATimecodeAndCamera",
-          "ReplayACamera1",
-          "ReplayACamera2",
-          "ReplayACamera3",
-          "ReplayACamera4",
-          "ReplayACamera5",
-          "ReplayACamera6",
-          "ReplayACamera7",
-          "ReplayACamera8",
-          "ReplayBCamera1",
-          "ReplayBCamera2",
-          "ReplayBCamera3",
-          "ReplayBCamera4",
-          "ReplayBCamera5",
-          "ReplayBCamera6",
-          "ReplayBCamera7",
-          "ReplayBCamera8",
-          "ReplayCCamera1",
-          "ReplayCCamera2",
-          "ReplayCCamera3",
-          "ReplayCCamera4",
-          "ReplayCCamera5",
-          "ReplayCCamera6",
-          "ReplayCCamera7",
-          "ReplayCCamera8",
-          "ReplayDCamera1",
-          "ReplayDCamera2",
-          "ReplayDCamera3",
-          "ReplayDCamera4",
-          "ReplayDCamera5",
-          "ReplayDCamera6",
-          "ReplayDCamera7",
-          "ReplayDCamera8",
-          "ReplayCamera1",
-          "ReplayCamera2",
-          "ReplayCamera3",
-          "ReplayCamera4",
-          "ReplayCamera5",
-          "ReplayCamera6",
-          "ReplayCamera7",
-          "ReplayCamera8",
-          "ReplayLive",
-          "ReplayRecorded",
-          "ReplayLiveToggle",
-          "ReplaySelectEvents1",
-          "ReplaySelectEvents2",
-          "ReplaySelectEvents3",
-          "ReplaySelectEvents4",
-          "ReplaySelectEvents5",
-          "ReplaySelectEvents6",
-          "ReplaySelectEvents7",
-          "ReplaySelectEvents8",
-          "ReplaySelectEvents9",
-          "ReplaySelectEvents10",
-          "ReplaySelectEvents11",
-          "ReplaySelectEvents12",
-          "ReplaySelectEvents13",
-          "ReplaySelectEvents14",
-          "ReplaySelectEvents15",
-          "ReplaySelectEvents16",
-          "ReplaySelectEvents17",
-          "ReplaySelectEvents18",
-          "ReplaySelectEvents19",
-          "ReplaySelectEvents20",
-          "ReplayPlayEvent",
-          "ReplayPlayEventToOutput",
-          "ReplayPlayAllEvents",
-          "ReplayPlayAllEventsToOutput",
-          "ReplayPlayEventsByID",
-          "ReplayPlayEventsByIDToOutput",
-          "ReplayPlayLastEvent",
-          "ReplayPlayLastEventToOutput",
-          "ReplayPlaySelectedEvent",
-          "ReplayPlaySelectedEventToOutput",
-          "ReplayExportLastEvent",
-          "ReplayShowHide",
-          "ReplayChangeDirection",
-          "ReplaySetDirectionForward",
-          "ReplaySetDirectionBackward",
-          "ReplaySetLastEventText",
-          "ReplaySetLastEventTextCamera",
-          "ReplaySetSelectedEventText",
-          "ReplaySetSelectedEventTextCamera",
-          "ReplayAppendLastEventText",
-          "ReplayAppendLastEventTextCamera",
-          "ReplayAppendSelectedEventText",
-          "ReplayAppendSelectedEventTextCamera",
-          "ReplayToggleLastEventCamera1",
-          "ReplayToggleLastEventCamera2",
-          "ReplayToggleLastEventCamera3",
-          "ReplayToggleLastEventCamera4",
-          "ReplayToggleLastEventCamera5",
-          "ReplayToggleLastEventCamera6",
-          "ReplayToggleLastEventCamera7",
-          "ReplayToggleLastEventCamera8",
-          "ReplayLastEventSingleCameraOn",
-          "ReplayLastEventCameraOn",
-          "ReplayLastEventCameraOff",
-          "ReplayToggleSelectedEventCamera1",
-          "ReplayToggleSelectedEventCamera2",
-          "ReplayToggleSelectedEventCamera3",
-          "ReplayToggleSelectedEventCamera4",
-          "ReplayToggleSelectedEventCamera5",
-          "ReplayToggleSelectedEventCamera6",
-          "ReplayToggleSelectedEventCamera7",
-          "ReplayToggleSelectedEventCamera8",
-          "ReplaySelectedEventSingleCameraOn",
-          "ReplaySelectedEventCameraOn",
-          "ReplaySelectedEventCameraOff",
-          "ReplayPlayPause",
-          "ReplayPlay",
-          "ReplayPause",
-          "ReplayPlayForward",
-          "ReplayPlayBackward",
-          "ReplayFastForward",
-          "ReplayFastBackward",
-          "ReplayJumpFrames",
-          "ReplayJumpFramesFastOn",
-          "ReplayJumpFramesFastOff",
-          "ReplayChangeSpeed",
-          "ReplaySetSpeed",
-          "ReplayJumpToNow",
-          "ReplaySetTimecode",
-          "ReplaySelectPreviousEvent",
-          "ReplaySelectNextEvent",
-          "ReplaySelectFirstEvent",
-          "ReplaySelectLastEvent",
-          "ReplaySelectAllEvents",
-          "ReplayScrollSelectedEvent",
-          "ReplayMoveSelectedInPoint",
-          "ReplayMoveSelectedOutPoint",
-          "ReplayUpdateSelectedInPoint",
-          "ReplayUpdateSelectedOutPoint",
-          "ReplayUpdateSelectedSpeed",
-          "ReplayUpdateSelectedSpeedDefault",
-          "ReplayUpdateSelectedSpeedFromValue",
-          "ReplayJumpToSelectedInPoint",
-          "ReplayJumpToSelectedOutPoint",
-          "ReplayPlayNext",
-          "ReplayPlayPrevious",
-          "ReplayMoveLastEvent",
-          "ReplayMoveSelectedEvent",
-          "ReplayCopyLastEvent",
-          "ReplayCopySelectedEvent",
-          "ReplayDeleteLastEvent",
-          "ReplayDeleteSelectedEvent",
-          "ReplayDuplicateLastEvent",
-          "ReplayDuplicateSelectedEvent",
-          "ReplayStopEvents",
-          "ReplayMoveSelectedEventUp",
-          "ReplayMoveSelectedEventDown",
-          "ReplaySetAudioSource"
-        ],
-        "declared_count": 175
-      },
-      {
-        "name": "Audio buses A-G / mix-minus",
-        "functions": [
-          "SetBusAVolume",
-          "SetBusBVolume",
-          "SetBusCVolume",
-          "SetBusDVolume",
-          "SetBusEVolume",
-          "SetBusFVolume",
-          "SetBusGVolume",
-          "SetBusAVolumeFade",
-          "SetBusBVolumeFade",
-          "SetBusCVolumeFade",
-          "SetBusDVolumeFade",
-          "SetBusEVolumeFade",
-          "SetBusFVolumeFade",
-          "SetBusGVolumeFade",
-          "BusAAudioOn",
-          "BusAAudioOff",
-          "BusAAudio",
-          "BusBAudioOn",
-          "BusBAudioOff",
-          "BusBAudio",
-          "BusAAudioPluginShow",
-          "BusAAudioPluginOn",
-          "BusAAudioPluginOff",
-          "BusAAudioPluginOnOff",
-          "BusBAudioPluginShow",
-          "BusBAudioPluginOn",
-          "BusBAudioPluginOff",
-          "BusBAudioPluginOnOff"
-        ],
-        "declared_count": 28
-      },
-      {
-        "name": "Audio mixer",
-        "functions": [
-          "Audio",
-          "AudioOn",
-          "AudioOff",
-          "SetFader",
-          "AudioAutoOn",
-          "AudioAutoOff",
-          "AudioAuto",
-          "SetAlpha",
-          "SetVolume",
-          "SetVolumeFade",
-          "SetVolumeChannel1",
-          "SetVolumeChannel2",
-          "SetVolumeChannelMixer",
-          "SetVolumeBusMixer",
-          "SetVolumeBusMixerM",
-          "SetVolumeBusMixerA",
-          "SetVolumeBusMixerB",
-          "SetVolumeBusMixerC",
-          "SetVolumeBusMixerD",
-          "SetVolumeBusMixerE",
-          "SetVolumeBusMixerF",
-          "SetVolumeBusMixerG",
-          "SetVolumeChannelMixer1",
-          "SetVolumeChannelMixer2",
-          "SetVolumeChannelMixer3",
-          "SetVolumeChannelMixer4",
-          "SetVolumeChannelMixer5",
-          "SetVolumeChannelMixer6",
-          "SetVolumeChannelMixer7",
-          "SetVolumeChannelMixer8",
-          "SetVolumeChannelMixer9",
-          "SetVolumeChannelMixer10",
-          "SetVolumeChannelMixer11",
-          "SetVolumeChannelMixer12",
-          "SetVolumeChannelMixer13",
-          "SetVolumeChannelMixer14",
-          "SetVolumeChannelMixer15",
-          "SetVolumeChannelMixer16",
-          "SetBalance",
-          "SetGain",
-          "SetGainChannel1",
-          "SetGainChannel2",
-          "SetMasterVolume",
-          "SetHeadphonesVolume",
-          "SetMasterVolumeFade",
-          "MasterAudioOn",
-          "MasterAudioOff",
-          "MasterAudio",
-          "Solo",
-          "SoloOn",
-          "SoloOff",
-          "SoloAllOff",
-          "SoloPFL",
-          "SoloPFLOn",
-          "SoloPFLOff",
-          "AudioBus",
-          "AudioBusOn",
-          "AudioBusOff",
-          "AudioMixerShowHide",
-          "AudioPluginShow",
-          "AudioPluginOn",
-          "AudioPluginOff",
-          "AudioPluginOnOff",
-          "AudioChannelMatrixApplyPreset",
-          "MasterAudioPluginShow",
-          "MasterAudioPluginOn",
-          "MasterAudioPluginOff",
-          "MasterAudioPluginOnOff",
-          "SetRate",
-          "SetRateSlowMotion"
-        ],
-        "declared_count": 70
-      },
-      {
-        "name": "Effects slots / image processing",
-        "functions": [
-          "DeinterlaceOn",
-          "DeinterlaceOff",
-          "SharpenOn",
-          "SharpenOff",
-          "MirrorOn",
-          "MirrorOff",
-          "SetPictureEffect",
-          "SetPictureEffectDuration",
-          "SetColor",
-          "SetMultiViewOverlay",
-          "SwapLayerAnimated",
-          "SetZoom",
-          "SetPanX",
-          "SetPanY",
-          "SetCropX1",
-          "SetCropY1",
-          "SetCropX2",
-          "SetCropY2",
-          "SetCrop",
-          "Effect1",
-          "Effect1On",
-          "Effect1Off",
-          "SetEffect1Strength",
-          "Effect2",
-          "Effect2On",
-          "Effect2Off",
-          "SetEffect2Strength",
-          "Effect3",
-          "Effect3On",
-          "Effect3Off",
-          "SetEffect3Strength",
-          "Effect4",
-          "Effect4On",
-          "Effect4Off",
-          "SetEffect4Strength"
-        ],
-        "declared_count": 35
-      },
-      {
-        "name": "Outputs / SRT / OMT",
-        "functions": [
-          "SetOutputFullscreen",
-          "SetOutputFullscreen2",
-          "SetOutputExternal2",
-          "SetOutput2",
-          "SetOutput3",
-          "SetOutput4",
-          "StartSRTOutput",
-          "StartStopSRTOutput",
-          "OMTSelectSourceByName",
-          "OMTSelectSourceByIndex",
-          "OMTPreviewOn",
-          "OMTPreviewOff"
-        ],
-        "declared_count": 12
-      },
-      {
-        "name": "Recording / video delay",
-        "functions": [
-          "StartRecording",
-          "StopRecording",
-          "VideoDelayStartRecording",
-          "VideoDelayStopRecording",
-          "VideoDelayStartStopRecording"
-        ],
-        "declared_count": 5
-      },
-      {
-        "name": "Streaming",
-        "functions": [
-          "StartStreaming",
-          "StopStreaming",
-          "StreamingSetURL",
-          "StreamingSetKey",
-          "StreamingSetUsername",
-          "StreamingSetPassword"
-        ],
-        "declared_count": 6
-      },
-      {
-        "name": "External output",
-        "functions": [
-          "StartExternal",
-          "StopExternal"
-        ],
-        "declared_count": 2
-      },
-      {
-        "name": "Title / text / data / countdown",
-        "functions": [
-          "SetText",
-          "SetCountdown",
-          "SetImage",
-          "SetImageVisible",
-          "SetImageVisibleOn",
-          "SetImageVisibleOff",
-          "SetTextColour",
-          "SetTextVisible",
-          "SetTextVisibleOn",
-          "SetTextVisibleOff",
-          "TitleBeginAnimation",
-          "DataSourcePreviousRow",
-          "DataSourceNextRow",
-          "DataSourceSelectRow",
-          "DataSourceAutoNextOnOff",
-          "DataSourceAutoNextOn",
-          "DataSourceAutoNextOff",
-          "DataSourcePlayPause",
-          "DataSourcePlay",
-          "DataSourcePause"
-        ],
-        "declared_count": 20
-      },
-      {
-        "name": "Scripting",
-        "functions": [
-          "ScriptStartDynamic",
-          "ScriptStopDynamic",
-          "ScriptStart",
-          "ScriptStop",
-          "ScriptStopAll"
-        ],
-        "declared_count": 5
-      },
-      {
-        "name": "Settings / preset / session",
-        "functions": [
-          "SaveVideoDelay",
-          "OpenPreset",
-          "SavePreset"
-        ],
-        "declared_count": 3
-      },
-      {
-        "name": "Fullscreen / display / multiview",
-        "functions": [
-          "FullscreenOn",
-          "FullscreenOff",
-          "MultiViewOverlay",
-          "MultiViewOverlayOn",
-          "MultiViewOverlayOff",
-          "Fullscreen"
-        ],
-        "declared_count": 6
-      },
-      {
-        "name": "PTZ / camera control",
-        "functions": [
-          "ZoomSelectParticipantByName",
-          "ZoomMuteSelf",
-          "ZoomUnMuteSelf",
-          "ZoomJoinMeeting",
-          "PTZMoveUp",
-          "PTZMoveUpLeft",
-          "PTZMoveUpRight",
-          "PTZMoveDown",
-          "PTZMoveDownLeft",
-          "PTZMoveDownRight",
-          "PTZMoveLeft",
-          "PTZMoveRight",
-          "PTZMoveStop",
-          "PTZZoomIn",
-          "PTZZoomOut",
-          "PTZZoomStop",
-          "PTZHome",
-          "PTZFocusFar",
-          "PTZFocusNear",
-          "PTZFocusStop",
-          "PTZFocusAuto",
-          "PTZFocusManual",
-          "PTZUpdateVirtualInput",
-          "PTZMoveToVirtualInputPosition",
-          "PTZMoveToVirtualInputPositionByIndex",
-          "PTZCreateVirtualInput"
-        ],
-        "declared_count": 26
-      },
-      {
-        "name": "Colour correction",
-        "functions": [
-          "SetCCLiftRGB",
-          "SetCCLiftR",
-          "SetCCLiftG",
-          "SetCCLiftB",
-          "SetCCLiftY",
-          "SetCCGammaRGB",
-          "SetCCGammaR",
-          "SetCCGammaG",
-          "SetCCGammaB",
-          "SetCCGammaY",
-          "SetCCGainRGB",
-          "SetCCGainR",
-          "SetCCGainG",
-          "SetCCGainB",
-          "SetCCGainY",
-          "SetCCSaturation",
-          "SetCCHue",
-          "ColourCorrectionReset",
-          "ColourCorrectionAuto"
-        ],
-        "declared_count": 19
-      },
-      {
-        "name": "Browser / web / video call",
-        "functions": [
-          "VideoCallAudioSource",
-          "VideoCallVideoSource",
-          "VideoCallReconnect",
-          "VideoCallConnect",
-          "BrowserReload",
-          "BrowserMouseEnabled",
-          "BrowserMouseDisabled",
-          "BrowserKeyboardEnabled",
-          "BrowserKeyboardDisabled",
-          "BrowserBack",
-          "BrowserForward",
-          "BrowserNavigate"
-        ],
-        "declared_count": 12
-      },
-      {
-        "name": "NDI",
-        "functions": [
-          "NDISelectSourceByName",
-          "NDISelectSourceByIndex",
-          "NDICommand",
-          "NDIStartRecording",
-          "NDIStopRecording"
-        ],
-        "declared_count": 5
-      },
-      {
-        "name": "Playlist / list operations",
-        "functions": [
-          "ListPlayOut",
-          "ListShowHide",
-          "ListAdd",
-          "ListRemove",
-          "ListRemoveAll",
-          "ListExport",
-          "ListShuffle"
-        ],
-        "declared_count": 7
-      },
-      {
-        "name": "Auto-play / auto-pause automation",
-        "functions": [
-          "AutoPlayOn",
-          "AutoPlayOff",
-          "AutoPauseOn",
-          "AutoPauseOff",
-          "AutoRestartOn",
-          "AutoRestartOff",
-          "AutoPlayNext",
-          "AutoPlayNextOn",
-          "AutoPlayNextOff",
-          "AutoPlayFirst",
-          "AutoPlayFirstOn",
-          "AutoPlayFirstOff"
-        ],
-        "declared_count": 12
-      },
-      {
-        "name": "Countdown / timer",
-        "functions": [
-          "StartCountdown",
-          "PauseCountdown",
-          "StopCountdown",
-          "AdjustCountdown",
-          "ChangeCountdown",
-          "SuspendCountdown"
-        ],
-        "declared_count": 6
-      },
-      {
-        "name": "Snapshot / render",
-        "functions": [
-          "ResumeRender",
-          "Snapshot",
-          "SnapshotInput"
-        ],
-        "declared_count": 3
-      },
-      {
-        "name": "Activator / hardware control",
-        "functions": [
-          "ActivatorRefresh"
-        ],
-        "declared_count": 1
-      },
-      {
-        "name": "Input management",
-        "functions": [
-          "AddInput",
-          "RemoveInput",
-          "SetInputName",
-          "MoveMultiViewOverlay",
-          "MoveLayer",
-          "MoveInput",
-          "InputPreviewShow",
-          "InputPreviewHide",
-          "InputPreviewShowHide"
-        ],
-        "declared_count": 9
-      },
-      {
-        "name": "Input transport",
-        "functions": [
-          "PlayPause",
-          "Restart",
-          "NextPicture",
-          "PreviousPicture",
-          "SetPosition",
-          "LoopOn",
-          "LoopOff",
-          "Play",
-          "Pause",
-          "ResetInput",
-          "LivePlayPause",
-          "Loop",
-          "GO",
-          "QuickPlay",
-          "NextPlayListEntry",
-          "PreviousPlayListEntry",
-          "StopPlayList",
-          "NextItem",
-          "PreviousItem",
-          "PauseRender",
-          "StopMultiCorder",
-          "StopSRTOutput",
-          "NextTitlePreset",
-          "PreviousTitlePreset"
-        ],
-        "declared_count": 24
-      },
-      {
-        "name": "Dynamic values",
-        "functions": [
-          "SetDynamicInput1",
-          "SetDynamicInput2",
-          "SetDynamicInput3",
-          "SetDynamicInput4",
-          "SetDynamicValue1",
-          "SetDynamicValue2",
-          "SetDynamicValue3",
-          "SetDynamicValue4"
-        ],
-        "declared_count": 8
-      },
-      {
-        "name": "(uncategorised)",
-        "functions": [
-          "StartPlayList",
-          "SelectPlayList",
-          "SelectIndex",
-          "SetPictureTransition",
-          "BusXAudioOn",
-          "BusXAudioOff",
-          "BusXAudio",
-          "BusXSendToMasterOn",
-          "BusXSendToMasterOff",
-          "BusXSendToMaster",
-          "BusXSoloOn",
-          "BusXSoloOff",
-          "BusXSolo",
-          "BusXAudioPluginShow",
-          "BusXAudioPluginOn",
-          "BusXAudioPluginOff",
-          "BusXAudioPluginOnOff",
-          "SetTickerSpeed",
-          "SetFrameDelay",
-          "SelectCategory",
-          "MarkIn",
-          "MarkOut",
-          "MarkReset",
-          "MarkResetIn",
-          "MarkResetOut",
-          "WriteDurationToRecordingLog",
-          "LastPreset",
-          "CreateVirtualInput",
-          "StartStopStreaming",
-          "StartStopRecording",
-          "StartStopExternal",
-          "StartMultiCorder",
-          "StartStopMultiCorder",
-          "SelectTitlePreset",
-          "WaitForCompletion",
-          "KeyPress",
-          "SendKeys",
-          "Undo",
-          "CallManagerShowHide"
-        ],
-        "declared_count": 39
-      }
-    ]
+  {
+   "id": 3,
+   "name": "Inputs",
+   "status": "experimental",
+   "conformance": "partial",
+   "source_evidence": [
+    "crates/ui-egui/src/media.rs"
+   ],
+   "test_files": [
+    "crates/engine/tests/inputs.rs"
+   ],
+   "scope": "Seven own generators plus bounded external PNG",
+   "gap": "40 observed wire types are not 40 working backends; video/capture/network/browser absent"
   },
-  "wire_observations": {
-    "authority": "evidence/trace-log.md T9/T10/T11, superseding older SPEC/api-report summaries",
-    "standard_wire_overlay_channels": [
-      1,
-      8
-    ],
-    "state_overlay_and_stinger_channels": [
-      1,
-      16
-    ],
-    "off_clears_assignment": true,
-    "out_retains_assignment": true,
-    "out_raster_effect": "Unknown from state-only observations",
-    "control_response": "Pre-action state; subsequent read is needed",
-    "shortcut_vocabulary_equals_http": false,
-    "exact_effect_geometry": "Names do not establish sampling, projection or pixel algorithms",
-    "physical_output_number_mapping": "Unknown for accepted SetOutput2/3/4 spellings"
+  {
+   "id": 4,
+   "name": "Overlays",
+   "status": "experimental",
+   "conformance": "partial",
+   "source_evidence": [
+    "crates/engine/src/lib.rs"
+   ],
+   "test_files": [
+    "crates/ui-egui/src/smoke.rs"
+   ],
+   "scope": "Four Program title panels and staged text/position edits",
+   "gap": "Title/enabled/position only; misleading advanced scratch controls removed; no source overlays/stingers, per-channel effects/timing/alpha/transforms."
   },
-  "source_candidate": {
-    "revision": "d893b3f",
-    "run": "https://github.com/sansaks-jpg/rustmix/actions/runs/39115630407",
-    "status": "pending hosted verification; runtime_evidence below is the previous accepted baseline"
+  {
+   "id": 5,
+   "name": "Multiview",
+   "status": "experimental",
+   "conformance": "partial",
+   "source_evidence": [
+    "crates/ui-egui/src/panels.rs"
+   ],
+   "test_files": [
+    "crates/ui-egui/src/smoke.rs"
+   ],
+   "scope": "In-app Split and full source grid layouts",
+   "gap": "No two independent multiview outputs or all five observed layout contracts"
+  },
+  {
+   "id": 6,
+   "name": "Titles / GT graphics",
+   "status": "experimental",
+   "conformance": "partial",
+   "source_evidence": [
+    "crates/ui-egui/src/panels.rs"
+   ],
+   "test_files": [
+    "crates/ui-egui/src/smoke.rs"
+   ],
+   "scope": "Original title/subtitle panels and generated graphics",
+   "gap": "No GT/XAML compatibility, animation templates, ticker or editable production clock"
+  },
+  {
+   "id": 7,
+   "name": "Audio mixer / matrix",
+   "status": "stub",
+   "conformance": "partial",
+   "source_evidence": [
+    "crates/engine/src/audio.rs"
+   ],
+   "test_files": [
+    "crates/engine/tests/workflow.rs"
+   ],
+   "scope": "Gain/mute/solo and Master/A/B meter-control simulation",
+   "gap": "No sample blocks, device audio, nine destinations, DSP, mix-minus or AV sync"
+  },
+  {
+   "id": 8,
+   "name": "Routing / external outputs",
+   "status": "experimental",
+   "conformance": "partial",
+   "source_evidence": [
+    "crates/engine/src/output.rs",
+    "crates/engine/src/lib.rs",
+    "crates/ui-egui/src/dialogs.rs"
+   ],
+   "test_files": [
+    "crates/engine/tests/outputs.rs",
+    "crates/ui-egui/src/smoke.rs"
+   ],
+   "scope": "Four source/configuration records, atomic complete-slot command, staged editor and schema-6 persistence; source review only, runtime acceptance pending",
+   "gap": "No external frame sink, device enumeration, SDI, virtual camera, NDI, OMT or SRT backend; no live output or protocol/hardware qualification"
+  },
+  {
+   "id": 9,
+   "name": "Streaming",
+   "status": "not_started",
+   "conformance": "missing",
+   "source_evidence": [
+    "crates/ui-egui/src/lib.rs"
+   ],
+   "test_files": [
+    "crates/ui-egui/src/smoke.rs"
+   ],
+   "scope": "Unavailable starts remain gated",
+   "gap": "No encoder, RTMP/RTMPS transport, profiles, reconnect or five destinations"
+  },
+  {
+   "id": 10,
+   "name": "Recording",
+   "status": "not_started",
+   "conformance": "missing",
+   "source_evidence": [
+    "crates/ui-egui/src/lib.rs"
+   ],
+   "test_files": [
+    "crates/ui-egui/src/smoke.rs"
+   ],
+   "scope": "Unavailable starts remain gated",
+   "gap": "No Program recording, independent WAV, splitting, recovery or two recording outputs"
+  },
+  {
+   "id": 11,
+   "name": "Replay",
+   "status": "not_started",
+   "conformance": "missing",
+   "source_evidence": [
+    "Cargo.toml"
+   ],
+   "test_files": [],
+   "scope": "None",
+   "gap": "No replay storage, camera channels, events, marks, speed control or exports"
+  },
+  {
+   "id": 12,
+   "name": "PTZ camera control",
+   "status": "not_started",
+   "conformance": "missing",
+   "source_evidence": [
+    "Cargo.toml"
+   ],
+   "test_files": [],
+   "scope": "None",
+   "gap": "No VISCA/vendor/UVC PTZ provider, movement or presets"
+  },
+  {
+   "id": 13,
+   "name": "Shortcuts / MIDI / surfaces",
+   "status": "experimental",
+   "conformance": "partial",
+   "source_evidence": [
+    "crates/engine/src/shortcuts.rs"
+   ],
+   "test_files": [
+    "crates/ui-egui/src/smoke.rs"
+   ],
+   "scope": "Saved keyboard action/key/modifier mappings with validation and repeat/focus guards",
+   "gap": "No MIDI, activators, controllers, voice or 19 input trigger events"
+  },
+  {
+   "id": 14,
+   "name": "Presets / sessions",
+   "status": "experimental",
+   "conformance": "partial",
+   "source_evidence": [
+    "crates/engine/src/persistence.rs"
+   ],
+   "test_files": [
+    "crates/engine/tests/inputs.rs"
+   ],
+   "scope": "Own schema6 with schema1-5 migration, atomic settings/saves, backups and checkpoints; new output migration tests prepared, not run",
+   "gap": "Previous hosted schema5 acceptance does not verify schema6; no .vmix interoperability, media packaging or power-loss qualification"
+  },
+  {
+   "id": 15,
+   "name": "Settings",
+   "status": "experimental",
+   "conformance": "partial",
+   "source_evidence": [
+    "crates/ui-egui/src/dialogs.rs"
+   ],
+   "test_files": [
+    "crates/ui-egui/src/smoke.rs"
+   ],
+   "scope": "Validated preferences, categories/theme/colors and one atomic name/preferences apply; unavailable scaffolds explicitly read-only",
+   "gap": "256 observed properties are not implemented; theme/color/display and advanced fields include unavailable/scaffold controls"
+  },
+  {
+   "id": 16,
+   "name": "HTTP / TCP / WebSocket API",
+   "status": "not_started",
+   "conformance": "missing",
+   "source_evidence": [
+    "Cargo.toml"
+   ],
+   "test_files": [],
+   "scope": "Headless typed Rust commands only",
+   "gap": "No HTTP listener, XML state document, public function dispatcher, TCP or WebSocket protocol"
+  },
+  {
+   "id": 17,
+   "name": "Scripting",
+   "status": "not_started",
+   "conformance": "missing",
+   "source_evidence": [
+    "Cargo.toml"
+   ],
+   "test_files": [],
+   "scope": "None",
+   "gap": "No scripts, timers, runtime sandbox or script permissions"
+  },
+  {
+   "id": 18,
+   "name": "Data sources",
+   "status": "not_started",
+   "conformance": "missing",
+   "source_evidence": [
+    "Cargo.toml"
+   ],
+   "test_files": [],
+   "scope": "None",
+   "gap": "No database/CSV/JSON/browser/social connector or live title binding"
+  },
+  {
+   "id": 19,
+   "name": "Browser inputs",
+   "status": "not_started",
+   "conformance": "missing",
+   "source_evidence": [
+    "Cargo.toml"
+   ],
+   "test_files": [],
+   "scope": "None",
+   "gap": "No embedded browser engine or texture/audio integration"
+  },
+  {
+   "id": 20,
+   "name": "Virtual sets",
+   "status": "not_started",
+   "conformance": "missing",
+   "source_evidence": [
+    "crates/engine/src/render.rs"
+   ],
+   "test_files": [],
+   "scope": "Procedural studio picture is a generator",
+   "gap": "Not a composited camera/talent/virtual-set workflow; no imported set assets"
+  },
+  {
+   "id": 21,
+   "name": "Video call / guests",
+   "status": "not_started",
+   "conformance": "missing",
+   "source_evidence": [
+    "Cargo.toml"
+   ],
+   "test_files": [],
+   "scope": "None",
+   "gap": "No WebRTC, guest sessions, consent workflow or mix-minus return"
+  },
+  {
+   "id": 22,
+   "name": "Voice control",
+   "status": "not_started",
+   "conformance": "missing",
+   "source_evidence": [
+    "Cargo.toml"
+   ],
+   "test_files": [],
+   "scope": "None",
+   "gap": "No speech engine, microphone source or confidence/test behavior"
+  },
+  {
+   "id": 23,
+   "name": "Tally lights",
+   "status": "not_started",
+   "conformance": "missing",
+   "source_evidence": [
+    "Cargo.toml"
+   ],
+   "test_files": [],
+   "scope": "None",
+   "gap": "No hardware/network tally backend or controller status"
+  },
+  {
+   "id": 24,
+   "name": "Statistics / diagnostics",
+   "status": "experimental",
+   "conformance": "partial",
+   "source_evidence": [
+    "crates/ui-egui/src/profile.rs"
+   ],
+   "test_files": [
+    "crates/ui-egui/src/program.rs"
+   ],
+   "scope": "Measured reference Program cadence, process memory and local status counters",
+   "gap": "Hosted cadence targets failed; no full media/QoS/GPU/AV/hardware diagnostics"
+  },
+  {
+   "id": 25,
+   "name": "Production clocks",
+   "status": "stub",
+   "conformance": "partial",
+   "source_evidence": [
+    "crates/engine/src/render.rs"
+   ],
+   "test_files": [
+    "crates/engine/tests/workflow.rs"
+   ],
+   "scope": "Fixed one-minute procedural countdown and independent source transports",
+   "gap": "No editable production clock/countdown engine or title countdown API"
+  },
+  {
+   "id": 26,
+   "name": "VST3 audio plugins",
+   "status": "not_started",
+   "conformance": "missing",
+   "source_evidence": [
+    "Cargo.toml"
+   ],
+   "test_files": [],
+   "scope": "None",
+   "gap": "No real audio/plugin hosting or license-reviewed VST3 adapter"
+  },
+  {
+   "id": 27,
+   "name": "NDI",
+   "status": "not_started",
+   "conformance": "missing",
+   "source_evidence": [
+    "Cargo.toml"
+   ],
+   "test_files": [],
+   "scope": "None",
+   "gap": "No SDK/runtime integration, sender, receiver or passthrough recording"
+  },
+  {
+   "id": 28,
+   "name": "OMT",
+   "status": "not_started",
+   "conformance": "missing",
+   "source_evidence": [
+    "Cargo.toml"
+   ],
+   "test_files": [],
+   "scope": "None",
+   "gap": "No protocol/runtime adapter, input or output"
+  },
+  {
+   "id": 29,
+   "name": "Color correction / LUT",
+   "status": "experimental",
+   "conformance": "partial",
+   "source_evidence": [
+    "crates/ui-egui/src/panels.rs"
+   ],
+   "test_files": [
+    "crates/ui-egui/src/smoke.rs"
+   ],
+   "scope": "Persisted lift/gain/saturation, mirror/sharpen, approximate chroma key and PIP",
+   "gap": "No full CC family, LUT/masks, ten-layer crop/rotation/animation graph or color-managed GPU pipeline"
+  },
+  {
+   "id": 30,
+   "name": "Social / cloud destinations",
+   "status": "not_started",
+   "conformance": "missing",
+   "source_evidence": [
+    "Cargo.toml"
+   ],
+   "test_files": [],
+   "scope": "None",
+   "gap": "No authenticated provider integration; no credentials requested or internet Program sent"
   }
+ ],
+ "input_types": [
+  {
+   "name": "Video",
+   "status": "not_started",
+   "conformance": "missing",
+   "scope": "No corresponding working source backend",
+   "wire_compatible": false
+  },
+  {
+   "name": "VideoList",
+   "status": "not_started",
+   "conformance": "missing",
+   "scope": "No corresponding working source backend",
+   "wire_compatible": false
+  },
+  {
+   "name": "VideoLoop",
+   "status": "not_started",
+   "conformance": "missing",
+   "scope": "No corresponding working source backend",
+   "wire_compatible": false
+  },
+  {
+   "name": "Image",
+   "status": "experimental",
+   "conformance": "partial",
+   "scope": "External PNG only; no generic still-image format parity",
+   "wire_compatible": false
+  },
+  {
+   "name": "Photos",
+   "status": "not_started",
+   "conformance": "missing",
+   "scope": "No corresponding working source backend",
+   "wire_compatible": false
+  },
+  {
+   "name": "ImageSequence",
+   "status": "not_started",
+   "conformance": "missing",
+   "scope": "No corresponding working source backend",
+   "wire_compatible": false
+  },
+  {
+   "name": "AudioFile",
+   "status": "not_started",
+   "conformance": "missing",
+   "scope": "No corresponding working source backend",
+   "wire_compatible": false
+  },
+  {
+   "name": "Audio",
+   "status": "not_started",
+   "conformance": "missing",
+   "scope": "No corresponding working source backend",
+   "wire_compatible": false
+  },
+  {
+   "name": "DVD",
+   "status": "not_started",
+   "conformance": "missing",
+   "scope": "No corresponding working source backend",
+   "wire_compatible": false
+  },
+  {
+   "name": "PowerPoint",
+   "status": "not_started",
+   "conformance": "missing",
+   "scope": "No corresponding working source backend",
+   "wire_compatible": false
+  },
+  {
+   "name": "Flash",
+   "status": "not_started",
+   "conformance": "missing",
+   "scope": "No corresponding working source backend",
+   "wire_compatible": false
+  },
+  {
+   "name": "Xaml",
+   "status": "not_started",
+   "conformance": "missing",
+   "scope": "No corresponding working source backend",
+   "wire_compatible": false
+  },
+  {
+   "name": "Waveform",
+   "status": "not_started",
+   "conformance": "missing",
+   "scope": "No corresponding working source backend",
+   "wire_compatible": false
+  },
+  {
+   "name": "Capture",
+   "status": "not_started",
+   "conformance": "missing",
+   "scope": "No corresponding working source backend",
+   "wire_compatible": false
+  },
+  {
+   "name": "DesktopCapture",
+   "status": "not_started",
+   "conformance": "missing",
+   "scope": "No corresponding working source backend",
+   "wire_compatible": false
+  },
+  {
+   "name": "NDI",
+   "status": "not_started",
+   "conformance": "missing",
+   "scope": "No corresponding working source backend",
+   "wire_compatible": false
+  },
+  {
+   "name": "OMT",
+   "status": "not_started",
+   "conformance": "missing",
+   "scope": "No corresponding working source backend",
+   "wire_compatible": false
+  },
+  {
+   "name": "SRT",
+   "status": "not_started",
+   "conformance": "missing",
+   "scope": "No corresponding working source backend",
+   "wire_compatible": false
+  },
+  {
+   "name": "VLC",
+   "status": "not_started",
+   "conformance": "missing",
+   "scope": "No corresponding working source backend",
+   "wire_compatible": false
+  },
+  {
+   "name": "Stream",
+   "status": "not_started",
+   "conformance": "missing",
+   "scope": "No corresponding working source backend",
+   "wire_compatible": false
+  },
+  {
+   "name": "Zoom",
+   "status": "not_started",
+   "conformance": "missing",
+   "scope": "No corresponding working source backend",
+   "wire_compatible": false
+  },
+  {
+   "name": "VideoCall",
+   "status": "not_started",
+   "conformance": "missing",
+   "scope": "No corresponding working source backend",
+   "wire_compatible": false
+  },
+  {
+   "name": "Telestrator",
+   "status": "not_started",
+   "conformance": "missing",
+   "scope": "No corresponding working source backend",
+   "wire_compatible": false
+  },
+  {
+   "name": "Browser",
+   "status": "not_started",
+   "conformance": "missing",
+   "scope": "No corresponding working source backend",
+   "wire_compatible": false
+  },
+  {
+   "name": "Title",
+   "status": "experimental",
+   "conformance": "partial",
+   "scope": "Own Program title panels, not a general title/template input",
+   "wire_compatible": false
+  },
+  {
+   "name": "GT",
+   "status": "not_started",
+   "conformance": "missing",
+   "scope": "No corresponding working source backend",
+   "wire_compatible": false
+  },
+  {
+   "name": "Colour",
+   "status": "experimental",
+   "conformance": "partial",
+   "scope": "Own solid-color generator",
+   "wire_compatible": false
+  },
+  {
+   "name": "VirtualSet",
+   "status": "not_started",
+   "conformance": "missing",
+   "scope": "No corresponding working source backend",
+   "wire_compatible": false
+  },
+  {
+   "name": "Virtual",
+   "status": "not_started",
+   "conformance": "missing",
+   "scope": "No corresponding working source backend",
+   "wire_compatible": false
+  },
+  {
+   "name": "Mix",
+   "status": "not_started",
+   "conformance": "missing",
+   "scope": "No corresponding working source backend",
+   "wire_compatible": false
+  },
+  {
+   "name": "Output",
+   "status": "not_started",
+   "conformance": "missing",
+   "scope": "No corresponding working source backend",
+   "wire_compatible": false
+  },
+  {
+   "name": "Preview",
+   "status": "not_started",
+   "conformance": "missing",
+   "scope": "No corresponding working source backend",
+   "wire_compatible": false
+  },
+  {
+   "name": "Blank",
+   "status": "not_started",
+   "conformance": "missing",
+   "scope": "No corresponding working source backend",
+   "wire_compatible": false
+  },
+  {
+   "name": "Placeholder",
+   "status": "not_started",
+   "conformance": "missing",
+   "scope": "No corresponding working source backend",
+   "wire_compatible": false
+  },
+  {
+   "name": "Signal",
+   "status": "experimental",
+   "conformance": "partial",
+   "scope": "Own procedural color bars",
+   "wire_compatible": false
+  },
+  {
+   "name": "VideoDelay",
+   "status": "not_started",
+   "conformance": "missing",
+   "scope": "No corresponding working source backend",
+   "wire_compatible": false
+  },
+  {
+   "name": "ProductionClocks",
+   "status": "not_started",
+   "conformance": "missing",
+   "scope": "No corresponding working source backend",
+   "wire_compatible": false
+  },
+  {
+   "name": "Replay",
+   "status": "not_started",
+   "conformance": "missing",
+   "scope": "No corresponding working source backend",
+   "wire_compatible": false
+  },
+  {
+   "name": "ReplayPreview",
+   "status": "not_started",
+   "conformance": "missing",
+   "scope": "No corresponding working source backend",
+   "wire_compatible": false
+  },
+  {
+   "name": "ReplayOverlay",
+   "status": "not_started",
+   "conformance": "missing",
+   "scope": "No corresponding working source backend",
+   "wire_compatible": false
+  }
+ ],
+ "transitions": [
+  {
+   "name": "Fade",
+   "status": "experimental",
+   "conformance": "partial",
+   "engine_variant": "Fade",
+   "scope": "Own CPU algorithm with endpoint/direction tests; no cross-vendor pixel parity"
+  },
+  {
+   "name": "Zoom",
+   "status": "experimental",
+   "conformance": "partial",
+   "engine_variant": "Zoom",
+   "scope": "Own CPU zoom-dissolve algorithm with endpoint tests; no cross-vendor pixel parity"
+  },
+  {
+   "name": "Wipe",
+   "status": "experimental",
+   "conformance": "partial",
+   "engine_variant": "Wipe",
+   "scope": "Own CPU algorithm with endpoint/direction tests; no cross-vendor pixel parity"
+  },
+  {
+   "name": "Slide",
+   "status": "experimental",
+   "conformance": "partial",
+   "engine_variant": "Slide",
+   "scope": "Own CPU algorithm with endpoint/direction tests; no cross-vendor pixel parity"
+  },
+  {
+   "name": "Fly",
+   "status": "experimental",
+   "conformance": "partial",
+   "engine_variant": "Fly",
+   "scope": "Own CPU fly-in with scale trajectory and endpoint tests; no cross-vendor pixel parity"
+  },
+  {
+   "name": "CrossZoom",
+   "status": "experimental",
+   "conformance": "partial",
+   "engine_variant": "CrossZoom",
+   "scope": "Own CPU opposing zoom-dissolve algorithm with endpoint tests; no cross-vendor pixel parity"
+  },
+  {
+   "name": "FlyRotate",
+   "status": "experimental",
+   "conformance": "partial",
+   "engine_variant": "FlyRotate",
+   "scope": "Own CPU fly-in with rotation and endpoint tests; no cross-vendor pixel parity"
+  },
+  {
+   "name": "Cube",
+   "status": "experimental",
+   "conformance": "partial",
+   "engine_variant": "Cube",
+   "scope": "Own CPU cube-turn algorithm with an edge-on black midpoint and row tests; no cross-vendor pixel parity"
+  },
+  {
+   "name": "CubeZoom",
+   "status": "experimental",
+   "conformance": "partial",
+   "engine_variant": "CubeZoom",
+   "scope": "Own CPU cube-turn with squash and endpoint tests; no cross-vendor pixel parity"
+  },
+  {
+   "name": "VerticalWipe",
+   "status": "experimental",
+   "conformance": "partial",
+   "engine_variant": "VerticalWipe",
+   "scope": "Own CPU algorithm with endpoint/direction tests; no cross-vendor pixel parity"
+  },
+  {
+   "name": "VerticalSlide",
+   "status": "experimental",
+   "conformance": "partial",
+   "engine_variant": "VerticalSlide",
+   "scope": "Own CPU algorithm with endpoint/direction tests; no cross-vendor pixel parity"
+  },
+  {
+   "name": "Merge",
+   "status": "experimental",
+   "conformance": "partial",
+   "engine_variant": "Merge",
+   "scope": "Own CPU recede/advance algorithm with endpoint and distinctness tests; no cross-vendor pixel parity"
+  },
+  {
+   "name": "WipeReverse",
+   "status": "experimental",
+   "conformance": "partial",
+   "engine_variant": "WipeReverse",
+   "scope": "Own CPU algorithm with endpoint/direction tests; no cross-vendor pixel parity"
+  },
+  {
+   "name": "SlideReverse",
+   "status": "experimental",
+   "conformance": "partial",
+   "engine_variant": "SlideReverse",
+   "scope": "Own CPU algorithm with endpoint/direction tests; no cross-vendor pixel parity"
+  },
+  {
+   "name": "VerticalWipeReverse",
+   "status": "experimental",
+   "conformance": "partial",
+   "engine_variant": "VerticalWipeReverse",
+   "scope": "Own CPU algorithm with endpoint/direction tests; no cross-vendor pixel parity"
+  },
+  {
+   "name": "VerticalSlideReverse",
+   "status": "experimental",
+   "conformance": "partial",
+   "engine_variant": "VerticalSlideReverse",
+   "scope": "Own CPU algorithm with endpoint/direction tests; no cross-vendor pixel parity"
+  },
+  {
+   "name": "BarnDoor",
+   "status": "experimental",
+   "conformance": "partial",
+   "engine_variant": "BarnDoor",
+   "scope": "Own CPU algorithm with endpoint/direction tests; no cross-vendor pixel parity"
+  },
+  {
+   "name": "RollerDoor",
+   "status": "experimental",
+   "conformance": "partial",
+   "engine_variant": "RollerDoor",
+   "scope": "Own CPU algorithm with endpoint/direction tests; no cross-vendor pixel parity"
+  },
+  {
+   "name": "AlphaFade",
+   "status": "experimental",
+   "conformance": "partial",
+   "engine_variant": "AlphaFade",
+   "scope": "Own CPU alpha-coverage dissolve with target-alpha regression tests; no cross-vendor pixel parity"
+  },
+  {
+   "name": "Cut",
+   "status": "experimental",
+   "conformance": "partial",
+   "engine_variant": "Cut",
+   "scope": "Own CPU algorithm with endpoint/direction tests; no cross-vendor pixel parity"
+  }
+ ],
+ "overlay_channels": [
+  {
+   "channel": 1,
+   "kind": "standard",
+   "status": "experimental",
+   "conformance": "partial",
+   "scope": "Title-panel channel: 16-channel bank, Program render, UI, F-key and persistence are real; no source overlay, per-channel effects, timing or alpha"
+  },
+  {
+   "channel": 2,
+   "kind": "standard",
+   "status": "experimental",
+   "conformance": "partial",
+   "scope": "Title-panel channel: 16-channel bank, Program render, UI, F-key and persistence are real; no source overlay, per-channel effects, timing or alpha"
+  },
+  {
+   "channel": 3,
+   "kind": "standard",
+   "status": "experimental",
+   "conformance": "partial",
+   "scope": "Title-panel channel: 16-channel bank, Program render, UI, F-key and persistence are real; no source overlay, per-channel effects, timing or alpha"
+  },
+  {
+   "channel": 4,
+   "kind": "standard",
+   "status": "experimental",
+   "conformance": "partial",
+   "scope": "Title-panel channel: 16-channel bank, Program render, UI, F-key and persistence are real; no source overlay, per-channel effects, timing or alpha"
+  },
+  {
+   "channel": 5,
+   "kind": "standard",
+   "status": "experimental",
+   "conformance": "partial",
+   "scope": "Title-panel channel: 16-channel bank, Program render, UI, F-key and persistence are real; no source overlay, per-channel effects, timing or alpha"
+  },
+  {
+   "channel": 6,
+   "kind": "standard",
+   "status": "experimental",
+   "conformance": "partial",
+   "scope": "Title-panel channel: 16-channel bank, Program render, UI, F-key and persistence are real; no source overlay, per-channel effects, timing or alpha"
+  },
+  {
+   "channel": 7,
+   "kind": "standard",
+   "status": "experimental",
+   "conformance": "partial",
+   "scope": "Title-panel channel: 16-channel bank, Program render, UI, F-key and persistence are real; no source overlay, per-channel effects, timing or alpha"
+  },
+  {
+   "channel": 8,
+   "kind": "standard",
+   "status": "experimental",
+   "conformance": "partial",
+   "scope": "Title-panel channel: 16-channel bank, Program render, UI, F-key and persistence are real; no source overlay, per-channel effects, timing or alpha"
+  },
+  {
+   "channel": 9,
+   "kind": "stinger",
+   "status": "stub",
+   "conformance": "partial",
+   "scope": "Model, SetStinger/Trigger/Stop commands and cut-point Program/Preview exchange only; no stinger clip compositing, timing raster or effects"
+  },
+  {
+   "channel": 10,
+   "kind": "stinger",
+   "status": "stub",
+   "conformance": "partial",
+   "scope": "Model, SetStinger/Trigger/Stop commands and cut-point Program/Preview exchange only; no stinger clip compositing, timing raster or effects"
+  },
+  {
+   "channel": 11,
+   "kind": "stinger",
+   "status": "stub",
+   "conformance": "partial",
+   "scope": "Model, SetStinger/Trigger/Stop commands and cut-point Program/Preview exchange only; no stinger clip compositing, timing raster or effects"
+  },
+  {
+   "channel": 12,
+   "kind": "stinger",
+   "status": "stub",
+   "conformance": "partial",
+   "scope": "Model, SetStinger/Trigger/Stop commands and cut-point Program/Preview exchange only; no stinger clip compositing, timing raster or effects"
+  },
+  {
+   "channel": 13,
+   "kind": "stinger",
+   "status": "stub",
+   "conformance": "partial",
+   "scope": "Model, SetStinger/Trigger/Stop commands and cut-point Program/Preview exchange only; no stinger clip compositing, timing raster or effects"
+  },
+  {
+   "channel": 14,
+   "kind": "stinger",
+   "status": "stub",
+   "conformance": "partial",
+   "scope": "Model, SetStinger/Trigger/Stop commands and cut-point Program/Preview exchange only; no stinger clip compositing, timing raster or effects"
+  },
+  {
+   "channel": 15,
+   "kind": "stinger",
+   "status": "stub",
+   "conformance": "partial",
+   "scope": "Model, SetStinger/Trigger/Stop commands and cut-point Program/Preview exchange only; no stinger clip compositing, timing raster or effects"
+  },
+  {
+   "channel": 16,
+   "kind": "stinger",
+   "status": "stub",
+   "conformance": "partial",
+   "scope": "Model, SetStinger/Trigger/Stop commands and cut-point Program/Preview exchange only; no stinger clip compositing, timing raster or effects"
+  }
+ ],
+ "audio_destinations": [
+  {
+   "name": "Master",
+   "status": "stub",
+   "conformance": "partial",
+   "scope": "Real 48 kHz sample mixing with explicitly started local WASAPI monitoring and measured peaks; no loudness metering"
+  },
+  {
+   "name": "Headphones",
+   "status": "stub",
+   "conformance": "partial",
+   "scope": "Mixes in the engine matrix with per-input sends; no dedicated headphone device output"
+  },
+  {
+   "name": "A",
+   "status": "stub",
+   "conformance": "partial",
+   "scope": "Real sample mixing and per-input sends in the engine matrix; no dedicated device output or per-bus metering"
+  },
+  {
+   "name": "B",
+   "status": "stub",
+   "conformance": "partial",
+   "scope": "Real sample mixing and per-input sends in the engine matrix; no dedicated device output or per-bus metering"
+  },
+  {
+   "name": "C",
+   "status": "stub",
+   "conformance": "partial",
+   "scope": "Real sample mixing and per-input sends in the engine matrix; no dedicated device output or per-bus metering"
+  },
+  {
+   "name": "D",
+   "status": "stub",
+   "conformance": "partial",
+   "scope": "Real sample mixing and per-input sends in the engine matrix; no dedicated device output or per-bus metering"
+  },
+  {
+   "name": "E",
+   "status": "stub",
+   "conformance": "partial",
+   "scope": "Real sample mixing and per-input sends in the engine matrix; no dedicated device output or per-bus metering"
+  },
+  {
+   "name": "F",
+   "status": "stub",
+   "conformance": "partial",
+   "scope": "Real sample mixing and per-input sends in the engine matrix; no dedicated device output or per-bus metering"
+  },
+  {
+   "name": "G",
+   "status": "stub",
+   "conformance": "partial",
+   "scope": "Real sample mixing and per-input sends in the engine matrix; no dedicated device output or per-bus metering"
+  }
+ ],
+ "constraints": [
+  "Reference enums/catalogues prove an exposed name or contract, not a working source/encoder/plugin backend",
+  "Reference Rust crates are a domain/API study and explicitly declare unavailable vendor backends; they are not a proven broadcast engine",
+  "A green functional CI run does not make all reference features present or qualify performance",
+  "No proprietary assets, extracted binary code or unapproved runtime dependency is imported",
+  "Latest trace-log corrections override earlier reference summaries; shortcut names, accepted HTTP functions and state models are distinct evidence sets"
+ ],
+ "ui_workflows": [
+  {
+   "id": "basic",
+   "name": "Basic / Advanced presentation",
+   "status": "experimental",
+   "conformance": "partial",
+   "scope": "Independent persisted UI mode; Basic retains both monitors, Quick Play, input selection/cut/overlays 1-4, Add Input, audio mixer and lock. Does not change Program or multiview choice.",
+   "gap": "Hosted widget/native Basic correction passed; overlays/audio/inputs retain the general prototype limitations. Global-mode restore has source coverage only; native save/reopen verifies project configuration. The existing lock suppresses production keys; a complete pointer/layout lock contract is unverified."
+  },
+  {
+   "id": "playlist",
+   "name": "Named input playlist",
+   "status": "experimental",
+   "conformance": "partial",
+   "scope": "1-16 saved lists, at most 128 items, independent effects/hold times, reorder, loop/manual/selected start/clear-on-start, start/stop/next/previous and offline alarms.",
+   "gap": "Explicit synthetic/PNG holds only; no file-duration inference, video end events, pause/seek or media playback engine."
+  },
+  {
+   "id": "shortcuts",
+   "name": "Keyboard bindings / palette",
+   "status": "experimental",
+   "conformance": "partial",
+   "scope": "Validated persisted logical key/modifier/action mappings, focus/repeat guards and quick action palette.",
+   "gap": "At most 64 bindings and the implemented engine action subset; no 777-function dispatcher, MIDI or control surfaces."
+  },
+  {
+   "id": "slots",
+   "name": "Four transition slots",
+   "status": "experimental",
+   "conformance": "partial",
+   "scope": "Each saved slot has a real CPU effect and duration; in-flight transition pins its configuration.",
+   "gap": "12 of 20 observed effects; no stingers/GPU equivalence or vendor-pixel parity."
+  },
+  {
+   "id": "tbar",
+   "name": "Manual T-bar",
+   "status": "experimental",
+   "conformance": "partial",
+   "scope": "First slot selects manual effect/duration; gesture pins effect/duration/start, reverses and commits endpoint once.",
+   "gap": "UI-013 regression pending; CPU raster only, no hardware controller qualification."
+  },
+  {
+   "id": "properties",
+   "name": "Input Settings transactions",
+   "status": "experimental",
+   "conformance": "partial",
+   "scope": "Staged persisted PNG/generator effects, Cancel discard, bounded loading/relink, duplicate and source lifecycle.",
+   "gap": "No ten-layer transform/crop/rotation animation graph, full color tools or real video/device properties."
+  },
+  {
+   "id": "categories",
+   "name": "Input category filter",
+   "status": "experimental",
+   "conformance": "partial",
+   "scope": "Schema4 stable per-input category assignment, six standard plus sixteen editable custom definitions, context-menu assignment and real category filters.",
+   "gap": "UI-013 hosted acceptance pending; no vendor pixel/protocol parity claim."
+  },
+  {
+   "id": "search",
+   "name": "Input search",
+   "status": "experimental",
+   "conformance": "partial",
+   "scope": "Staged Input Search dialog with OK/Cancel, case-insensitive title/type/number filtering and no implicit switching.",
+   "gap": "UI-013 hosted acceptance pending; at most48 query characters, no remote search protocol."
+  },
+  {
+   "id": "theme",
+   "name": "Theme and Preview/Program colors",
+   "status": "experimental",
+   "conformance": "partial",
+   "scope": "Original persisted Dark/Light appearance and RGB Preview/Program roles; colors reach monitor headers and source selection.",
+   "gap": "UI-013 hosted acceptance pending; operator/media cards retain dark surfaces, vendor theme list/pixel parity and physical DPI are unqualified."
+  },
+  {
+   "id": "fullscreen",
+   "name": "Fullscreen Program outputs",
+   "status": "stub",
+   "conformance": "partial",
+   "scope": "Fullscreen expands the application window; routed-output menu explicitly says unavailable.",
+   "gap": "No independent Program-only monitor window, two routed fullscreen outputs, display selection or hotplug handling."
+  },
+  {
+   "id": "audio_panel",
+   "name": "Audio Mixer pane toggle",
+   "status": "experimental",
+   "conformance": "partial",
+   "scope": "Actual Audio Mixer hide/show with complete previous dock restoration; saves retain the complete layout.",
+   "gap": "UI-013 hosted acceptance pending; changes to the temporary hidden layout are not persisted; no physical monitoring/audio backend."
+  },
+  {
+   "id": "settings",
+   "name": "Settings categories and fields",
+   "status": "experimental",
+   "conformance": "partial",
+   "scope": "Atomic name/preferences apply, staged categories/theme/keys, explicit read-only unavailable display/output scaffolds.",
+   "gap": "UI-013 hosted acceptance pending. Most of256 declared reference properties have no backend and cannot be configured."
+  }
+ ],
+ "shortcut_function_inventory": {
+  "status": "experimental",
+  "conformance": "partial",
+  "scope": "777 observed shortcut identifiers; configurable RustMix bindings implement a limited typed-action subset. T11 proves this vocabulary differs from HTTP; it is not a 777-function API compatibility target.",
+  "groups": [
+   {
+    "name": "Layer / position / scale / crop / effects (per-input)",
+    "functions": [
+     "SetLayer",
+     "SetLayerAnimated",
+     "LayerOnOff",
+     "LayerOn",
+     "LayerOff",
+     "SetLayer1Zoom",
+     "SetLayer1PanX",
+     "SetLayer1PanY",
+     "SetLayer1X",
+     "SetLayer1Y",
+     "SetLayer1Width",
+     "SetLayer1Height",
+     "SetLayer1Rectangle",
+     "SetLayer1CropX1",
+     "SetLayer1CropY1",
+     "SetLayer1CropX2",
+     "SetLayer1CropY2",
+     "SetLayer1Crop",
+     "SetLayer2Zoom",
+     "SetLayer2PanX",
+     "SetLayer2PanY",
+     "SetLayer2X",
+     "SetLayer2Y",
+     "SetLayer2Width",
+     "SetLayer2Height",
+     "SetLayer2Rectangle",
+     "SetLayer2CropX1",
+     "SetLayer2CropY1",
+     "SetLayer2CropX2",
+     "SetLayer2CropY2",
+     "SetLayer2Crop",
+     "SetLayer3Zoom",
+     "SetLayer3PanX",
+     "SetLayer3PanY",
+     "SetLayer3X",
+     "SetLayer3Y",
+     "SetLayer3Width",
+     "SetLayer3Height",
+     "SetLayer3Rectangle",
+     "SetLayer3CropX1",
+     "SetLayer3CropY1",
+     "SetLayer3CropX2",
+     "SetLayer3CropY2",
+     "SetLayer3Crop",
+     "SetLayer4Zoom",
+     "SetLayer4PanX",
+     "SetLayer4PanY",
+     "SetLayer4X",
+     "SetLayer4Y",
+     "SetLayer4Width",
+     "SetLayer4Height",
+     "SetLayer4Rectangle",
+     "SetLayer4CropX1",
+     "SetLayer4CropY1",
+     "SetLayer4CropX2",
+     "SetLayer4CropY2",
+     "SetLayer4Crop",
+     "SetLayer5Zoom",
+     "SetLayer5PanX",
+     "SetLayer5PanY",
+     "SetLayer5X",
+     "SetLayer5Y",
+     "SetLayer5Width",
+     "SetLayer5Height",
+     "SetLayer5Rectangle",
+     "SetLayer5CropX1",
+     "SetLayer5CropY1",
+     "SetLayer5CropX2",
+     "SetLayer5CropY2",
+     "SetLayer5Crop",
+     "SetLayer6Zoom",
+     "SetLayer6PanX",
+     "SetLayer6PanY",
+     "SetLayer6X",
+     "SetLayer6Y",
+     "SetLayer6Width",
+     "SetLayer6Height",
+     "SetLayer6Rectangle",
+     "SetLayer6CropX1",
+     "SetLayer6CropY1",
+     "SetLayer6CropX2",
+     "SetLayer6CropY2",
+     "SetLayer6Crop",
+     "SetLayer7Zoom",
+     "SetLayer7PanX",
+     "SetLayer7PanY",
+     "SetLayer7X",
+     "SetLayer7Y",
+     "SetLayer7Width",
+     "SetLayer7Height",
+     "SetLayer7Rectangle",
+     "SetLayer7CropX1",
+     "SetLayer7CropY1",
+     "SetLayer7CropX2",
+     "SetLayer7CropY2",
+     "SetLayer7Crop",
+     "SetLayer8Zoom",
+     "SetLayer8PanX",
+     "SetLayer8PanY",
+     "SetLayer8X",
+     "SetLayer8Y",
+     "SetLayer8Width",
+     "SetLayer8Height",
+     "SetLayer8Rectangle",
+     "SetLayer8CropX1",
+     "SetLayer8CropY1",
+     "SetLayer8CropX2",
+     "SetLayer8CropY2",
+     "SetLayer8Crop",
+     "SetLayer9Zoom",
+     "SetLayer9PanX",
+     "SetLayer9PanY",
+     "SetLayer9X",
+     "SetLayer9Y",
+     "SetLayer9Width",
+     "SetLayer9Height",
+     "SetLayer9Rectangle",
+     "SetLayer9CropX1",
+     "SetLayer9CropY1",
+     "SetLayer9CropX2",
+     "SetLayer9CropY2",
+     "SetLayer9Crop",
+     "SetLayer10Zoom",
+     "SetLayer10PanX",
+     "SetLayer10PanY",
+     "SetLayer10X",
+     "SetLayer10Y",
+     "SetLayer10Width",
+     "SetLayer10Height",
+     "SetLayer10Rectangle",
+     "SetLayer10CropX1",
+     "SetLayer10CropY1",
+     "SetLayer10CropX2",
+     "SetLayer10CropY2",
+     "SetLayer10Crop",
+     "SetLayerDynamicZoom",
+     "SetLayerDynamicPanX",
+     "SetLayerDynamicPanY",
+     "SetLayerDynamicX",
+     "SetLayerDynamicY",
+     "SetLayerDynamicWidth",
+     "SetLayerDynamicHeight",
+     "SetLayerDynamicRectangle",
+     "SetLayerDynamicCropX1",
+     "SetLayerDynamicCropY1",
+     "SetLayerDynamicCropX2",
+     "SetLayerDynamicCropY2",
+     "SetLayerDynamicCrop"
+    ],
+    "declared_count": 148
+   },
+   {
+    "name": "Transition / stinger",
+    "functions": [
+     "FadeToBlack",
+     "Transition1",
+     "Transition2",
+     "Transition3",
+     "Transition4",
+     "Stinger1",
+     "Stinger2",
+     "Stinger3",
+     "Stinger4",
+     "Stinger5",
+     "Stinger6",
+     "Stinger7",
+     "Stinger8",
+     "SetStingerGTInput1",
+     "SetStingerGTInput2",
+     "SetStingerGTInput3",
+     "SetStingerGTInput4",
+     "SetStingerGTInput5",
+     "SetStingerGTInput6",
+     "SetStingerGTInput7",
+     "SetStingerGTInput8",
+     "CutDirect",
+     "SetTransitionEffect1",
+     "SetTransitionEffect2",
+     "SetTransitionEffect3",
+     "SetTransitionEffect4",
+     "SetTransitionDuration1",
+     "SetTransitionDuration2",
+     "SetTransitionDuration3",
+     "SetTransitionDuration4"
+    ],
+    "declared_count": 30
+   },
+   {
+    "name": "Preview / program routing",
+    "functions": [
+     "PreviewInputNext",
+     "PreviewInputPrevious",
+     "PreviewInput",
+     "ActiveInput",
+     "PreviewOverlayInput1",
+     "PreviewOverlayInput2",
+     "PreviewOverlayInput3",
+     "PreviewOverlayInput4",
+     "PreviewOverlayInput5",
+     "PreviewOverlayInput6",
+     "PreviewOverlayInput7",
+     "PreviewOverlayInput8"
+    ],
+    "declared_count": 12
+   },
+   {
+    "name": "Overlay channels",
+    "functions": [
+     "OverlayInput1",
+     "OverlayInput1Off",
+     "OverlayInput1In",
+     "OverlayInput1Out",
+     "OverlayInput1Zoom",
+     "OverlayInput1Last",
+     "OverlayInput2",
+     "OverlayInput2Off",
+     "OverlayInput2In",
+     "OverlayInput2Out",
+     "OverlayInput2Zoom",
+     "OverlayInput2Last",
+     "OverlayInput3",
+     "OverlayInput3Off",
+     "OverlayInput3In",
+     "OverlayInput3Out",
+     "OverlayInput3Zoom",
+     "OverlayInput3Last",
+     "OverlayInput4",
+     "OverlayInput4Off",
+     "OverlayInput4In",
+     "OverlayInput4Out",
+     "OverlayInput4Zoom",
+     "OverlayInput4Last",
+     "OverlayInput5",
+     "OverlayInput5Off",
+     "OverlayInput5In",
+     "OverlayInput5Out",
+     "OverlayInput5Zoom",
+     "OverlayInput5Last",
+     "OverlayInput6",
+     "OverlayInput6Off",
+     "OverlayInput6In",
+     "OverlayInput6Out",
+     "OverlayInput6Zoom",
+     "OverlayInput6Last",
+     "OverlayInput7",
+     "OverlayInput7Off",
+     "OverlayInput7In",
+     "OverlayInput7Out",
+     "OverlayInput7Zoom",
+     "OverlayInput7Last",
+     "OverlayInput8",
+     "OverlayInput8Off",
+     "OverlayInput8In",
+     "OverlayInput8Out",
+     "OverlayInput8Zoom",
+     "OverlayInput8Last",
+     "OverlayInputAllOff"
+    ],
+    "declared_count": 49
+   },
+   {
+    "name": "Replay",
+    "functions": [
+     "ReplayStartRecording",
+     "ReplayStopRecording",
+     "ReplayStartStopRecording",
+     "ReplayMarkIn",
+     "ReplayMarkInLive",
+     "ReplayMarkInRecorded",
+     "ReplayMarkOut",
+     "ReplayMarkInOut",
+     "ReplayMarkInOutLive",
+     "ReplayMarkInOutRecorded",
+     "ReplayMarkInOutLiveFuture",
+     "ReplayMarkInRecordedNow",
+     "ReplayMarkCancel",
+     "ReplayToggleQuadMode",
+     "ReplayQuadModeOn",
+     "ReplayQuadModeOff",
+     "ReplaySelectChannelAB",
+     "ReplaySelectChannelA",
+     "ReplaySelectChannelB",
+     "ReplaySwapChannels",
+     "ReplaySetChannelAToBTimecode",
+     "ReplaySetChannelBToATimecode",
+     "ReplaySetChannelAToBTimecodeAndCamera",
+     "ReplaySetChannelBToATimecodeAndCamera",
+     "ReplayACamera1",
+     "ReplayACamera2",
+     "ReplayACamera3",
+     "ReplayACamera4",
+     "ReplayACamera5",
+     "ReplayACamera6",
+     "ReplayACamera7",
+     "ReplayACamera8",
+     "ReplayBCamera1",
+     "ReplayBCamera2",
+     "ReplayBCamera3",
+     "ReplayBCamera4",
+     "ReplayBCamera5",
+     "ReplayBCamera6",
+     "ReplayBCamera7",
+     "ReplayBCamera8",
+     "ReplayCCamera1",
+     "ReplayCCamera2",
+     "ReplayCCamera3",
+     "ReplayCCamera4",
+     "ReplayCCamera5",
+     "ReplayCCamera6",
+     "ReplayCCamera7",
+     "ReplayCCamera8",
+     "ReplayDCamera1",
+     "ReplayDCamera2",
+     "ReplayDCamera3",
+     "ReplayDCamera4",
+     "ReplayDCamera5",
+     "ReplayDCamera6",
+     "ReplayDCamera7",
+     "ReplayDCamera8",
+     "ReplayCamera1",
+     "ReplayCamera2",
+     "ReplayCamera3",
+     "ReplayCamera4",
+     "ReplayCamera5",
+     "ReplayCamera6",
+     "ReplayCamera7",
+     "ReplayCamera8",
+     "ReplayLive",
+     "ReplayRecorded",
+     "ReplayLiveToggle",
+     "ReplaySelectEvents1",
+     "ReplaySelectEvents2",
+     "ReplaySelectEvents3",
+     "ReplaySelectEvents4",
+     "ReplaySelectEvents5",
+     "ReplaySelectEvents6",
+     "ReplaySelectEvents7",
+     "ReplaySelectEvents8",
+     "ReplaySelectEvents9",
+     "ReplaySelectEvents10",
+     "ReplaySelectEvents11",
+     "ReplaySelectEvents12",
+     "ReplaySelectEvents13",
+     "ReplaySelectEvents14",
+     "ReplaySelectEvents15",
+     "ReplaySelectEvents16",
+     "ReplaySelectEvents17",
+     "ReplaySelectEvents18",
+     "ReplaySelectEvents19",
+     "ReplaySelectEvents20",
+     "ReplayPlayEvent",
+     "ReplayPlayEventToOutput",
+     "ReplayPlayAllEvents",
+     "ReplayPlayAllEventsToOutput",
+     "ReplayPlayEventsByID",
+     "ReplayPlayEventsByIDToOutput",
+     "ReplayPlayLastEvent",
+     "ReplayPlayLastEventToOutput",
+     "ReplayPlaySelectedEvent",
+     "ReplayPlaySelectedEventToOutput",
+     "ReplayExportLastEvent",
+     "ReplayShowHide",
+     "ReplayChangeDirection",
+     "ReplaySetDirectionForward",
+     "ReplaySetDirectionBackward",
+     "ReplaySetLastEventText",
+     "ReplaySetLastEventTextCamera",
+     "ReplaySetSelectedEventText",
+     "ReplaySetSelectedEventTextCamera",
+     "ReplayAppendLastEventText",
+     "ReplayAppendLastEventTextCamera",
+     "ReplayAppendSelectedEventText",
+     "ReplayAppendSelectedEventTextCamera",
+     "ReplayToggleLastEventCamera1",
+     "ReplayToggleLastEventCamera2",
+     "ReplayToggleLastEventCamera3",
+     "ReplayToggleLastEventCamera4",
+     "ReplayToggleLastEventCamera5",
+     "ReplayToggleLastEventCamera6",
+     "ReplayToggleLastEventCamera7",
+     "ReplayToggleLastEventCamera8",
+     "ReplayLastEventSingleCameraOn",
+     "ReplayLastEventCameraOn",
+     "ReplayLastEventCameraOff",
+     "ReplayToggleSelectedEventCamera1",
+     "ReplayToggleSelectedEventCamera2",
+     "ReplayToggleSelectedEventCamera3",
+     "ReplayToggleSelectedEventCamera4",
+     "ReplayToggleSelectedEventCamera5",
+     "ReplayToggleSelectedEventCamera6",
+     "ReplayToggleSelectedEventCamera7",
+     "ReplayToggleSelectedEventCamera8",
+     "ReplaySelectedEventSingleCameraOn",
+     "ReplaySelectedEventCameraOn",
+     "ReplaySelectedEventCameraOff",
+     "ReplayPlayPause",
+     "ReplayPlay",
+     "ReplayPause",
+     "ReplayPlayForward",
+     "ReplayPlayBackward",
+     "ReplayFastForward",
+     "ReplayFastBackward",
+     "ReplayJumpFrames",
+     "ReplayJumpFramesFastOn",
+     "ReplayJumpFramesFastOff",
+     "ReplayChangeSpeed",
+     "ReplaySetSpeed",
+     "ReplayJumpToNow",
+     "ReplaySetTimecode",
+     "ReplaySelectPreviousEvent",
+     "ReplaySelectNextEvent",
+     "ReplaySelectFirstEvent",
+     "ReplaySelectLastEvent",
+     "ReplaySelectAllEvents",
+     "ReplayScrollSelectedEvent",
+     "ReplayMoveSelectedInPoint",
+     "ReplayMoveSelectedOutPoint",
+     "ReplayUpdateSelectedInPoint",
+     "ReplayUpdateSelectedOutPoint",
+     "ReplayUpdateSelectedSpeed",
+     "ReplayUpdateSelectedSpeedDefault",
+     "ReplayUpdateSelectedSpeedFromValue",
+     "ReplayJumpToSelectedInPoint",
+     "ReplayJumpToSelectedOutPoint",
+     "ReplayPlayNext",
+     "ReplayPlayPrevious",
+     "ReplayMoveLastEvent",
+     "ReplayMoveSelectedEvent",
+     "ReplayCopyLastEvent",
+     "ReplayCopySelectedEvent",
+     "ReplayDeleteLastEvent",
+     "ReplayDeleteSelectedEvent",
+     "ReplayDuplicateLastEvent",
+     "ReplayDuplicateSelectedEvent",
+     "ReplayStopEvents",
+     "ReplayMoveSelectedEventUp",
+     "ReplayMoveSelectedEventDown",
+     "ReplaySetAudioSource"
+    ],
+    "declared_count": 175
+   },
+   {
+    "name": "Audio buses A-G / mix-minus",
+    "functions": [
+     "SetBusAVolume",
+     "SetBusBVolume",
+     "SetBusCVolume",
+     "SetBusDVolume",
+     "SetBusEVolume",
+     "SetBusFVolume",
+     "SetBusGVolume",
+     "SetBusAVolumeFade",
+     "SetBusBVolumeFade",
+     "SetBusCVolumeFade",
+     "SetBusDVolumeFade",
+     "SetBusEVolumeFade",
+     "SetBusFVolumeFade",
+     "SetBusGVolumeFade",
+     "BusAAudioOn",
+     "BusAAudioOff",
+     "BusAAudio",
+     "BusBAudioOn",
+     "BusBAudioOff",
+     "BusBAudio",
+     "BusAAudioPluginShow",
+     "BusAAudioPluginOn",
+     "BusAAudioPluginOff",
+     "BusAAudioPluginOnOff",
+     "BusBAudioPluginShow",
+     "BusBAudioPluginOn",
+     "BusBAudioPluginOff",
+     "BusBAudioPluginOnOff"
+    ],
+    "declared_count": 28
+   },
+   {
+    "name": "Audio mixer",
+    "functions": [
+     "Audio",
+     "AudioOn",
+     "AudioOff",
+     "SetFader",
+     "AudioAutoOn",
+     "AudioAutoOff",
+     "AudioAuto",
+     "SetAlpha",
+     "SetVolume",
+     "SetVolumeFade",
+     "SetVolumeChannel1",
+     "SetVolumeChannel2",
+     "SetVolumeChannelMixer",
+     "SetVolumeBusMixer",
+     "SetVolumeBusMixerM",
+     "SetVolumeBusMixerA",
+     "SetVolumeBusMixerB",
+     "SetVolumeBusMixerC",
+     "SetVolumeBusMixerD",
+     "SetVolumeBusMixerE",
+     "SetVolumeBusMixerF",
+     "SetVolumeBusMixerG",
+     "SetVolumeChannelMixer1",
+     "SetVolumeChannelMixer2",
+     "SetVolumeChannelMixer3",
+     "SetVolumeChannelMixer4",
+     "SetVolumeChannelMixer5",
+     "SetVolumeChannelMixer6",
+     "SetVolumeChannelMixer7",
+     "SetVolumeChannelMixer8",
+     "SetVolumeChannelMixer9",
+     "SetVolumeChannelMixer10",
+     "SetVolumeChannelMixer11",
+     "SetVolumeChannelMixer12",
+     "SetVolumeChannelMixer13",
+     "SetVolumeChannelMixer14",
+     "SetVolumeChannelMixer15",
+     "SetVolumeChannelMixer16",
+     "SetBalance",
+     "SetGain",
+     "SetGainChannel1",
+     "SetGainChannel2",
+     "SetMasterVolume",
+     "SetHeadphonesVolume",
+     "SetMasterVolumeFade",
+     "MasterAudioOn",
+     "MasterAudioOff",
+     "MasterAudio",
+     "Solo",
+     "SoloOn",
+     "SoloOff",
+     "SoloAllOff",
+     "SoloPFL",
+     "SoloPFLOn",
+     "SoloPFLOff",
+     "AudioBus",
+     "AudioBusOn",
+     "AudioBusOff",
+     "AudioMixerShowHide",
+     "AudioPluginShow",
+     "AudioPluginOn",
+     "AudioPluginOff",
+     "AudioPluginOnOff",
+     "AudioChannelMatrixApplyPreset",
+     "MasterAudioPluginShow",
+     "MasterAudioPluginOn",
+     "MasterAudioPluginOff",
+     "MasterAudioPluginOnOff",
+     "SetRate",
+     "SetRateSlowMotion"
+    ],
+    "declared_count": 70
+   },
+   {
+    "name": "Effects slots / image processing",
+    "functions": [
+     "DeinterlaceOn",
+     "DeinterlaceOff",
+     "SharpenOn",
+     "SharpenOff",
+     "MirrorOn",
+     "MirrorOff",
+     "SetPictureEffect",
+     "SetPictureEffectDuration",
+     "SetColor",
+     "SetMultiViewOverlay",
+     "SwapLayerAnimated",
+     "SetZoom",
+     "SetPanX",
+     "SetPanY",
+     "SetCropX1",
+     "SetCropY1",
+     "SetCropX2",
+     "SetCropY2",
+     "SetCrop",
+     "Effect1",
+     "Effect1On",
+     "Effect1Off",
+     "SetEffect1Strength",
+     "Effect2",
+     "Effect2On",
+     "Effect2Off",
+     "SetEffect2Strength",
+     "Effect3",
+     "Effect3On",
+     "Effect3Off",
+     "SetEffect3Strength",
+     "Effect4",
+     "Effect4On",
+     "Effect4Off",
+     "SetEffect4Strength"
+    ],
+    "declared_count": 35
+   },
+   {
+    "name": "Outputs / SRT / OMT",
+    "functions": [
+     "SetOutputFullscreen",
+     "SetOutputFullscreen2",
+     "SetOutputExternal2",
+     "SetOutput2",
+     "SetOutput3",
+     "SetOutput4",
+     "StartSRTOutput",
+     "StartStopSRTOutput",
+     "OMTSelectSourceByName",
+     "OMTSelectSourceByIndex",
+     "OMTPreviewOn",
+     "OMTPreviewOff"
+    ],
+    "declared_count": 12
+   },
+   {
+    "name": "Recording / video delay",
+    "functions": [
+     "StartRecording",
+     "StopRecording",
+     "VideoDelayStartRecording",
+     "VideoDelayStopRecording",
+     "VideoDelayStartStopRecording"
+    ],
+    "declared_count": 5
+   },
+   {
+    "name": "Streaming",
+    "functions": [
+     "StartStreaming",
+     "StopStreaming",
+     "StreamingSetURL",
+     "StreamingSetKey",
+     "StreamingSetUsername",
+     "StreamingSetPassword"
+    ],
+    "declared_count": 6
+   },
+   {
+    "name": "External output",
+    "functions": [
+     "StartExternal",
+     "StopExternal"
+    ],
+    "declared_count": 2
+   },
+   {
+    "name": "Title / text / data / countdown",
+    "functions": [
+     "SetText",
+     "SetCountdown",
+     "SetImage",
+     "SetImageVisible",
+     "SetImageVisibleOn",
+     "SetImageVisibleOff",
+     "SetTextColour",
+     "SetTextVisible",
+     "SetTextVisibleOn",
+     "SetTextVisibleOff",
+     "TitleBeginAnimation",
+     "DataSourcePreviousRow",
+     "DataSourceNextRow",
+     "DataSourceSelectRow",
+     "DataSourceAutoNextOnOff",
+     "DataSourceAutoNextOn",
+     "DataSourceAutoNextOff",
+     "DataSourcePlayPause",
+     "DataSourcePlay",
+     "DataSourcePause"
+    ],
+    "declared_count": 20
+   },
+   {
+    "name": "Scripting",
+    "functions": [
+     "ScriptStartDynamic",
+     "ScriptStopDynamic",
+     "ScriptStart",
+     "ScriptStop",
+     "ScriptStopAll"
+    ],
+    "declared_count": 5
+   },
+   {
+    "name": "Settings / preset / session",
+    "functions": [
+     "SaveVideoDelay",
+     "OpenPreset",
+     "SavePreset"
+    ],
+    "declared_count": 3
+   },
+   {
+    "name": "Fullscreen / display / multiview",
+    "functions": [
+     "FullscreenOn",
+     "FullscreenOff",
+     "MultiViewOverlay",
+     "MultiViewOverlayOn",
+     "MultiViewOverlayOff",
+     "Fullscreen"
+    ],
+    "declared_count": 6
+   },
+   {
+    "name": "PTZ / camera control",
+    "functions": [
+     "ZoomSelectParticipantByName",
+     "ZoomMuteSelf",
+     "ZoomUnMuteSelf",
+     "ZoomJoinMeeting",
+     "PTZMoveUp",
+     "PTZMoveUpLeft",
+     "PTZMoveUpRight",
+     "PTZMoveDown",
+     "PTZMoveDownLeft",
+     "PTZMoveDownRight",
+     "PTZMoveLeft",
+     "PTZMoveRight",
+     "PTZMoveStop",
+     "PTZZoomIn",
+     "PTZZoomOut",
+     "PTZZoomStop",
+     "PTZHome",
+     "PTZFocusFar",
+     "PTZFocusNear",
+     "PTZFocusStop",
+     "PTZFocusAuto",
+     "PTZFocusManual",
+     "PTZUpdateVirtualInput",
+     "PTZMoveToVirtualInputPosition",
+     "PTZMoveToVirtualInputPositionByIndex",
+     "PTZCreateVirtualInput"
+    ],
+    "declared_count": 26
+   },
+   {
+    "name": "Colour correction",
+    "functions": [
+     "SetCCLiftRGB",
+     "SetCCLiftR",
+     "SetCCLiftG",
+     "SetCCLiftB",
+     "SetCCLiftY",
+     "SetCCGammaRGB",
+     "SetCCGammaR",
+     "SetCCGammaG",
+     "SetCCGammaB",
+     "SetCCGammaY",
+     "SetCCGainRGB",
+     "SetCCGainR",
+     "SetCCGainG",
+     "SetCCGainB",
+     "SetCCGainY",
+     "SetCCSaturation",
+     "SetCCHue",
+     "ColourCorrectionReset",
+     "ColourCorrectionAuto"
+    ],
+    "declared_count": 19
+   },
+   {
+    "name": "Browser / web / video call",
+    "functions": [
+     "VideoCallAudioSource",
+     "VideoCallVideoSource",
+     "VideoCallReconnect",
+     "VideoCallConnect",
+     "BrowserReload",
+     "BrowserMouseEnabled",
+     "BrowserMouseDisabled",
+     "BrowserKeyboardEnabled",
+     "BrowserKeyboardDisabled",
+     "BrowserBack",
+     "BrowserForward",
+     "BrowserNavigate"
+    ],
+    "declared_count": 12
+   },
+   {
+    "name": "NDI",
+    "functions": [
+     "NDISelectSourceByName",
+     "NDISelectSourceByIndex",
+     "NDICommand",
+     "NDIStartRecording",
+     "NDIStopRecording"
+    ],
+    "declared_count": 5
+   },
+   {
+    "name": "Playlist / list operations",
+    "functions": [
+     "ListPlayOut",
+     "ListShowHide",
+     "ListAdd",
+     "ListRemove",
+     "ListRemoveAll",
+     "ListExport",
+     "ListShuffle"
+    ],
+    "declared_count": 7
+   },
+   {
+    "name": "Auto-play / auto-pause automation",
+    "functions": [
+     "AutoPlayOn",
+     "AutoPlayOff",
+     "AutoPauseOn",
+     "AutoPauseOff",
+     "AutoRestartOn",
+     "AutoRestartOff",
+     "AutoPlayNext",
+     "AutoPlayNextOn",
+     "AutoPlayNextOff",
+     "AutoPlayFirst",
+     "AutoPlayFirstOn",
+     "AutoPlayFirstOff"
+    ],
+    "declared_count": 12
+   },
+   {
+    "name": "Countdown / timer",
+    "functions": [
+     "StartCountdown",
+     "PauseCountdown",
+     "StopCountdown",
+     "AdjustCountdown",
+     "ChangeCountdown",
+     "SuspendCountdown"
+    ],
+    "declared_count": 6
+   },
+   {
+    "name": "Snapshot / render",
+    "functions": [
+     "ResumeRender",
+     "Snapshot",
+     "SnapshotInput"
+    ],
+    "declared_count": 3
+   },
+   {
+    "name": "Activator / hardware control",
+    "functions": [
+     "ActivatorRefresh"
+    ],
+    "declared_count": 1
+   },
+   {
+    "name": "Input management",
+    "functions": [
+     "AddInput",
+     "RemoveInput",
+     "SetInputName",
+     "MoveMultiViewOverlay",
+     "MoveLayer",
+     "MoveInput",
+     "InputPreviewShow",
+     "InputPreviewHide",
+     "InputPreviewShowHide"
+    ],
+    "declared_count": 9
+   },
+   {
+    "name": "Input transport",
+    "functions": [
+     "PlayPause",
+     "Restart",
+     "NextPicture",
+     "PreviousPicture",
+     "SetPosition",
+     "LoopOn",
+     "LoopOff",
+     "Play",
+     "Pause",
+     "ResetInput",
+     "LivePlayPause",
+     "Loop",
+     "GO",
+     "QuickPlay",
+     "NextPlayListEntry",
+     "PreviousPlayListEntry",
+     "StopPlayList",
+     "NextItem",
+     "PreviousItem",
+     "PauseRender",
+     "StopMultiCorder",
+     "StopSRTOutput",
+     "NextTitlePreset",
+     "PreviousTitlePreset"
+    ],
+    "declared_count": 24
+   },
+   {
+    "name": "Dynamic values",
+    "functions": [
+     "SetDynamicInput1",
+     "SetDynamicInput2",
+     "SetDynamicInput3",
+     "SetDynamicInput4",
+     "SetDynamicValue1",
+     "SetDynamicValue2",
+     "SetDynamicValue3",
+     "SetDynamicValue4"
+    ],
+    "declared_count": 8
+   },
+   {
+    "name": "(uncategorised)",
+    "functions": [
+     "StartPlayList",
+     "SelectPlayList",
+     "SelectIndex",
+     "SetPictureTransition",
+     "BusXAudioOn",
+     "BusXAudioOff",
+     "BusXAudio",
+     "BusXSendToMasterOn",
+     "BusXSendToMasterOff",
+     "BusXSendToMaster",
+     "BusXSoloOn",
+     "BusXSoloOff",
+     "BusXSolo",
+     "BusXAudioPluginShow",
+     "BusXAudioPluginOn",
+     "BusXAudioPluginOff",
+     "BusXAudioPluginOnOff",
+     "SetTickerSpeed",
+     "SetFrameDelay",
+     "SelectCategory",
+     "MarkIn",
+     "MarkOut",
+     "MarkReset",
+     "MarkResetIn",
+     "MarkResetOut",
+     "WriteDurationToRecordingLog",
+     "LastPreset",
+     "CreateVirtualInput",
+     "StartStopStreaming",
+     "StartStopRecording",
+     "StartStopExternal",
+     "StartMultiCorder",
+     "StartStopMultiCorder",
+     "SelectTitlePreset",
+     "WaitForCompletion",
+     "KeyPress",
+     "SendKeys",
+     "Undo",
+     "CallManagerShowHide"
+    ],
+    "declared_count": 39
+   }
+  ]
+ },
+ "wire_observations": {
+  "authority": "evidence/trace-log.md T9/T10/T11, superseding older SPEC/api-report summaries",
+  "standard_wire_overlay_channels": [
+   1,
+   8
+  ],
+  "state_overlay_and_stinger_channels": [
+   1,
+   16
+  ],
+  "off_clears_assignment": true,
+  "out_retains_assignment": true,
+  "out_raster_effect": "Unknown from state-only observations",
+  "control_response": "Pre-action state; subsequent read is needed",
+  "shortcut_vocabulary_equals_http": false,
+  "exact_effect_geometry": "Names do not establish sampling, projection or pixel algorithms",
+  "physical_output_number_mapping": "Unknown for accepted SetOutput2/3/4 spellings"
+ },
+ "source_candidate": {
+  "revision": "d893b3f",
+  "run": "https://github.com/sansaks-jpg/rustmix/actions/runs/39115630407",
+  "status": "pending hosted verification; runtime_evidence below is the previous accepted baseline"
+ }
 }

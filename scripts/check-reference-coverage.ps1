@@ -66,8 +66,16 @@ $standardChannels = [int][regex]::Match($overlays, 'pub const STANDARD_CHANNELS:
 $stingerChannels = [int][regex]::Match($overlays, 'pub const STINGER_CHANNELS: usize = (\d+);').Groups[1].Value
 $overlayChannels = $standardChannels + $stingerChannels
 if ($overlayChannels -ne @($audit.overlay_channels | Where-Object { $_.status -ne 'not_started' }).Count) { throw 'Overlay scope exceeds the actual engine bank' }
-$busCount = [int][regex]::Match($core, 'pub buses: \[AudioChannel; (\d+)\]').Groups[1].Value
-if ($busCount -ne @($audit.audio_destinations | Where-Object { $_.status -ne 'not_started' }).Count) { throw 'Audio scope exceeds the actual engine bank' }
+$busMatch = [regex]::Match($core, 'pub buses: \[AudioChannel; ([^\]]+)\]')
+$busCount = 0
+if ($busMatch.Groups[1].Value -match '^\d+$') {
+    $busCount = [int]$busMatch.Groups[1].Value
+} else {
+    # A symbolic width must resolve to the actual audio_engine constant.
+    $audioEngine = Get-Content -LiteralPath (Join-Path $workspaceRoot 'crates/engine/src/audio_engine.rs') -Raw
+    $busCount = [int][regex]::Match($audioEngine, 'pub const BUS_COUNT: usize = (\d+);').Groups[1].Value
+}
+if ($busCount -le 0 -or $busCount -ne @($audit.audio_destinations | Where-Object { $_.status -ne 'not_started' }).Count) { throw 'Audio scope exceeds the actual engine bank' }
 $allRows = @($audit.areas) + @($audit.input_types) + @($audit.transitions) + @($audit.overlay_channels) + @($audit.audio_destinations) + @($audit.ui_workflows) + @($audit.shortcut_function_inventory)
 $unmatched = @($allRows | Where-Object { $_.conformance -ne 'matched' }).Count
 $fullMatch = ($unmatched -eq 0 -and $audit.reference.wire_contract_qualified -eq $true -and
