@@ -19,15 +19,17 @@
 
 /// The six preset colours in catalogue order (reference `PRESET_CATEGORIES`).
 ///
-/// The reference code names the last two slots `Aqua` and `Blue`; RustMix
-/// keeps the task specification's `Azure` and `MidnightBlue` labels.
+/// The last two labels are the verified reference catalogue names `Aqua` and
+/// `Blue` (confirmed against the reference binary strings and metadata);
+/// neither `Azure` nor `MidnightBlue` appears there. Persisted definition ids
+/// and rustmix's own colour values are unchanged, so existing projects load.
 pub const PRESET_CATEGORIES: [InputCategory; 6] = [
     InputCategory::Red,
     InputCategory::Green,
     InputCategory::Orange,
     InputCategory::Purple,
-    InputCategory::Azure,
-    InputCategory::MidnightBlue,
+    InputCategory::Aqua,
+    InputCategory::Blue,
 ];
 
 /// Persisted definition id of the first custom category.
@@ -43,8 +45,8 @@ pub enum InputCategory {
     Green,
     Orange,
     Purple,
-    Azure,
-    MidnightBlue,
+    Aqua,
+    Blue,
     /// User category `1..=16`; use [`InputCategory::custom`] to clamp.
     Custom(u8),
     /// UI-only pseudo filter; the text matcher belongs to the caller.
@@ -72,8 +74,8 @@ impl InputCategory {
             Self::Green => Some(1),
             Self::Orange => Some(2),
             Self::Purple => Some(3),
-            Self::Azure => Some(4),
-            Self::MidnightBlue => Some(5),
+            Self::Aqua => Some(4),
+            Self::Blue => Some(5),
             Self::Custom(index) => Some(CUSTOM_ID_FIRST + index.clamp(1, Self::CUSTOM_COUNT) - 1),
         }
     }
@@ -88,8 +90,8 @@ impl InputCategory {
             Some(1) => Some(Self::Green),
             Some(2) => Some(Self::Orange),
             Some(3) => Some(Self::Purple),
-            Some(4) => Some(Self::Azure),
-            Some(5) => Some(Self::MidnightBlue),
+            Some(4) => Some(Self::Aqua),
+            Some(5) => Some(Self::Blue),
             Some(id @ CUSTOM_ID_FIRST..=LAST_CUSTOM_ID) => {
                 Some(Self::Custom(id - CUSTOM_ID_FIRST + 1))
             }
@@ -167,7 +169,7 @@ mod tests {
         let names: Vec<_> = definitions.iter().map(|c| c.name.as_str()).collect();
         assert_eq!(
             names[..6],
-            ["Red", "Green", "Orange", "Purple", "Azure", "Midnight Blue"]
+            ["Red", "Green", "Orange", "Purple", "Aqua", "Blue"]
         );
     }
 }

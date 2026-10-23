@@ -633,6 +633,7 @@ pub enum Command {
     SetInputAudio(InputId, AudioChannel),
     SetBus(usize, AudioChannel),
     SetOverlay(usize, OverlayState),
+    SetOverlayInput(usize, Option<InputId>),
     SetStinger(usize, StingerChannel),
     TriggerStinger(usize),
     StopStinger,
@@ -824,6 +825,14 @@ impl Command {
                 "Set overlay",
                 "Graphics",
                 "F1–F8",
+                true,
+                true,
+            ),
+            Self::SetOverlayInput(..) => (
+                "overlay.input.set",
+                "Bind overlay input",
+                "Graphics",
+                "",
                 true,
                 true,
             ),
@@ -1225,6 +1234,14 @@ impl Engine {
             Command::SetOverlay(slot, _) if *slot >= overlays::STANDARD_CHANNELS => {
                 Err(invalid("Overlay channel not found"))
             }
+            Command::SetOverlayInput(slot, _) if *slot >= overlays::STANDARD_CHANNELS => {
+                Err(invalid("Overlay channel not found"))
+            }
+            Command::SetOverlayInput(_, binding)
+                if binding.is_some_and(|id| self.project.input(id).is_none()) =>
+            {
+                Err(invalid("Overlay input not found"))
+            }
             Command::SetStinger(slot, _) if *slot >= overlays::STINGER_CHANNELS => {
                 Err(invalid("Stinger channel not found"))
             }
@@ -1503,6 +1520,11 @@ impl Engine {
                         channel.stinger_input = None;
                     }
                 }
+                for binding in &mut next.overlays.inputs {
+                    if *binding == Some(id) {
+                        *binding = None;
+                    }
+                }
                 for input in &mut next.inputs {
                     if input.config.pip_source == Some(id) {
                         input.config.pip_source = None;
@@ -1590,6 +1612,18 @@ impl Engine {
                     .overlays
                     .standard_mut(i)
                     .ok_or_else(|| invalid("Overlay channel not found"))? = o;
+            }
+            Command::SetOverlayInput(slot, binding) => {
+                // The reference OverlayInput<n> pair: assigning a binding puts
+                // the channel (picture-in-picture plus caption panel) on
+                // Program; clearing it turns the whole channel off.
+                match next.overlays.binding_mut(slot) {
+                    Some(cell) => *cell = binding,
+                    None => return Err(invalid("Overlay channel not found")),
+                }
+                if let Some(panel) = next.overlays.standard_mut(slot) {
+                    panel.enabled = binding.is_some();
+                }
             }
             Command::SetStinger(i, config) => {
                 *next

@@ -1,5 +1,25 @@
 # rustmix-ui
 
+UI-040 (2026-10-24) reference-alignment follow-up: the Audio Mixer input strips
+and every visible bus column (including Master) render the engine mixer's
+measured per-input and per-bus peak/RMS from `AudioMetrics` through
+`audio_session.rs` (`SessionStatus.buses`, `SourceStatus` peaks) with stable
+automation IDs `audio.input.<n>.meter` / `audio.bus.<n>.meter`; levels show
+honest zeros while monitoring is off and the "per-input peak metering is
+unavailable" placeholders are gone. The Overlay/Graphics panel gained a
+per-channel input-assignment row for standard channels 1–8
+(`overlay.channel.<n>.input`, selector + Clear dispatching
+`Command::SetOverlayInput`, with a readable "Add an input first — nothing to
+bind" reason when nothing is assignable); it dispatches typed commands only and
+the engine owns putting a channel on/off Program. Evidence: UI suite 188 passed
+in the workspace gate (incl. `strip_meters_render_injected_peaks_from_the_bottom_of_the_well`,
+`mixer_strips_render_meter_columns_with_stable_ids_for_every_visible_strip`,
+`overlay_channel_input_selector_dispatches_the_typed_engine_command` and
+`overlay_input_selector_disables_with_a_readable_reason_without_assignable_inputs`);
+hosted `--ui-audio-smoke` (release build, exit 0) asserted the meter IDs in-app
+and `artifacts/overlay-panel.png` was inspected. No new dependency, no dock or
+project schema change.
+
 UI-035: `output_dialogs` owns destination/format/status inspection;
 `settings_pages` owns specific Settings summaries. Input processing resets only
 the current draft group. Test-only `ui_review` captures actual egui meshes and

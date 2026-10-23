@@ -10,14 +10,23 @@ use rustmix_platform::media_foundation::{DecodedVideoFrame, VideoFile, VideoForm
 use std::path::PathBuf;
 
 fn fixture_path() -> PathBuf {
-    let path = std::env::var_os("RUSTMIX_TEST_VIDEO")
-        .map(PathBuf::from)
-        .expect("Windows decode tests require scripts/ci-video-fixture.ps1 and RUSTMIX_TEST_VIDEO; a missing fixture is a test failure");
+    // CI runs scripts/ci-video-fixture.ps1 before the workspace tests and exports
+    // RUSTMIX_TEST_VIDEO (docs/testing.md). Local `cargo test` runs without that
+    // export, so fall back to the script's own default output location. Either
+    // way a missing fixture is a hard failure, never a skipped test.
+    let path = match std::env::var_os("RUSTMIX_TEST_VIDEO") {
+        Some(path) => PathBuf::from(path),
+        None => PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../artifacts/video-fixture.mp4"),
+    };
     assert!(
         path.is_absolute(),
         "Video test fixture path must be absolute"
     );
-    assert!(path.is_file(), "Generated MP4 fixture is missing");
+    assert!(
+        path.is_file(),
+        "Generated MP4 fixture is missing at {}; run scripts/ci-video-fixture.ps1 or set RUSTMIX_TEST_VIDEO",
+        path.display()
+    );
     path
 }
 

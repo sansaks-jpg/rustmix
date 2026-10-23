@@ -872,3 +872,212 @@ fn recording_native_guard_rejects_overlapping_footer_and_side_by_side_browse() {
     );
     assert!(app.validate_recording_geometry(&ctx).is_err());
 }
+
+fn overlays_frame(app: &mut RustMixApp, ctx: &egui::Context, events: Vec<egui::Event>) {
+    let _ = ctx.run_ui(
+        egui::RawInput {
+            screen_rect: Some(Rect::from_min_size(Pos2::ZERO, Vec2::new(1200.0, 760.0))),
+            events,
+            ..Default::default()
+        },
+        |ui| app.overlays(ui),
+    );
+}
+
+fn overlays_click(app: &mut RustMixApp, ctx: &egui::Context, id: &str) {
+    for _ in 0..4 {
+        overlays_frame(app, ctx, vec![]);
+    }
+    let pos = app
+        .automation
+        .get(id)
+        .expect("visible overlay control")
+        .center();
+    for pressed in [true, false] {
+        overlays_frame(
+            app,
+            ctx,
+            vec![
+                egui::Event::PointerMoved(pos),
+                egui::Event::PointerButton {
+                    pos,
+                    button: egui::PointerButton::Primary,
+                    pressed,
+                    modifiers: egui::Modifiers::NONE,
+                },
+            ],
+        );
+    }
+}
+
+#[test]
+fn mixer_strips_render_meter_columns_with_stable_ids_for_every_visible_strip() {
+    let mut app = RustMixApp::headless();
+    let ctx = egui::Context::default();
+    app.theme(&ctx);
+    let mut input = app.engine.project().inputs.first().cloned().unwrap();
+    input.config.audio_source = Some(AudioSource::Microphone { device_id: None });
+    app.engine.execute(Command::UpdateInput(input), 0).unwrap();
+    let paint = |app: &mut RustMixApp, ctx: &egui::Context| {
+        ctx.run_ui(
+            egui::RawInput {
+                screen_rect: Some(Rect::from_min_size(Pos2::ZERO, Vec2::new(1600.0, 320.0))),
+                ..Default::default()
+            },
+            |ui| app.audio(ui),
+        )
+    };
+    for _ in 0..3 {
+        let _ = paint(&mut app, &ctx);
+    }
+    let output = paint(&mut app, &ctx);
+    for (id, label) in [("bus.0", "Master bus"), ("input.1", "microphone input")] {
+        let strip = *app.automation.get(&format!("audio.{id}.strip")).unwrap();
+        let meter = *app.automation.get(&format!("audio.{id}.meter")).unwrap();
+        assert!(
+            strip.contains_rect(meter),
+            "{label} meter column escapes its strip"
+        );
+        assert!(
+            meter.height() >= 68.0,
+            "{label} meter keeps the fader height"
+        );
+        assert!(
+            output.shapes.iter().any(|clipped| matches!(&clipped.shape,
+                egui::Shape::Rect(rect)
+                    if rect.fill == Color32::from_rgb(10, 14, 18)
+                        && meter.expand(1.0).contains_rect(rect.rect)
+                        && rect.rect.height() >= 68.0)),
+            "{label} meter well is not painted"
+        );
+    }
+    // Audio is off in this headless run: the measured feeds are silent, so no
+    // level fill may be painted — the well and its automation id remain.
+    for id in ["bus.0", "input.1"] {
+        let meter = *app.automation.get(&format!("audio.{id}.meter")).unwrap();
+        assert!(!output.shapes.iter().any(|clipped| matches!(&clipped.shape,
+            egui::Shape::Rect(rect)
+                if rect.fill == Color32::from_rgb(35, 195, 65)
+                    && meter.expand(1.0).contains_rect(rect.rect)
+                    && rect.rect.height() >= 1.0)));
+    }
+    // Only audio-configured inputs get strips, and the meter shares the
+    // fader column height beside it.
+    assert!(!app.automation.contains_key("audio.input.2.meter"));
+    let gain = *app.automation.get("audio.input.1.gain").unwrap();
+    let meter = *app.automation.get("audio.input.1.meter").unwrap();
+    assert!((gain.height() - meter.height()).abs() <= 1.0);
+    assert!(gain.right() <= meter.left());
+}
+
+#[test]
+fn overlay_channel_input_selector_dispatches_the_typed_engine_command() {
+    let mut app = RustMixApp::headless();
+    let ctx = egui::Context::default();
+    app.theme(&ctx);
+    let before = app.engine.project().clone();
+    for _ in 0..3 {
+        overlays_frame(&mut app, &ctx, vec![]);
+    }
+    // Every standard channel renders its selector and its clear control.
+    for channel in 1..=8 {
+        for suffix in ["input", "input.clear"] {
+            assert!(
+                app.automation
+                    .contains_key(&format!("overlay.channel.{channel}.{suffix}")),
+                "channel {channel} is missing {suffix}"
+            );
+        }
+    }
+    // Picking the third listed input dispatches the typed command without
+    // applying it from the panel itself.
+    overlays_click(&mut app, &ctx, "overlay.channel.1.input");
+    overlays_click(&mut app, &ctx, "overlay.channel.1.input.option.2");
+    assert!(
+        matches!(
+            app.actions.first(),
+            Some(Action::Engine(Command::SetOverlayInput(
+                0,
+                Some(InputId(3))
+            )))
+        ),
+        "the selector must dispatch overlay.input.set"
+    );
+    assert_eq!(
+        *app.engine.project(),
+        before,
+        "the panel dispatches; only the engine applies"
+    );
+    // With a binding in place the Clear control dispatches the None command.
+    app.actions.clear();
+    app.execute(Command::SetOverlayInput(0, Some(InputId(3))));
+    overlays_click(&mut app, &ctx, "overlay.channel.1.input.clear");
+    assert!(matches!(
+        app.actions.first(),
+        Some(Action::Engine(Command::SetOverlayInput(0, None)))
+    ));
+    app.actions.clear();
+    assert_eq!(app.engine.project().overlays.binding(0), Some(InputId(3)));
+}
+
+#[test]
+fn overlay_input_selector_disables_with_a_readable_reason_without_assignable_inputs() {
+    let mut app = RustMixApp::headless();
+    let ctx = egui::Context::default();
+    app.theme(&ctx);
+    let mut selector = Rect::NOTHING;
+    let mut reason = Rect::NOTHING;
+    let output = ctx.run_ui(
+        egui::RawInput {
+            screen_rect: Some(Rect::from_min_size(Pos2::ZERO, Vec2::new(1200.0, 760.0))),
+            ..Default::default()
+        },
+        |ui| {
+            app.overlay_input_assignment(ui, 0, None, &[]);
+            selector = *app.automation.get("overlay.channel.1.input").unwrap();
+            reason = *app
+                .automation
+                .get("overlay.channel.1.input.reason")
+                .unwrap();
+        },
+    );
+    assert!(
+        selector.is_positive(),
+        "the selector stays visible while disabled"
+    );
+    let painted = output.shapes.iter().any(|shape| {
+        matches!(&shape.shape,
+            egui::Shape::Text(text)
+                if text.galley.job.text == "Add an input first — nothing to bind"
+                    && reason.expand(2.0).contains_rect(text.visual_bounding_rect()))
+    });
+    assert!(
+        painted,
+        "the operator-readable disabled reason must be painted"
+    );
+    // Clicking the disabled controls neither opens a picker nor dispatches.
+    for pressed in [true, false] {
+        let _ = ctx.run_ui(
+            egui::RawInput {
+                screen_rect: Some(Rect::from_min_size(Pos2::ZERO, Vec2::new(1200.0, 760.0))),
+                events: vec![
+                    egui::Event::PointerMoved(selector.center()),
+                    egui::Event::PointerButton {
+                        pos: selector.center(),
+                        button: egui::PointerButton::Primary,
+                        pressed,
+                        modifiers: egui::Modifiers::NONE,
+                    },
+                ],
+                ..Default::default()
+            },
+            |ui| app.overlay_input_assignment(ui, 0, None, &[]),
+        );
+    }
+    assert!(app.actions.is_empty());
+    assert!(
+        !app.automation
+            .contains_key("overlay.channel.1.input.option.0")
+    );
+    assert!(app.automation.contains_key("overlay.channel.1.input.clear"));
+}

@@ -6,8 +6,8 @@ use eframe::egui;
 use rustmix_engine::{
     Engine, InputId, VideoSource,
     audio_engine::{
-        AudioBlock, AudioInputBatch, AudioMeter, AudioMixer, AudioOutput, BLOCK_FRAMES, BusConfig,
-        MAX_AUDIO_SOURCES, MAX_SAMPLE_MAGNITUDE, MixerConfig, SAMPLE_RATE, SourceBlock,
+        AudioBlock, AudioInputBatch, AudioMeter, AudioMixer, AudioOutput, BLOCK_FRAMES, BUS_COUNT,
+        BusConfig, MAX_AUDIO_SOURCES, MAX_SAMPLE_MAGNITUDE, MixerConfig, SAMPLE_RATE, SourceBlock,
         SourceConfig, StereoFrame,
     },
     input::AudioSource,
@@ -47,6 +47,10 @@ pub struct SourceStatus {
     pub ended: bool,
     pub position_frames: u64,
     pub duration_frames: u64,
+    /// Measured per-input tap: post-gain, pre-clamp block peak/RMS from the
+    /// engine mixer. Zero while the session is not rendering this source.
+    pub peak: StereoFrame,
+    pub rms: StereoFrame,
     pub error: Option<String>,
 }
 
@@ -64,6 +68,9 @@ pub struct SessionStatus {
     pub clipped_samples: u64,
     pub peak: StereoFrame,
     pub rms: StereoFrame,
+    /// Measured per-bus meters from the last mixed block, Master first. Zero
+    /// meters mean silence, not an idle session — pair them with `phase`.
+    pub buses: [AudioMeter; BUS_COUNT],
     pub sources: Vec<SourceStatus>,
     pub error: Option<String>,
 }
@@ -81,6 +88,7 @@ impl SessionStatus {
             clipped_samples: 0,
             peak: [0.0; 2],
             rms: [0.0; 2],
+            buses: [AudioMeter::default(); BUS_COUNT],
             sources: Vec::new(),
             error: None,
         }
@@ -324,6 +332,8 @@ impl SessionSource {
             ended,
             position_frames: position,
             duration_frames: duration,
+            peak: [0.0; 2],
+            rms: [0.0; 2],
             error: self.error.clone(),
         }
     }
@@ -627,9 +637,26 @@ impl Worker {
             clipped_samples: totals.clipped_samples,
             peak,
             rms,
+            // The same measured set the Master peak above comes from, kept for
+            // every bus so the mixer's bus columns render real levels.
+            buses: self.output.metrics.buses,
             sources: self.sources.iter().map(SessionSource::status).collect(),
             error: None,
         };
+        // Publish the mixer's measured per-source taps with each status.
+        for source in &mut status.sources {
+            if let Some(tap) = self
+                .output
+                .metrics
+                .sources
+                .iter()
+                .flatten()
+                .find(|tap| tap.id == source.id)
+            {
+                source.peak = tap.meter.peak;
+                source.rms = tap.meter.rms;
+            }
+        }
         for source in &self.sources {
             if let SourceKind::Capture { stream, .. } = &source.kind {
                 let capture = stream.metrics();

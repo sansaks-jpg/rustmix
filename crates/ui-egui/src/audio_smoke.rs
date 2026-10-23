@@ -233,6 +233,7 @@ impl RustMixApp {
                     ));
                 }
                 write_audio_elements("audio-source", &self.automation)?;
+                assert_mixer_meters(&self.automation)?;
                 ctx.send_viewport_cmd(egui::ViewportCommand::Screenshot(egui::UserData::default()));
                 s.captured = false;
                 s.stage = 15;
@@ -300,13 +301,38 @@ fn audio_program_black(pixels: &[u8]) -> bool {
 fn write_audio_elements(name: &str, elements: &HashMap<String, Rect>) -> Result<()> {
     let relevant = elements
         .iter()
-        .filter(|(id, _)| id.starts_with("dialog.") || id.starts_with("monitor."))
+        .filter(|(id, _)| {
+            id.starts_with("dialog.") || id.starts_with("monitor.") || id.starts_with("audio.")
+        })
         .map(|(id, rect)| (id, format!("{rect:?}")))
         .collect::<HashMap<_, _>>();
     std::fs::write(
         format!("artifacts/{name}-elements.json"),
         serde_json::to_vec_pretty(&relevant)?,
     )?;
+    Ok(())
+}
+
+/// The hosted mixer must render meter columns with stable automation IDs for
+/// the Master bus and every audio-configured input strip. Monitoring never
+/// starts in this workflow, so the feeds are silent — presence and geometry
+/// are the contract, not level values.
+fn assert_mixer_meters(elements: &HashMap<String, Rect>) -> Result<()> {
+    for id in ["bus.0", "input.8"] {
+        let meter = elements
+            .get(&format!("audio.{id}.meter"))
+            .copied()
+            .ok_or_else(|| Error::Invalid(format!("Mixer meter missing: audio.{id}.meter")))?;
+        let strip = elements
+            .get(&format!("audio.{id}.strip"))
+            .copied()
+            .ok_or_else(|| Error::Invalid(format!("Mixer strip missing: audio.{id}.strip")))?;
+        if !meter.is_finite() || !meter.is_positive() || !strip.contains_rect(meter) {
+            return Err(Error::Invalid(format!(
+                "Mixer meter column is empty or outside its strip: audio.{id}.meter"
+            )));
+        }
+    }
     Ok(())
 }
 

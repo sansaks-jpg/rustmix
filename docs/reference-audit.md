@@ -1,5 +1,52 @@
 # Audit seluruh temuan referensi
 
+## Re-verification addendum (2026-10-24, UI-040)
+
+The pinned study snapshot was re-verified against the installed product
+(29.0.0.48) by **static clean-room inspection only**: the product was never
+launched, decompiled or copied from. Method — directory and file-version
+inventory of the install tree; import-table/section inspection of the core
+binaries; read of the embedded configuration and XML provider files; extraction
+of the contiguous CamelCase shortcut/API function table and the transition,
+transport and layout enum strings from the binary image; one-to-one
+cross-check against the vendor's public feature and shortcut-function pages;
+per-claim confirmation against this repository's own wire measurements.
+
+Confirmed corrections (full detail in the `reverification` object of
+[reference-audit.json](reference-audit.json); every one is enforced in code and
+tests on the rustmix side):
+
+- `OverlayInput` spellings exist only for channels 1–8 (binary string table,
+  committed shortcut catalogues, measured wire). Channels 9–16 are addressed by
+  the separate `Stinger1–8` family. The older specification table claiming
+  `OverlayInput` with N in 1..=16 is wrong.
+- `OverlayInput<n>Off` clears a channel's assignment; `OverlayInput<n>Out`
+  leaves the assignment in place. The older summary made `Out` the clear
+  spelling and omitted `Off` entirely.
+- The `SetLayer` family covers geometry members (X/Y/Width/Height/Zoom plus
+  crop/pan siblings) but contains no Alpha or Rotation member; a separate
+  unindexed `SetAlpha` exists.
+- The observed state document's `outputs` element contains only `output`
+  children (some carrying a fullscreen type attribute); no separate
+  `<fullscreen>` child element exists in any of the seven captured state XMLs.
+- The verified input-category catalogue members are Aqua and Blue; the older
+  task summary's Azure/MidnightBlue names appear nowhere in the binary.
+- The main window shows **five** transport setup/arm pairs; the "six transports"
+  summaries contradict their own geometry tables.
+- Further confirmed document-internal contradictions (stale duplicate-capture
+  claim disproven by differing SHA-256 hashes, an "unresolved" finding the same
+  document later resolves, an unmeasured theme colour, a misapplied CONFIRMED
+  label on an unsound era inference, a dependency claim contradicted by the
+  manifests, a promised inventory file never produced, an off-by-one
+  replay-controller member count, and gitignored gui-pass images behind some
+  overlay/category resolutions) are recorded in the JSON addendum so they are
+  not re-imported into rustmix.
+
+RustMix status rows below were reconciled to the post-UI-040 tree (20 effects
+with golden curve pins, input-backed standard overlay channels, the nine-bus
+sample mixer with meter taps, and the loopback HTTP control API). Full-match
+acceptance remains false.
+
 Task 1.3 source update (2026-10-19): four external-output route/configuration records, atomic
 complete-slot Apply and schema-6 persistence are implemented in RustMix. This is **source-only**
 experimental configuration work; new engine/widget/native acceptance is pending. No external
@@ -17,12 +64,12 @@ Status: `experimental` = sebagian alur prototipe berjalan; `stub` = hanya simula
 | # | Area referensi | Status RustMix | Yang benar-benar ada | Kekurangan terhadap temuan | Bukti sumber / pengujian |
 |---|---|---|---|---|---|
 | 1 | Preview / Program | experimental | Independent Preview, Program, explicit Cut/Take and source exchange | Synthetic/PNG reference raster only; no qualified broadcast output | [kode](../crates/engine/src/lib.rs) / [uji](../crates/engine/tests/workflow.rs) |
-| 2 | Transitions | experimental | Four independent saved slots and 12 CPU effects | 8 observed effects; stinger channels only exchange Program/Preview at their cut point (no raster); no vendor-pixel parity or GPU parity | [kode](../crates/engine/src/render.rs) / [uji](../crates/engine/tests/transitions.rs) |
+| 2 | Transitions | experimental | Four independent saved slots and all 20 effects as shared per-pixel CPU renderers, each motion curve pinned by golden frames at 25/50/75% | No vendor-pixel parity or GPU parity; Full HD benchmark of the eight per-pixel effects pending; stinger clip compositing absent | [kode](../crates/engine/src/render.rs) / [uji](../crates/engine/tests/transitions.rs) |
 | 3 | Inputs | experimental | Seven own generators plus bounded external PNG | 40 observed wire types are not 40 working backends; video/capture/network/browser absent | [kode](../crates/ui-egui/src/media.rs) / [uji](../crates/engine/tests/inputs.rs) |
-| 4 | Overlays | experimental | Eight Program title-panel channels inside a 16-channel overlay/stinger bank, staged text/position edits, F1–F8 defaults and a verified 4→5 schema migration | Title/enabled/position only for the eight title panels; no source overlays, per-channel effects/timing/alpha/transforms. Stinger channels 9–16 hold model/trigger/cut-point state and exchange buses but render no clip. | [kode](../crates/engine/src/overlays.rs) / [uji](../crates/engine/tests/overlays.rs) |
+| 4 | Overlays | experimental | Eight standard channels composite a bound input (PiP) under the caption text via `overlay.input.set`, plus title/subtitle panels, staged text/position edits, F1–F8 defaults and a verified 4→5 schema migration inside the 16-channel overlay/stinger bank | No per-channel effects/timing/alpha/transforms on standard channels. Stinger channels 9–16 hold model/trigger/cut-point state and exchange buses but render no clip; the occupied-channel state-document content form is not evidenced | [kode](../crates/engine/src/overlays.rs) / [uji](../crates/engine/tests/overlays.rs) |
 | 5 | Multiview | experimental | In-app Split and full source grid layouts | No two independent multiview outputs or all five observed layout contracts | [kode](../crates/ui-egui/src/panels.rs) / [uji](../crates/ui-egui/src/smoke.rs) |
 | 6 | Titles / GT graphics | experimental | Original title/subtitle panels and generated graphics | No GT/XAML compatibility, animation templates, ticker or editable production clock | [kode](../crates/ui-egui/src/panels.rs) / [uji](../crates/ui-egui/src/smoke.rs) |
-| 7 | Audio mixer / matrix | stub | Gain/mute/solo and Master/A/B meter-control simulation | No sample blocks, device audio, nine destinations, DSP, mix-minus or AV sync | [kode](../crates/engine/src/audio.rs) / [uji](../crates/engine/tests/workflow.rs) |
+| 7 | Audio mixer / matrix | experimental | Real 48 kHz sample mixer with nine configured buses (Master, A–G, Headphones), per-input nine-way sends, mix-minus guest returns, schema-11 migration and per-source post-gain pre-clamp meter taps | No device-callback/hardware qualification, DSP/EQ, loudness metering, A/V sync or dedicated headphone device output | [kode](../crates/engine/src/audio_engine.rs) / [uji](../crates/engine/tests/audio_samples.rs) |
 | 8 | Routing / external outputs | experimental, source only | Four persisted configuration records; atomic complete-slot command and independent staged UI drafts | New regression execution/native acceptance pending; no external frame sink, SDI/virtual camera/NDI/OMT/SRT or hardware output | [kode](../crates/engine/src/output.rs) / [uji disiapkan](../crates/engine/tests/outputs.rs) |
 | 9 | Streaming | not_started | Unavailable starts remain gated | No encoder, RTMP/RTMPS transport, profiles, reconnect or five destinations | [kode](../crates/ui-egui/src/lib.rs) / [uji](../crates/ui-egui/src/smoke.rs) |
 | 10 | Recording | not_started | Unavailable starts remain gated | No Program recording, independent WAV, splitting, recovery or two recording outputs | [kode](../crates/ui-egui/src/lib.rs) / [uji](../crates/ui-egui/src/smoke.rs) |
@@ -31,7 +78,7 @@ Status: `experimental` = sebagian alur prototipe berjalan; `stub` = hanya simula
 | 13 | Shortcuts / MIDI / surfaces | experimental | Saved keyboard action/key/modifier mappings with validation and repeat/focus guards | No MIDI, activators, controllers, voice or 19 input trigger events | [kode](../crates/engine/src/shortcuts.rs) / [uji](../crates/ui-egui/src/smoke.rs) |
 | 14 | Presets / sessions | experimental | Own schema6 with schema1–5 migration, atomic settings/saves, backups and checkpoints | New schema6 tests prepared, execution pending; hosted run 39129117131 verifies earlier schema5 only; no .vmix interoperability, media packaging or power-loss qualification. | [kode](../crates/engine/src/persistence.rs) / [uji](../crates/engine/tests/inputs.rs) |
 | 15 | Settings | experimental | Validated preferences, categories/theme/colors and one atomic name/preferences apply; unavailable scaffolds explicitly read-only | 256 observed properties are not implemented; theme/color/display and advanced fields include unavailable/scaffold controls | [kode](../crates/ui-egui/src/dialogs.rs) / [uji](../crates/ui-egui/src/smoke.rs) |
-| 16 | HTTP / TCP / WebSocket API | not_started | Headless typed Rust commands only | No HTTP listener, XML state document, public function dispatcher, TCP or WebSocket protocol | [kode](../Cargo.toml) |
+| 16 | HTTP / TCP / WebSocket API | experimental | Opt-in loopback HTTP/1.1 GET endpoint (default port 8088, 8 KiB request bound, never auto-started): state document rendering plus a 25-spelling executable vocabulary (OverlayInput1–8 +Off, Stinger1–8, PlayPause and the earlier families) | No TCP text protocol, WebSocket, write-side spellings beyond the mapped set, authentication beyond loopback binding or an operator-facing enablement workflow | [kode](../crates/automation/src/server.rs) / [uji](../crates/automation/tests/api_contract.rs) |
 | 17 | Scripting | not_started | None | No scripts, timers, runtime sandbox or script permissions | [kode](../Cargo.toml) |
 | 18 | Data sources | not_started | None | No database/CSV/JSON/browser/social connector or live title binding | [kode](../Cargo.toml) |
 | 19 | Browser inputs | not_started | None | No embedded browser engine or texture/audio integration | [kode](../Cargo.toml) |
@@ -97,31 +144,31 @@ Status: `experimental` = sebagian alur prototipe berjalan; `stub` = hanya simula
 | Temuan | Status | Batas aktual |
 |---|---|---|
 | Fade | experimental | Own CPU algorithm with endpoint/direction tests; no cross-vendor pixel parity |
-| Zoom | not_started | No implementation; must not alias to another effect |
+| Zoom | experimental | Own CPU zoom-dissolve algorithm with endpoint tests; golden curve pin at 25/50/75% |
 | Wipe | experimental | Own CPU algorithm with endpoint/direction tests; no cross-vendor pixel parity |
 | Slide | experimental | Own CPU algorithm with endpoint/direction tests; no cross-vendor pixel parity |
-| Fly | not_started | No implementation; must not alias to another effect |
-| CrossZoom | not_started | No implementation; must not alias to another effect |
-| FlyRotate | not_started | No implementation; must not alias to another effect |
-| Cube | not_started | No implementation; must not alias to another effect |
-| CubeZoom | not_started | No implementation; must not alias to another effect |
+| Fly | experimental | Own CPU fly-in with scale trajectory and endpoint tests; golden curve pin at 25/50/75% |
+| CrossZoom | experimental | Own CPU opposing zoom-dissolve algorithm with endpoint tests; golden curve pin at 25/50/75% |
+| FlyRotate | experimental | Own CPU fly-in with rotation and endpoint tests; golden curve pin at 25/50/75% |
+| Cube | experimental | Own CPU cube-turn algorithm with an edge-on black midpoint and row tests; golden curve pin at 25/50/75% |
+| CubeZoom | experimental | Own CPU cube-turn with squash and endpoint tests; golden curve pin at 25/50/75% |
 | VerticalWipe | experimental | Own CPU algorithm with endpoint/direction tests; no cross-vendor pixel parity |
 | VerticalSlide | experimental | Own CPU algorithm with endpoint/direction tests; no cross-vendor pixel parity |
-| Merge | not_started | No implementation; must not alias to another effect |
+| Merge | experimental | Own CPU recede/advance algorithm with endpoint and distinctness tests; golden curve pin at 25/50/75% |
 | WipeReverse | experimental | Own CPU algorithm with endpoint/direction tests; no cross-vendor pixel parity |
 | SlideReverse | experimental | Own CPU algorithm with endpoint/direction tests; no cross-vendor pixel parity |
 | VerticalWipeReverse | experimental | Own CPU algorithm with endpoint/direction tests; no cross-vendor pixel parity |
 | VerticalSlideReverse | experimental | Own CPU algorithm with endpoint/direction tests; no cross-vendor pixel parity |
 | BarnDoor | experimental | Own CPU algorithm with endpoint/direction tests; no cross-vendor pixel parity |
 | RollerDoor | experimental | Own CPU algorithm with endpoint/direction tests; no cross-vendor pixel parity |
-| AlphaFade | not_started | No implementation; must not alias to another effect |
+| AlphaFade | experimental | Own CPU alpha-coverage dissolve with target-alpha regression tests; golden curve pin at 25/50/75% |
 | Cut | experimental | Own CPU algorithm with endpoint/direction tests; no cross-vendor pixel parity |
 
 ## 16 kanal overlay/stinger
 
 | Temuan | Status | Batas aktual |
 |---|---|---|
-| 1 | experimental | Title-panel channel: 16-channel bank, Program render, UI, F-key and persistence are real; no source overlay, per-channel effects, timing or alpha |
+| 1 | experimental | Standard channel: 16-channel bank, Program render, UI, F-key and persistence are real; an optional bound input composites as PiP under the caption text via `overlay.input.set` (serde-default binding, legacy files load idle); no per-channel effects, timing or alpha |
 | 2 | experimental | Title-panel channel: 16-channel bank, Program render, UI, F-key and persistence are real; no source overlay, per-channel effects, timing or alpha |
 | 3 | experimental | Title-panel channel: 16-channel bank, Program render, UI, F-key and persistence are real; no source overlay, per-channel effects, timing or alpha |
 | 4 | experimental | Title-panel channel: 16-channel bank, Program render, UI, F-key and persistence are real; no source overlay, per-channel effects, timing or alpha |
@@ -142,15 +189,15 @@ Status: `experimental` = sebagian alur prototipe berjalan; `stub` = hanya simula
 
 | Temuan | Status | Batas aktual |
 |---|---|---|
-| Master | stub | Control/meter simulation only; no samples or device sound |
-| Headphones | not_started | No bus/device implementation |
-| A | stub | Control/meter simulation only; no samples or device sound |
-| B | stub | Control/meter simulation only; no samples or device sound |
-| C | not_started | No bus/device implementation |
-| D | not_started | No bus/device implementation |
-| E | not_started | No bus/device implementation |
-| F | not_started | No bus/device implementation |
-| G | not_started | No bus/device implementation |
+| Master | stub | Real 48 kHz sample mixing with explicitly started local WASAPI monitoring and measured peaks; no loudness metering |
+| Headphones | stub | Mixes in the engine matrix with per-input sends; no dedicated headphone device output |
+| A | stub | Real sample mixing and per-input sends in the engine matrix with measured per-bus peak/RMS surfaced in the mixer strips; no dedicated device output |
+| B | stub | Real sample mixing and per-input sends in the engine matrix with measured per-bus peak/RMS surfaced in the mixer strips; no dedicated device output |
+| C | stub | Real sample mixing and per-input sends in the engine matrix with measured per-bus peak/RMS surfaced in the mixer strips; no dedicated device output |
+| D | stub | Real sample mixing and per-input sends in the engine matrix with measured per-bus peak/RMS surfaced in the mixer strips; no dedicated device output |
+| E | stub | Real sample mixing and per-input sends in the engine matrix with measured per-bus peak/RMS surfaced in the mixer strips; no dedicated device output |
+| F | stub | Real sample mixing and per-input sends in the engine matrix with measured per-bus peak/RMS surfaced in the mixer strips; no dedicated device output |
+| G | stub | Real sample mixing and per-input sends in the engine matrix with measured per-bus peak/RMS surfaced in the mixer strips; no dedicated device output |
 
 ## Kontrak alur UI yang diperiksa terpisah
 

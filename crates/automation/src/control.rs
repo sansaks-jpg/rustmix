@@ -11,8 +11,12 @@
 //!
 //! The implemented catalogue is the subset that maps onto real engine
 //! behaviour today; transport families with no backend (recording, streaming,
-//! multicorder) and input-backed overlay channels are declared unsupported
-//! with an operator-readable reason instead of pretending to succeed.
+//! multicorder) are declared unsupported with an operator-readable reason
+//! instead of pretending to succeed. The overlay vocabulary is implemented
+//! against the engine's input-backed standard channels: `OverlayInput1`–`8`
+//! bind an input onto the channel, `OverlayInput<n>Off` clears it,
+//! `OverlayInput<n>Out` is declared but not implemented (it never clears), and
+//! `OverlayInput9`–`16` do not exist because channels 9–16 are `Stinger1`–`8`.
 use std::collections::BTreeMap;
 
 use rustmix_engine::{AudioChannel, Command, Engine, InputId, TransitionKind, TransitionSlot};
@@ -215,6 +219,7 @@ pub fn accepted_functions() -> Vec<&'static str> {
         "SetTransitionDuration4",
         "Play",
         "Pause",
+        "PlayPause",
         "Restart",
         "SetPosition",
         "LoopOn",
@@ -234,9 +239,116 @@ pub fn accepted_functions() -> Vec<&'static str> {
         "SetBusFVolume",
         "SetBusGVolume",
         "SetHeadphonesVolume",
+        "OverlayInput1",
+        "OverlayInput2",
+        "OverlayInput3",
+        "OverlayInput4",
+        "OverlayInput5",
+        "OverlayInput6",
+        "OverlayInput7",
+        "OverlayInput8",
+        "OverlayInput1Off",
+        "OverlayInput2Off",
+        "OverlayInput3Off",
+        "OverlayInput4Off",
+        "OverlayInput5Off",
+        "OverlayInput6Off",
+        "OverlayInput7Off",
+        "OverlayInput8Off",
+        "Stinger1",
+        "Stinger2",
+        "Stinger3",
+        "Stinger4",
+        "Stinger5",
+        "Stinger6",
+        "Stinger7",
+        "Stinger8",
         "StartPlayList",
         "StopPlayList",
     ]
+}
+
+/// A recognised `OverlayInput*` wire function.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum OverlayFunction {
+    /// `OverlayInput<n>`: put the request's `Input` on standard channel `n`.
+    Bind(usize),
+    /// `OverlayInput<n>Off`: clear standard channel `n`.
+    Off(usize),
+    /// `OverlayInput<n>Out`, `In`, `Zoom` and `Last`: declared by the
+    /// reference but not implemented; none of them clears the channel, and
+    /// the reason says which function does.
+    Variant(&'static str),
+    /// `OverlayInputAllOff`: declared; per-channel clearing is implemented.
+    AllOff,
+    /// `OverlayInput9`–`OverlayInput16`: those channels are Stingers 1–8, so
+    /// no such overlay spelling exists in the reference vocabulary.
+    StingerChannel,
+}
+
+/// Parse the `OverlayInput*` wire family.
+///
+/// The executable vocabulary is exactly `OverlayInput1`–`OverlayInput8` with
+/// the `Off` suffix. The sibling spellings the reference declares (`Out`,
+/// `In`, `Zoom`, `Last`, `AllOff`) parse to declared-not-implemented
+/// rejections rather than unknown-function errors, and channels 9–16 belong
+/// to the stingers. Anything else is not an overlay function and falls
+/// through to the unknown-function arm.
+fn overlay_function(name: &str) -> Option<OverlayFunction> {
+    let suffix = name.strip_prefix("OverlayInput")?;
+    if suffix == "AllOff" {
+        return Some(OverlayFunction::AllOff);
+    }
+    let (digits, action) = if let Some(rest) = suffix.strip_suffix("Off") {
+        (rest, Action::Off)
+    } else if let Some(rest) = suffix.strip_suffix("Out") {
+        (rest, Action::Out)
+    } else if let Some(rest) = suffix.strip_suffix("In") {
+        (rest, Action::In)
+    } else if let Some(rest) = suffix.strip_suffix("Zoom") {
+        (rest, Action::Zoom)
+    } else if let Some(rest) = suffix.strip_suffix("Last") {
+        (rest, Action::Last)
+    } else {
+        (suffix, Action::Plain)
+    };
+    let number: usize = digits.parse().ok()?;
+    match number {
+        1..=8 => Some(match action {
+            Action::Off => OverlayFunction::Off(number - 1),
+            Action::Out => OverlayFunction::Variant(
+                "the animated overlay-out is not implemented; OverlayInput<n>Off clears the channel",
+            ),
+            Action::In => OverlayFunction::Variant(
+                "re-showing an assigned overlay input is not implemented; OverlayInput<n>Off clears the channel",
+            ),
+            Action::Zoom => OverlayFunction::Variant(
+                "the overlay zoom variant is not implemented; OverlayInput<n>Off clears the channel",
+            ),
+            Action::Last => OverlayFunction::Variant(
+                "the overlay last variant is not implemented; OverlayInput<n>Off clears the channel",
+            ),
+            Action::Plain => OverlayFunction::Bind(number - 1),
+        }),
+        9..=16 => Some(OverlayFunction::StingerChannel),
+        _ => None,
+    }
+}
+
+enum Action {
+    Plain,
+    Off,
+    Out,
+    In,
+    Zoom,
+    Last,
+}
+
+/// `Stinger1`–`Stinger8` → the 0-based stinger slot to trigger. No other
+/// `Stinger*` spelling exists on the wire.
+fn stinger_function(name: &str) -> Option<usize> {
+    let number: usize = name.strip_prefix("Stinger")?.parse().ok()?;
+    (1..=8).contains(&number).then_some(number - 1)
 }
 
 /// The outcome of a dispatched request.
@@ -384,6 +496,39 @@ pub fn dispatch(engine: &mut Engine, req: &Request, now: u64) -> Result<Outcome,
         _ => {}
     }
 
+    // Overlay and stinger families. `OverlayInput<n>` puts the request's input
+    // on the channel; an absent or unresolvable target is the usual no-op.
+    if let Some(overlay) = overlay_function(&name) {
+        return match overlay {
+            OverlayFunction::Bind(slot) => match input {
+                Some(id) => engine
+                    .execute(Command::SetOverlayInput(slot, Some(id)), now)
+                    .map(|_| Outcome::Executed)
+                    .map_err(|e| DispatchError::Rejected(e.to_string())),
+                None => Ok(Outcome::Noop),
+            },
+            OverlayFunction::Off(slot) => engine
+                .execute(Command::SetOverlayInput(slot, None), now)
+                .map(|_| Outcome::Executed)
+                .map_err(|e| DispatchError::Rejected(e.to_string())),
+            OverlayFunction::Variant(reason) => Err(unsupported(&name, reason)),
+            OverlayFunction::AllOff => Err(unsupported(
+                &name,
+                "clearing all overlay channels at once is not implemented; clear each with OverlayInput<n>Off",
+            )),
+            OverlayFunction::StingerChannel => Err(unsupported(
+                &name,
+                "overlay channels 9-16 are Stingers 1-8; trigger them with Stinger1-Stinger8",
+            )),
+        };
+    }
+    if let Some(slot) = stinger_function(&name) {
+        return engine
+            .execute(Command::TriggerStinger(slot), now)
+            .map(|_| Outcome::Executed)
+            .map_err(|e| DispatchError::Rejected(e.to_string()));
+    }
+
     // Session-level switcher commands.
     let command = match name.as_str() {
         "Cut" => Command::Cut,
@@ -414,13 +559,19 @@ pub fn dispatch(engine: &mut Engine, req: &Request, now: u64) -> Result<Outcome,
             }
         }
         "PlayPause" => {
-            // The engine keeps per-input paused state on an internal playback
-            // clock with no public query, so a wire-level toggle cannot be
-            // resolved honestly; Play and Pause remain the explicit pair.
-            return Err(unsupported(
-                "PlayPause",
-                "toggling playback needs a per-input paused query the engine does not expose",
-            ));
+            // The engine exposes its per-input transport clock publicly, so the
+            // toggle resolves honestly: a playing input pauses, a paused input
+            // (including one parked at the end of a non-looping source) plays.
+            return match input {
+                Some(id) => {
+                    let paused = engine.playback(id).is_some_and(|clock| clock.paused());
+                    engine
+                        .execute(Command::SetInputPaused(id, !paused), now)
+                        .map(|_| Outcome::Executed)
+                        .map_err(|e| DispatchError::Rejected(e.to_string()))
+                }
+                None => Ok(Outcome::Noop),
+            };
         }
         slot_effect @ ("SetTransitionEffect1"
         | "SetTransitionEffect2"
@@ -473,12 +624,6 @@ pub fn dispatch(engine: &mut Engine, req: &Request, now: u64) -> Result<Outcome,
         }
         "StartMultiCorder" | "StopMultiCorder" => {
             return Err(unsupported(&name, "multicorder has no encoder backend yet"));
-        }
-        overlay if overlay.starts_with("OverlayInput") || overlay.starts_with("Stinger") => {
-            return Err(unsupported(
-                overlay,
-                "overlay channels are caption panels without input bindings",
-            ));
         }
         _ => {
             return Err(DispatchError::UnknownFunction(name));

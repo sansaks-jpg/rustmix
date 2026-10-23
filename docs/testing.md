@@ -1,5 +1,89 @@
 # Verification
 
+UI-040 (2026-10-24) — reference-alignment follow-up; runs under the UI-036 owner
+instruction (local build/manual laptop acceptance precedes push; GitHub compiles
+and packages without running tests). Everything below was executed in this
+session on the owner laptop (Windows x64, GNU toolchain, Rust 1.94.1), except
+where explicitly marked as reported by an implementation agent.
+
+Workspace gate — all four commands run and passing on the integrated tree
+(implementation changes from three agents plus the docs edits):
+
+- `cargo fmt --all -- --check` — pass.
+- `cargo clippy --workspace --all-targets --locked -- -D warnings` — pass, no
+  warnings.
+- `cargo test --workspace --all-targets --locked` — **360 passed, 0 failed,
+  1 ignored**, 0 filtered. Per suite: engine lib 42; engine integration
+  audio_samples 9, audio_sources 4, categories 8, inputs 10, outputs 10,
+  overlays 14, presets 6, production 8, source_capabilities 3, transitions 8,
+  video_sources 7, wav 7, workflow 11, render_perf 0 (+1 opt-in ignored) —
+  engine total 147; platform lib 5, video_buffers 4, video_decode 2 (generated
+  MP4 fixture present in `artifacts/`) — platform total 11; automation
+  api_contract 14; UI 188. The one ignored test is the pre-existing opt-in
+  `render_perf` release benchmark, unchanged by this work.
+- `cargo build -p rustmix --locked` — pass.
+
+New coverage introduced by the implementation run and re-verified inside the
+gate run above:
+
+- Engine overlays: 14 integration tests (the file grew 9→14 vs HEAD, verified
+  by `git show HEAD:crates/engine/tests/overlays.rs | grep -c '#\[test\]'`) —
+  overlay binding command semantics, project validation, pixel-level
+  composite-under-caption with offline/parked inputs, save/load plus
+  legacy-file load, and input-removal cleanup; 3 further unit tests live in
+  `crates/engine/src/overlays.rs` (engine lib 42, 39 at HEAD).
+- Engine transitions: 8 tests including `golden_frames_pin_every_effect_curve`,
+  pinning all 20 effects' motion at 25/50/75% with FNV-1a frame hashes; the
+  temporary hash-extraction probe was removed before landing (reported by the
+  engine agent; the landed file contains only the pinned table).
+- Engine audio_samples: 9 tests including
+  `per_source_taps_measure_post_gain_pre_clamp_levels_per_input` (per-source
+  impulse peak/RMS, mute-to-silence, pre-clamp behaviour, per-render slot
+  reset, underrun silence).
+- Automation api_contract: 14 tests (was 9) — Off clears the overlay channel,
+  `OverlayInput3Out` is unsupported and leaves the binding intact,
+  `OverlayInput9`/`16` return the stinger-range reason, outside-vocabulary
+  spellings stay UnknownFunction, an unconfigured `Stinger1` is rejected with
+  "Configure a stinger input", and PlayPause covers playing, paused and
+  no-transport inputs.
+- UI suite: 188 tests including meter-strip geometry from injected peaks,
+  stable `audio.{id}.meter` IDs for every visible strip, the overlay-channel
+  input selector dispatch test and the disabled-selector reason test.
+
+Hosted/native evidence reported by the UI agent (not re-executed in this docs
+session): `cargo build -p rustmix --release --locked` success,
+`target/release/rustmix.exe --ui-audio-smoke` exit 0 with the new stage-14
+`assert_mixer_meters` check, artifacts `audio-source.png` and
+`audio-source-elements.json` (contain `audio.bus.0.meter` and
+`audio.input.8.meter` with real rects), and `artifacts/overlay-panel.png`
+captured from a release-build instance showing the channel-01 input row.
+
+Environment note: the tempfile-based tests previously hit `PermissionDenied
+(os error 5)` on `C:\Users\...\AppData\Local\Temp` in this sandbox; for this
+run TMP/TEMP/TMPDIR were redirected into `<workspace>/target/tmp` before
+starting, and no such failure occurred — the 360-test result above is a clean
+single pass, not a retry across redirects.
+
+Reference inventory guards after the docs/inventory edits: `pwsh -File
+scripts/check-reference-coverage.ps1` and `pwsh -File
+scripts/check-repository.ps1` — both run and passing, reporting
+"Reference inventory verified: 30 areas, 40 input types, 20 effects,
+16 overlay/stinger channels, 9 audio destinations, 12 UI workflows, 777 unique
+shortcut function names in 29 groups. Actual engine scope: 20 effects, 8
+title-panel channels and 8 modelled stinger channels, 9 configured audio buses
+(device qualification separate). Full reference match: False." The strict
+`-RequireFullMatch` mode continues to fail while protocol/hardware/cadence
+qualification is unqualified, which is the expected state. (The checker script
+requires PowerShell 7 — `SHA256.HashData` does not exist in Windows PowerShell
+5.1, which fails on its own .NET call before reading any data.)
+
+Not covered by this entry: any physical camera/microphone/display/audio device,
+GPU drain/teardown workflows, the Full HD benchmark of the eight per-pixel
+effects (still opt-in, still unrun for them), hosted CI execution (the Windows
+workflow packages without running tests), long-duration/soak qualification, and
+the deferred families listed in [gaps](gaps.md) and the
+[feature matrix](feature-matrix.md).
+
 UI-036 current owner instruction supersedes the older UI-035 build restriction:
 local build/manual laptop acceptance precedes push; GitHub compiles/packages
 without automated test execution. See [current audit](core-engine-audit.md) for
@@ -108,7 +192,10 @@ The RustMix application never links, bundles or invokes FFmpeg. The generated ar
 content: 160×90, 30/1, 60 frames of red/green/blue/white quadrants plus a moving black square,
 encoded as H.264 Baseline yuv420p (limited BT.709, GOP 30, no B frames, no audio). The script
 records provenance, hashes and the exact command in `artifacts/video-fixture.json`, then exports
-`RUSTMIX_TEST_VIDEO`. A missing fixture is a hard failure, never a skipped test.
+`RUSTMIX_TEST_VIDEO`. Local `cargo test` runs without that export, so `crates/platform/tests/video_decode.rs`
+falls back to the script's own default output location, `artifacts/video-fixture.mp4` (the
+`RUSTMIX_TEST_VIDEO` environment variable always takes precedence). A missing fixture is a hard
+failure, never a skipped test.
 
 `--ui-video-smoke` drives the real Add Input dialog, waits for the off-thread probe and rejects any
 raster other than 160×90 or any frame-rate ratio other than 30/1 (Media Foundation may report an

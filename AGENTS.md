@@ -14,13 +14,14 @@
 ## 0.0 Current repository state (verified 2026-10-24)
 
 Section 3's layout is the *target* architecture. The workspace that actually exists today has
-four members; do not reference other crates from §3 in build instructions:
+five members; do not reference other crates from §3 in build instructions:
 
 | Member | Crate | Role |
 |---|---|---|
 | `crates/engine` | `rustmix-engine` | Headless core: validated state/commands, rational timing, CPU rendering, audio sample mixing. Dependencies: serde, serde_json, thiserror, tempfile only. |
 | `crates/platform` | `rustmix-platform` | Windows Media Foundation / WASAPI / display FFI (`windows` 0.62, `cpal` 0.18, `rtrb` ring buffers). The only crate permitting `unsafe` — it overrides the workspace lints with its own table (`unsafe_code = "deny"`, audited allow sites). |
 | `crates/ui-egui` | `rustmix-ui` | egui/eframe 0.35 + egui_dock operator UI; depends on engine + platform; dispatches typed commands only. |
+| `crates/automation` | `rustmix-automation` | Loopback HTTP control API: minimal opt-in GET-only server on `127.0.0.1` (`server.rs`), the re-verified reference function vocabulary (`control.rs`, 25 executable spellings incl. `OverlayInput1–8`/`Off`, `Stinger1–8`, `PlayPause`) and state-document rendering (`document.rs`). Depends on engine + thiserror. |
 | `apps/rustmix` | `rustmix` | Thin binary launcher (`test = false`). |
 
 - **Toolchain:** edition 2024, MSRV 1.94 (verified with 1.94.1 on Windows). Workspace lints

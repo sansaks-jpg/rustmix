@@ -1,5 +1,26 @@
 # rustmix-engine
 
+UI-040 (2026-10-24) reference-alignment follow-up: standard overlay channels 1–8
+carry an optional input binding (`OverlayBank::inputs`, serde-default so legacy
+project files load unchanged) set through the validated `overlay.input.set`
+command (`Command::SetOverlayInput`); assigning binds and enables the channel,
+clearing unbinds and disables it, and input removal clears bindings while
+preserving the caption panel. `render::paint_overlay_pips` composites the bound
+input's frame into the panel rectangle under the existing caption text (black
+placeholder for offline/media inputs), and `render::program_from_sources_at`
+animates the composite on the compositor clock while `program_from_sources`
+keeps its signature (clock 0). `audio_engine` computes per-source post-gain
+pre-clamp `SourceMeter` taps on `AudioMetrics.sources` under the existing
+measure-and-clip contract, and `categories` default labels are the verified
+reference catalogue names Aqua/Blue (persisted definition ids and colour values
+unchanged). Evidence: engine suite 147 passed in the 2026-10-24 workspace gate —
+overlays 14 (5 new integration + 3 new unit), transitions 8 including
+`golden_frames_pin_every_effect_curve` (all 20 effects pinned at 25/50/75% with
+FNV-1a frame hashes; per-effect curve parameters documented in the render module
+docs), audio_samples 9 including the per-source tap impulse test, categories 8.
+Offline/media inputs composite a black placeholder; the engine opens no decoder,
+no audio device and no file.
+
 UI-034 candidate: `video_format` validates landscape/portrait project standards,
 rational frame rates, scan/field order and exact Camera modes. `Engine::new_preset`
 constructs two muted black safety inputs without I/O. Schema 10 migrates older
@@ -69,14 +90,14 @@ portable key bindings and resolves them to typed commands. Schema 3 migrates 1/2
 state. Twelve original CPU effects have independent pixel-vector tests. All 36 engine tests passed
 in hosted Windows run 39111788801 (`a01f498`); no full reference/hardware qualification is claimed.
 
-Headless synthetic UI domain. `Engine::execute` validates typed commands; `tick` advances pinned transitions using supplied monotonic milliseconds. Project/model, procedural CPU rendering, deterministic simulated meters and bounded atomic project IO are modules with no UI dependencies.
+Headless synthetic UI domain. `Engine::execute` validates typed commands; `tick` advances pinned transitions using supplied monotonic milliseconds. Project/model, procedural CPU rendering, measured audio meter taps, deterministic simulated meters and bounded atomic project IO are modules with no UI dependencies.
 
 Engine tests run on GitHub Actions. The engine exposes no hardware, GPU types or output encoders; it does not open audio/video devices or files. Local MP4 decoding belongs to the platform/UI workers, and real audio rendering is driven by the UI session.
 
-`playback` owns independent monotonic clocks for each procedural source through `input.pause`, `input.restart`, `input.loop` and `inputs.pause`. Global source pause preserves local pause states and timed transitions continue. `render::program_from_sources` composites validated processed surfaces, then overlays and FTB. Source transports are not decoder support and are not persisted in project files.
+`playback` owns independent monotonic clocks for each procedural source through `input.pause`, `input.restart`, `input.loop` and `inputs.pause`. Global source pause preserves local pause states and timed transitions continue. `render::program_from_sources` composites validated processed surfaces, then overlays and FTB; `render::program_from_sources_at(ms)` renders the same composition at an explicit compositor-clock offset so bound overlay inputs animate. Source transports are not decoder support and are not persisted in project files.
 
 `input::InputConfig` persists PNG descriptors and validated processing parameters since schema 2. Schema 1 migration supplies identity settings; older schemas load through the current migration chain. `AddInputAt`, `DuplicateInput` and `ApplyInput` are headless atomic commands; layer graphs are acyclic and removal clears dependencies. The engine does not open image paths; a media-free renderer shows black for external-image descriptors until a consumer supplies decoded surfaces.
 
-`overlays` owns the sixteen-channel bank (`standard[8]` title panels plus `stingers[8]` with input, cut point and display-underneath configuration) and `ActiveStinger`. A trigger captures Program/Preview and exchanges them exactly once at the cut point; `tick` performs the exchange before transition completion, and a zero cut point exchanges at the trigger itself. Unconfigured stingers refuse with a disabled reason and failed commands leave the project untouched.
+`overlays` owns the sixteen-channel bank (`standard[8]` title panels plus `stingers[8]` with input, cut point and display-underneath configuration) and `ActiveStinger`. A trigger captures Program/Preview and exchanges them exactly once at the cut point; `tick` performs the exchange before transition completion, and a zero cut point exchanges at the trigger itself. Unconfigured stingers refuse with a disabled reason and failed commands leave the project untouched. Each standard channel additionally carries an optional input binding (`OverlayBank::inputs`, `overlay.input.set`): the renderer composites the bound input under the caption text and clearing removes the binding, never the panel.
 
 `video_clock` computes rational nanosecond frame deadlines from indices and records skipped deadlines without a catch-up queue. `source_into` reuses caller-owned capacity. `from_project_at` starts restored source clocks at the current session origin. These APIs do not establish a hardware output/audio master clock.

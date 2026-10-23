@@ -4,7 +4,10 @@
 //! The channel shape follows the reference task 1.1 findings: standard
 //! channels `1..=8` and stinger channels `9..=16`, where each stinger carries
 //! its source input, a cut point and a display-underneath flag. RustMix renders
-//! standard channels as its existing title panels. A triggered stinger
+//! standard channels as its existing title panels, and a standard channel may
+//! additionally bind an input ([`OverlayBank::inputs`]): the bound input's
+//! frame is composited as a picture-in-picture at the channel's panel position,
+//! underneath the caption text. A triggered stinger
 //! performs its Program/Preview exchange exactly once at the cut point on the
 //! engine clock. Stinger *clip compositing* has no media renderer yet: the
 //! model, commands and bus exchange are real, the animated clip layer is
@@ -68,11 +71,23 @@ pub struct StingerChannel {
     pub display_underneath_overlays: bool,
 }
 
+/// Idle input bindings for the standard channels.
+fn default_standard_bindings() -> [Option<InputId>; STANDARD_CHANNELS] {
+    std::array::from_fn(|_| None)
+}
+
 /// The sixteen production overlay channels.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct OverlayBank {
     /// Title-panel channels 1–8.
     pub standard: [OverlayState; STANDARD_CHANNELS],
+    /// Optional input binding per standard channel. A bound input composites
+    /// its frame as a picture-in-picture at the channel's panel position,
+    /// underneath the caption text, whenever the channel is enabled. The
+    /// field is additive with a serde default, so every older project file
+    /// loads with idle (unbound) channels.
+    #[serde(default = "default_standard_bindings")]
+    pub inputs: [Option<InputId>; STANDARD_CHANNELS],
     /// Stinger channels 9–16.
     pub stingers: [StingerChannel; STINGER_CHANNELS],
 }
@@ -92,6 +107,7 @@ impl OverlayBank {
                 subtitle: "Independent live production • Synthetic demo".into(),
                 position: Position::LowerLeft,
             }),
+            inputs: default_standard_bindings(),
             stingers: std::array::from_fn(|_| StingerChannel::default()),
         }
     }
@@ -104,6 +120,16 @@ impl OverlayBank {
     /// Mutable access to the standard channel at a 0-based slot.
     pub fn standard_mut(&mut self, slot: usize) -> Option<&mut OverlayState> {
         self.standard.get_mut(slot)
+    }
+
+    /// The input bound to the standard channel at a 0-based slot.
+    pub fn binding(&self, slot: usize) -> Option<InputId> {
+        self.inputs.get(slot).copied().flatten()
+    }
+
+    /// Mutable access to the standard channel's input binding.
+    pub fn binding_mut(&mut self, slot: usize) -> Option<&mut Option<InputId>> {
+        self.inputs.get_mut(slot)
     }
 
     /// The stinger channel at a 0-based slot (0..=7).
@@ -131,6 +157,13 @@ impl OverlayBank {
                 return Err(invalid(
                     "Subtitle is too long or contains control characters",
                 ));
+            }
+        }
+        for binding in &self.inputs {
+            if let Some(id) = binding
+                && !inputs.iter().any(|input| input.id == *id)
+            {
+                return Err(invalid("Overlay input is missing"));
             }
         }
         for stinger in &self.stingers {
@@ -223,11 +256,52 @@ mod tests {
             assert!(!overlay.enabled);
             assert!(overlay.title.len() >= 4, "channel {} needs a title", i + 1);
         }
+        assert!(bank.inputs.iter().all(|binding| binding.is_none()));
         for stinger in &bank.stingers {
             assert_eq!(stinger.stinger_input, None);
             assert_eq!(stinger.cut_point_ms, 0);
             assert!(!stinger.display_underneath_overlays);
         }
+    }
+
+    #[test]
+    fn bindings_roundtrip_through_the_bank_accessors() {
+        let mut bank = OverlayBank::demo();
+        assert_eq!(bank.binding(0), None);
+        *bank.binding_mut(2).expect("slot 2 exists") = Some(InputId(4));
+        assert_eq!(bank.binding(2), Some(InputId(4)));
+        assert_eq!(
+            bank.binding(8),
+            None,
+            "only the eight standard channels bind"
+        );
+        assert!(bank.binding_mut(8).is_none());
+    }
+
+    #[test]
+    fn validation_rejects_bindings_to_missing_inputs() {
+        let inputs = ProjectState::demo().inputs;
+        let mut bank = OverlayBank::demo();
+        assert!(bank.validate(&inputs).is_ok());
+        *bank.binding_mut(0).expect("slot 0 exists") = Some(InputId(9_999));
+        assert!(bank.validate(&inputs).is_err());
+        *bank.binding_mut(0).expect("slot 0 exists") = Some(inputs[1].id);
+        assert!(bank.validate(&inputs).is_ok());
+    }
+
+    #[test]
+    fn deserialising_an_old_bank_keeps_bindings_idle() {
+        // A bank persisted before input bindings existed must load unchanged,
+        // with every standard channel unbound.
+        let mut old = serde_json::to_value(OverlayBank::demo()).expect("demo bank serialises");
+        let removed = old
+            .as_object_mut()
+            .expect("a bank serialises to an object")
+            .remove("inputs");
+        assert!(removed.is_some(), "the old shape has no bindings field");
+        let bank: OverlayBank = serde_json::from_value(old).expect("old bank shape loads");
+        assert_eq!(bank.standard[0].title, "RUSTMIX / STUDIO");
+        assert!(bank.inputs.iter().all(|binding| binding.is_none()));
     }
 
     #[test]

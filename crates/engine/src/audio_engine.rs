@@ -277,16 +277,30 @@ impl SourceRuntime {
 
 /// Meters measure post-gain, pre-clamp samples. RMS is per-channel block RMS,
 /// not loudness or true peak. Hard-clipped output samples are counted per channel.
+/// Source taps measure one input's post-gain contribution before bus summation
+/// (mute/solo silence reads zero). A tap never clamps anything, so its
+/// `clipped_samples` count is how many of that input's own samples are already
+/// beyond full scale before any bus gain or summation.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct AudioMeter {
     pub peak: StereoFrame,
     pub rms: StereoFrame,
     pub clipped_samples: u64,
 }
+/// One per-source meter tap: which input it belongs to and that input's own
+/// post-gain, pre-clamp `AudioMeter` under the bus-meter contract above.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct SourceMeter {
+    pub id: InputId,
+    pub meter: AudioMeter,
+}
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct AudioMetrics {
     pub buses: [AudioMeter; BUS_COUNT],
     pub guest_returns: [AudioMeter; GUEST_RETURN_COUNT],
+    /// Per-source taps in mixer source order; entries beyond the configured
+    /// source count stay None, and every entry is reset at each render.
+    pub sources: [Option<SourceMeter>; MAX_AUDIO_SOURCES],
     pub underrun_sources: u32,
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -317,6 +331,8 @@ pub struct AudioMixer {
     buses: [Ramp; BUS_COUNT],
     guest_returns: [Option<GuestReturn>; GUEST_RETURN_COUNT],
     totals: AudioTotals,
+    /// Preallocated per-source measurement copy; never aliases the mix path.
+    measure_buffer: [StereoFrame; BLOCK_FRAMES],
 }
 impl AudioMixer {
     /// Control-side construction. Initial parameters apply without a startup ramp.
@@ -336,6 +352,7 @@ impl AudioMixer {
             buses: config.buses.map(|bus| Ramp::new(bus_gain(&bus, bus_solo))),
             guest_returns: config.guest_returns,
             totals: AudioTotals::default(),
+            measure_buffer: [[0.0; 2]; BLOCK_FRAMES],
         })
     }
 
@@ -380,7 +397,7 @@ impl AudioMixer {
     /// Counter saturation at u64::MAX is intentional and never affects samples.
     pub fn render(&mut self, input: &AudioInputBatch<'_>, output: &mut AudioOutput) {
         *output = AudioOutput::default();
-        for source in &mut self.sources {
+        for (source_index, source) in self.sources.iter_mut().enumerate() {
             let block = input
                 .sources
                 .iter()
@@ -396,6 +413,9 @@ impl AudioMixer {
                     .unwrap_or([0.0; 2]);
                 let [gain_left, gain_right] = &mut source.gain;
                 let sample = [left * gain_left.next(), right * gain_right.next()];
+                if let Some(tap) = self.measure_buffer.get_mut(index) {
+                    *tap = sample;
+                }
                 for (bus_index, (bus_frames, send)) in
                     output.buses.iter_mut().zip(&mut source.sends).enumerate()
                 {
@@ -418,6 +438,12 @@ impl AudioMixer {
                         }
                     }
                 }
+            }
+            if let Some(slot) = output.metrics.sources.get_mut(source_index) {
+                *slot = Some(SourceMeter {
+                    id: source.id,
+                    meter: measure_and_clip(&mut self.measure_buffer),
+                });
             }
         }
         for (bus_index, (bus_frames, gain)) in

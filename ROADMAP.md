@@ -1,5 +1,19 @@
 # Roadmap
 
+UI-040 (2026-10-24): reference-alignment follow-up landed — standard overlay
+channels 1–8 bind inputs (PiP) behind `overlay.input.set`, the HTTP control API
+gains the wire-verified `OverlayInput1–8`(+`Off`)/`Stinger1–8` vocabulary and
+`PlayPause`, per-source and per-bus meters feed real mixer strips with stable
+automation IDs, the Overlay panel assigns/clears channel inputs, category
+labels match the verified Aqua/Blue catalogue, and all 20 transition curves are
+pinned by golden frames. Workspace gate green (fmt, clippy `-D warnings`, 360
+tests, app build). Deferred by scope decision: network/capture/browser sources,
+recording/streaming/replay backends, VST3, TCP text protocol, colour
+correction/LUT and other unmapped behaviours (licence review or clean-room spec
+required first). Stale documentation rows (gaps G02, feature matrix, AGENTS §0.0
+member table, reference inventory) reconciled. See
+[gaps](docs/gaps.md) and [feature matrix](docs/feature-matrix.md).
+
 UI-036: core-only operator navigation and an audit of all current CPU/GPU,
 media, audio, project and worker boundaries. New backends remain deferred.
 Current validation and remaining limits: [core audit](docs/core-engine-audit.md).

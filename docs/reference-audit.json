@@ -84,8 +84,8 @@
    "test_files": [
     "crates/engine/tests/transitions.rs"
    ],
-   "scope": "Four independent saved slots and 12 CPU effects",
-   "gap": "8 observed effects and stingers absent; no vendor-pixel parity or GPU parity"
+   "scope": "Four independent saved slots and all 20 effects as shared per-pixel CPU renderers, each motion curve pinned by golden frames at 25/50/75%",
+   "gap": "No vendor-pixel parity or GPU parity; Full HD benchmark of the eight per-pixel effects added in UI-039 still pending; stinger clip compositing absent"
   },
   {
    "id": 3,
@@ -107,13 +107,15 @@
    "status": "experimental",
    "conformance": "partial",
    "source_evidence": [
-    "crates/engine/src/lib.rs"
+    "crates/engine/src/lib.rs",
+    "crates/engine/src/overlays.rs"
    ],
    "test_files": [
-    "crates/ui-egui/src/smoke.rs"
+    "crates/ui-egui/src/smoke.rs",
+    "crates/engine/tests/overlays.rs"
    ],
-   "scope": "Four Program title panels and staged text/position edits",
-   "gap": "Title/enabled/position only; misleading advanced scratch controls removed; no source overlays/stingers, per-channel effects/timing/alpha/transforms."
+   "scope": "Eight standard channels compose a bound input (PiP) under the caption text via overlay.input.set, plus title/subtitle panels, staged text/position edits, F1-F8 defaults and a verified 4-to-5 schema migration inside the 16-channel bank",
+   "gap": "No per-channel effects/timing/alpha/transforms on standard channels; stinger channels 9-16 hold model/trigger/cut-point state but render no clip; the occupied-channel state-document content form is not evidenced"
   },
   {
    "id": 5,
@@ -146,16 +148,17 @@
   {
    "id": 7,
    "name": "Audio mixer / matrix",
-   "status": "stub",
+   "status": "experimental",
    "conformance": "partial",
    "source_evidence": [
-    "crates/engine/src/audio.rs"
+    "crates/engine/src/audio_engine.rs"
    ],
    "test_files": [
-    "crates/engine/tests/workflow.rs"
+    "crates/engine/tests/workflow.rs",
+    "crates/engine/tests/audio_samples.rs"
    ],
-   "scope": "Gain/mute/solo and Master/A/B meter-control simulation",
-   "gap": "No sample blocks, device audio, nine destinations, DSP, mix-minus or AV sync"
+   "scope": "Real 48 kHz sample mixer with nine configured buses (Master, A-G, Headphones), per-input nine-way sends, mix-minus guest returns, schema-11 migration and per-source post-gain pre-clamp meter taps",
+   "gap": "No device-callback/hardware qualification, DSP/EQ, loudness metering, A/V sync or dedicated headphone device output"
   },
   {
    "id": 8,
@@ -271,14 +274,17 @@
   {
    "id": 16,
    "name": "HTTP / TCP / WebSocket API",
-   "status": "not_started",
-   "conformance": "missing",
+   "status": "experimental",
+   "conformance": "partial",
    "source_evidence": [
-    "Cargo.toml"
+    "crates/automation/src/server.rs",
+    "crates/automation/src/control.rs"
    ],
-   "test_files": [],
-   "scope": "Headless typed Rust commands only",
-   "gap": "No HTTP listener, XML state document, public function dispatcher, TCP or WebSocket protocol"
+   "test_files": [
+    "crates/automation/tests/api_contract.rs"
+   ],
+   "scope": "Opt-in loopback HTTP/1.1 GET endpoint (default port 8088, 8 KiB request bound, never auto-started): state document rendering plus a 25-spelling executable function vocabulary covering OverlayInput1-8 (+Off), Stinger1-8, PlayPause and the pre-existing families",
+   "gap": "No TCP text protocol, WebSocket, write-side spellings beyond the mapped set, authentication beyond loopback binding, or operator-facing enablement workflow"
   },
   {
    "id": 17,
@@ -885,56 +891,56 @@
    "kind": "standard",
    "status": "experimental",
    "conformance": "partial",
-   "scope": "Title-panel channel: 16-channel bank, Program render, UI, F-key and persistence are real; no source overlay, per-channel effects, timing or alpha"
+   "scope": "Standard channel: 16-channel bank, Program render, UI, F-key and persistence are real; an optional bound input composites as PiP under the caption text via overlay.input.set (serde-default binding, legacy files load idle); no per-channel effects, timing or alpha"
   },
   {
    "channel": 2,
    "kind": "standard",
    "status": "experimental",
    "conformance": "partial",
-   "scope": "Title-panel channel: 16-channel bank, Program render, UI, F-key and persistence are real; no source overlay, per-channel effects, timing or alpha"
+   "scope": "Standard channel: 16-channel bank, Program render, UI, F-key and persistence are real; an optional bound input composites as PiP under the caption text via overlay.input.set (serde-default binding, legacy files load idle); no per-channel effects, timing or alpha"
   },
   {
    "channel": 3,
    "kind": "standard",
    "status": "experimental",
    "conformance": "partial",
-   "scope": "Title-panel channel: 16-channel bank, Program render, UI, F-key and persistence are real; no source overlay, per-channel effects, timing or alpha"
+   "scope": "Standard channel: 16-channel bank, Program render, UI, F-key and persistence are real; an optional bound input composites as PiP under the caption text via overlay.input.set (serde-default binding, legacy files load idle); no per-channel effects, timing or alpha"
   },
   {
    "channel": 4,
    "kind": "standard",
    "status": "experimental",
    "conformance": "partial",
-   "scope": "Title-panel channel: 16-channel bank, Program render, UI, F-key and persistence are real; no source overlay, per-channel effects, timing or alpha"
+   "scope": "Standard channel: 16-channel bank, Program render, UI, F-key and persistence are real; an optional bound input composites as PiP under the caption text via overlay.input.set (serde-default binding, legacy files load idle); no per-channel effects, timing or alpha"
   },
   {
    "channel": 5,
    "kind": "standard",
    "status": "experimental",
    "conformance": "partial",
-   "scope": "Title-panel channel: 16-channel bank, Program render, UI, F-key and persistence are real; no source overlay, per-channel effects, timing or alpha"
+   "scope": "Standard channel: 16-channel bank, Program render, UI, F-key and persistence are real; an optional bound input composites as PiP under the caption text via overlay.input.set (serde-default binding, legacy files load idle); no per-channel effects, timing or alpha"
   },
   {
    "channel": 6,
    "kind": "standard",
    "status": "experimental",
    "conformance": "partial",
-   "scope": "Title-panel channel: 16-channel bank, Program render, UI, F-key and persistence are real; no source overlay, per-channel effects, timing or alpha"
+   "scope": "Standard channel: 16-channel bank, Program render, UI, F-key and persistence are real; an optional bound input composites as PiP under the caption text via overlay.input.set (serde-default binding, legacy files load idle); no per-channel effects, timing or alpha"
   },
   {
    "channel": 7,
    "kind": "standard",
    "status": "experimental",
    "conformance": "partial",
-   "scope": "Title-panel channel: 16-channel bank, Program render, UI, F-key and persistence are real; no source overlay, per-channel effects, timing or alpha"
+   "scope": "Standard channel: 16-channel bank, Program render, UI, F-key and persistence are real; an optional bound input composites as PiP under the caption text via overlay.input.set (serde-default binding, legacy files load idle); no per-channel effects, timing or alpha"
   },
   {
    "channel": 8,
    "kind": "standard",
    "status": "experimental",
    "conformance": "partial",
-   "scope": "Title-panel channel: 16-channel bank, Program render, UI, F-key and persistence are real; no source overlay, per-channel effects, timing or alpha"
+   "scope": "Standard channel: 16-channel bank, Program render, UI, F-key and persistence are real; an optional bound input composites as PiP under the caption text via overlay.input.set (serde-default binding, legacy files load idle); no per-channel effects, timing or alpha"
   },
   {
    "channel": 9,
@@ -1010,43 +1016,43 @@
    "name": "A",
    "status": "stub",
    "conformance": "partial",
-   "scope": "Real sample mixing and per-input sends in the engine matrix; no dedicated device output or per-bus metering"
+   "scope": "Real sample mixing and per-input sends in the engine matrix with measured per-bus peak/RMS surfaced in the mixer strips; no dedicated device output"
   },
   {
    "name": "B",
    "status": "stub",
    "conformance": "partial",
-   "scope": "Real sample mixing and per-input sends in the engine matrix; no dedicated device output or per-bus metering"
+   "scope": "Real sample mixing and per-input sends in the engine matrix with measured per-bus peak/RMS surfaced in the mixer strips; no dedicated device output"
   },
   {
    "name": "C",
    "status": "stub",
    "conformance": "partial",
-   "scope": "Real sample mixing and per-input sends in the engine matrix; no dedicated device output or per-bus metering"
+   "scope": "Real sample mixing and per-input sends in the engine matrix with measured per-bus peak/RMS surfaced in the mixer strips; no dedicated device output"
   },
   {
    "name": "D",
    "status": "stub",
    "conformance": "partial",
-   "scope": "Real sample mixing and per-input sends in the engine matrix; no dedicated device output or per-bus metering"
+   "scope": "Real sample mixing and per-input sends in the engine matrix with measured per-bus peak/RMS surfaced in the mixer strips; no dedicated device output"
   },
   {
    "name": "E",
    "status": "stub",
    "conformance": "partial",
-   "scope": "Real sample mixing and per-input sends in the engine matrix; no dedicated device output or per-bus metering"
+   "scope": "Real sample mixing and per-input sends in the engine matrix with measured per-bus peak/RMS surfaced in the mixer strips; no dedicated device output"
   },
   {
    "name": "F",
    "status": "stub",
    "conformance": "partial",
-   "scope": "Real sample mixing and per-input sends in the engine matrix; no dedicated device output or per-bus metering"
+   "scope": "Real sample mixing and per-input sends in the engine matrix with measured per-bus peak/RMS surfaced in the mixer strips; no dedicated device output"
   },
   {
    "name": "G",
    "status": "stub",
    "conformance": "partial",
-   "scope": "Real sample mixing and per-input sends in the engine matrix; no dedicated device output or per-bus metering"
+   "scope": "Real sample mixing and per-input sends in the engine matrix with measured per-bus peak/RMS surfaced in the mixer strips; no dedicated device output"
   }
  ],
  "constraints": [
@@ -2134,5 +2140,21 @@
   "revision": "d893b3f",
   "run": "https://github.com/sansaks-jpg/rustmix/actions/runs/39115630407",
   "status": "pending hosted verification; runtime_evidence below is the previous accepted baseline"
+ },
+ "reverification": {
+  "date": "2026-10-24",
+  "task": "UI-040 reference alignment re-verification",
+  "target": "vMix 29.0.0.48 as installed on the analysis machine; the pinned study snapshot in the separate reference workspace was re-checked against it",
+  "method": "Static clean-room inspection only. The installed product was never launched, decompiled or copied from; nothing from it entered this repository. Steps: directory and file-version inventory of the install tree; import-table and section inspection of the core binaries (confirming the managed core and the confined native stack); read of the embedded configuration and XML provider files; extraction of the contiguous CamelCase shortcut/API function table, transition, transport and layout enum strings from the binary image; and one-to-one cross-check of those names against the vendor's public feature and shortcut-function documentation. Per-claim verdicts were then confirmed against this repository's own wire measurements and the binary's string table.",
+  "corrections_confirmed": [
+   "OverlayInput spellings exist only for channels 1-8 in the binary string table, the committed shortcut catalogues and the measured wire; channels 9-16 are addressed by the separate Stinger1-8 family. The older specification table claiming OverlayInput with N in 1..=16 is wrong and contradicted by the repository's own trace evidence.",
+   "OverlayInput<n>Off clears a channel's assignment while OverlayInput<n>Out leaves the assignment in place; the older summary that made Out the clear spelling is wrong, and Off was omitted from that summary entirely.",
+   "The SetLayer family present in the binary and on the wire covers geometry members (X/Y/Width/Height/Zoom plus crop/pan siblings) but contains no Alpha or Rotation member; a separate unindexed SetAlpha spelling does exist. Exactly the Alpha member of the older mandated family is rejected.",
+   "The observed state document's outputs element contains only output children (including ones carrying a fullscreen type attribute); no separate fullscreen child element exists in any of the seven captured state XMLs, so the serializer matching the fixture - not the older summary's element list - is authoritative.",
+   "The verified input-category catalogue members are Aqua and Blue; the older task summary's Azure and MidnightBlue names appear nowhere in the product binary. rustmix categories now use the verified labels with persisted ids unchanged.",
+   "The main window shows five transport setup/arm pairs; the summaries saying six contradict their own geometry tables and button inventory.",
+   "Further document-internal contradictions confirmed and recorded so they are not re-imported: a stale duplicate-capture claim disproven by two different SHA-256 hashes, an unresolved finding that later sections of the same document resolve, a self-contradicting text-colour claim carrying an unmeasured theme value, a misapplied CONFIRMED label on a logically unsound era inference, a dependency claim contradicted by the manifests, a promised inventory file that was never produced, and an off-by-one member count in a replay-controller summary. The gui-pass image evidence behind some overlay/category resolutions is gitignored and exists only on the analysis machine, which weakens those confirmations relative to committed material."
+  ],
+  "rustmix_guard": "These corrections are enforced in code and tests: crates/engine/src/categories.rs uses the verified Aqua/Blue labels, crates/automation/src/control.rs accepts OverlayInput1-8/Off and Stinger1-8 while rejecting OverlayInput9-16 with a stinger-pointer reason, and crates/automation/tests/api_contract.rs encodes the Off-clears/Out-preserves bounds."
  }
 }

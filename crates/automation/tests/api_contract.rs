@@ -1,6 +1,9 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::indexing_slicing)]
+// Test-only explicit panics report unexpected dispatch outcomes; the workspace
+// runtime deny does not apply to assertion macros in tests (AGENTS §1.1).
+#![allow(clippy::panic)]
 use rustmix_automation::{DispatchError, Telemetry, document, parse_query, server};
-use rustmix_engine::{Command, Engine, InputId, ProjectState, TransitionKind};
+use rustmix_engine::{Command, Engine, InputId, ProjectState, StingerChannel, TransitionKind};
 
 #[test]
 fn fresh_session_renders_the_reference_document_shape() {
@@ -162,6 +165,199 @@ fn the_loopback_endpoint_serves_the_document_and_dispatches_over_a_real_socket()
 
     let response = server::handle_request(&mut engine, &Telemetry::default(), "/other", 0);
     assert_eq!(response.status, 404);
+}
+
+#[test]
+fn overlay_input_functions_bind_clear_and_reject_the_stinger_range() {
+    let mut engine = Engine::from_project(ProjectState::demo()).unwrap();
+
+    // OverlayInput3 puts input 5 on standard channel 3.
+    let request = parse_query("Function=OverlayInput3&Input=5");
+    rustmix_automation::dispatch(&mut engine, &request, 0).unwrap();
+    assert_eq!(engine.project().overlays.binding(2), Some(InputId(5)));
+    assert!(engine.project().overlays.standard[2].enabled);
+
+    // Out is declared but not implemented, and is never treated as a clear.
+    let before_out = engine.project().clone();
+    match rustmix_automation::dispatch(&mut engine, &parse_query("Function=OverlayInput3Out"), 0) {
+        Err(DispatchError::Unsupported { function, reason }) => {
+            assert_eq!(function, "OverlayInput3Out");
+            assert!(
+                reason.contains("Off clears the channel"),
+                "reason: {reason}"
+            );
+        }
+        other => panic!("OverlayInput3Out must be declared unsupported, got {other:?}"),
+    }
+    assert_eq!(
+        engine.project(),
+        &before_out,
+        "Out must leave the channel assignment intact"
+    );
+
+    // Off is the function that clears the channel.
+    rustmix_automation::dispatch(&mut engine, &parse_query("Function=OverlayInput3Off"), 0)
+        .unwrap();
+    assert_eq!(engine.project().overlays.binding(2), None);
+    assert!(!engine.project().overlays.standard[2].enabled);
+
+    // Channels 9-16 belong to the stingers; no OverlayInput9-16 spelling exists.
+    for number in [9, 16] {
+        let request = parse_query(&format!("Function=OverlayInput{number}"));
+        match rustmix_automation::dispatch(&mut engine, &request, 0) {
+            Err(DispatchError::Unsupported { function, reason }) => {
+                assert_eq!(function, format!("OverlayInput{number}"));
+                assert!(reason.contains("9-16 are Stingers 1-8"), "reason: {reason}");
+            }
+            other => panic!("OverlayInput{number} must name the stinger range, got {other:?}"),
+        }
+    }
+
+    // Absent and unresolvable Input targets are the accepted no-op.
+    let before_noop = engine.project().clone();
+    for query in ["Function=OverlayInput1", "Function=OverlayInput1&Input=999"] {
+        assert_eq!(
+            rustmix_automation::dispatch(&mut engine, &parse_query(query), 0).unwrap(),
+            rustmix_automation::control::Outcome::Noop,
+            "{query}"
+        );
+    }
+    assert_eq!(engine.project(), &before_noop);
+
+    // Spellings outside the 1-8 vocabulary remain unknown functions.
+    for query in [
+        "Function=OverlayInput",
+        "Function=OverlayInput0",
+        "Function=OverlayInput17",
+    ] {
+        assert!(
+            matches!(
+                rustmix_automation::dispatch(&mut engine, &parse_query(query), 0),
+                Err(DispatchError::UnknownFunction(_))
+            ),
+            "{query}"
+        );
+    }
+}
+
+#[test]
+fn the_declared_overlay_variants_never_clear_a_bound_channel() {
+    let mut engine = Engine::from_project(ProjectState::demo()).unwrap();
+    rustmix_automation::dispatch(
+        &mut engine,
+        &parse_query("Function=OverlayInput1&Input=4"),
+        0,
+    )
+    .unwrap();
+    let bound = engine.project().clone();
+    for query in [
+        "Function=OverlayInput1In",
+        "Function=OverlayInput1Zoom",
+        "Function=OverlayInput1Last",
+        // AllOff is the one unnumbered spelling of the family.
+        "Function=OverlayInputAllOff",
+    ] {
+        match rustmix_automation::dispatch(&mut engine, &parse_query(query), 0) {
+            Err(DispatchError::Unsupported { .. }) => {}
+            other => panic!("{query} must be declared unsupported, got {other:?}"),
+        }
+        assert_eq!(
+            engine.project(),
+            &bound,
+            "a declared variant must not change the channel"
+        );
+    }
+    assert_eq!(engine.project().overlays.binding(0), Some(InputId(4)));
+}
+
+#[test]
+fn stinger_functions_trigger_the_configured_channel() {
+    let mut engine = Engine::from_project(ProjectState::demo()).unwrap();
+    let config = StingerChannel {
+        stinger_input: Some(InputId(3)),
+        cut_point_ms: 500,
+        display_underneath_overlays: false,
+    };
+    engine.execute(Command::SetStinger(7, config), 0).unwrap();
+
+    rustmix_automation::dispatch(&mut engine, &parse_query("Function=Stinger8"), 100).unwrap();
+    let active = engine.stinger().unwrap();
+    assert_eq!(active.slot, 7);
+    assert_eq!(active.input, InputId(3));
+    assert_eq!(active.cut_point_ms, 500);
+
+    // An unconfigured stinger is rejected with the engine's operator reason.
+    match rustmix_automation::dispatch(&mut engine, &parse_query("Function=Stinger1"), 200) {
+        Err(DispatchError::Rejected(message)) => {
+            assert!(
+                message.contains("Configure a stinger input"),
+                "message: {message}"
+            );
+        }
+        other => panic!("an unconfigured stinger must be rejected, got {other:?}"),
+    }
+
+    // The stinger vocabulary ends at eight.
+    assert!(matches!(
+        rustmix_automation::dispatch(&mut engine, &parse_query("Function=Stinger9"), 0),
+        Err(DispatchError::UnknownFunction(_))
+    ));
+}
+
+#[test]
+fn play_pause_toggles_the_input_transport() {
+    let mut engine = Engine::from_project(ProjectState::demo()).unwrap();
+    // The Program input plays by default, so the first toggle pauses it.
+    rustmix_automation::dispatch(&mut engine, &parse_query("Function=PlayPause&Input=1"), 0)
+        .unwrap();
+    assert!(engine.playback(InputId(1)).unwrap().paused());
+    // The second toggle resumes it.
+    rustmix_automation::dispatch(&mut engine, &parse_query("Function=PlayPause&Input=1"), 10)
+        .unwrap();
+    assert!(!engine.playback(InputId(1)).unwrap().paused());
+
+    // The Preview transport input starts paused, so the toggle plays it.
+    rustmix_automation::dispatch(&mut engine, &parse_query("Function=PlayPause&Input=2"), 20)
+        .unwrap();
+    assert!(!engine.playback(InputId(2)).unwrap().paused());
+
+    // An input without a transport is rejected with the engine's reason.
+    match rustmix_automation::dispatch(&mut engine, &parse_query("Function=PlayPause&Input=6"), 0) {
+        Err(DispatchError::Rejected(message)) => {
+            assert!(
+                message.contains("no playback transport"),
+                "message: {message}"
+            );
+        }
+        other => panic!("a transport-less input must be rejected, got {other:?}"),
+    }
+
+    // Absent and unresolvable targets are the accepted no-op.
+    let before = engine.project().clone();
+    for query in ["Function=PlayPause", "Function=PlayPause&Input=999"] {
+        assert_eq!(
+            rustmix_automation::dispatch(&mut engine, &parse_query(query), 0).unwrap(),
+            rustmix_automation::control::Outcome::Noop,
+            "{query}"
+        );
+    }
+    assert_eq!(engine.project(), &before);
+}
+
+#[test]
+fn accepted_functions_carry_the_wire_overlay_and_transport_vocabulary() {
+    let accepted = rustmix_automation::control::accepted_functions();
+    for name in [
+        "PlayPause",
+        "OverlayInput1",
+        "OverlayInput8",
+        "OverlayInput1Off",
+        "OverlayInput8Off",
+        "Stinger1",
+        "Stinger8",
+    ] {
+        assert!(accepted.contains(&name), "{name} must be listed");
+    }
 }
 
 #[test]

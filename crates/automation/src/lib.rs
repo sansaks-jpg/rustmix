@@ -16,9 +16,10 @@
 //! * `type` attributes use rustmix's own source vocabulary (Video, Image,
 //!   AudioFile, Capture, Browser, Photos, AudioInput, or the generator kind
 //!   name) — the engine does not model the reference's forty input types yet.
-//! * all sixteen overlay channels render empty: the engine's overlay bank is
-//!   caption panels without input bindings, so claiming an occupied channel
-//!   would be false.
+//! * all sixteen overlay channels render as empty self-closing elements; the
+//!   engine models input-backed standard channels, but the analysed evidence
+//!   for an occupied channel's element content is not available, so the
+//!   verified empty shape is kept instead of an invented wire form.
 //! * `key` attributes are deterministic GUID-shaped identifiers derived from
 //!   the stable input ID (`00000000-0000-0000-0000-<id>`), unique per input
 //!   within a session.

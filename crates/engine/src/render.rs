@@ -1,5 +1,44 @@
 //! Bounded deterministic SDR, full-range RGBA8 demo renderer.
 //! Blending is in display-referred sRGB for this UI prototype, not a broadcast color pipeline.
+//!
+//! ## Overlay channels
+//!
+//! `finish_program` composites the standard overlay channels on top of the
+//! transitioned picture, in this order: a bound input's frame is blitted as a
+//! picture-in-picture into the channel's panel rectangle, the panel chrome is
+//! painted over it (the accent bar; the dark panel wash only for unbound
+//! channels), then the caption raster draws the title and subtitle ink on top,
+//! and fade-to-black is applied last so it covers the whole overlay layer.
+//!
+//! ## Transition curve parameters
+//!
+//! All twenty effects move linearly in progress `p` (elapsed / duration); the
+//! table pins each effect's geometry and dissolve parameters so the motion is
+//! a documented contract, exercised by the golden tests in
+//! `tests/transitions.rs`:
+//!
+//! | Effect | Motion (all linear in `p`) |
+//! |---|---|
+//! | Cut | hard switch: `from` until `p = 1`, then `to` |
+//! | Fade | plain dissolve `blend(from, to, p)` |
+//! | Wipe | vertical boundary at `x/w = p`; target right of it |
+//! | WipeReverse | boundary at `x/w = 1 − p`; target left of it |
+//! | VerticalWipe | horizontal boundary at `y/h = p`; target below it |
+//! | VerticalWipeReverse | boundary at `y/h = 1 − p`; target above it |
+//! | Slide | target slides in left→right, shift `round(w·p)` |
+//! | SlideReverse | target slides in right→left from the opposite edge |
+//! | VerticalSlide | outgoing scrolls up out of frame, target enters from the bottom |
+//! | VerticalSlideReverse | outgoing scrolls down, target enters from the top |
+//! | BarnDoor | vertical seam opens from the centre: `\|((2x+1)/w) − 1\| < p` |
+//! | RollerDoor | horizontal seam opens from the centre: same predicate on `y` |
+//! | Zoom | incoming scale `2 − p` about the centre, dissolve by `p` |
+//! | Fly | incoming scale `0.5 + 0.5p`, centre `(1 − 0.5p, 1 − 0.5p)`, dissolve by `p` |
+//! | CrossZoom | outgoing scale `1 + p`, incoming scale `2 − p`, dissolve by `p` |
+//! | FlyRotate | Fly plus rotation `p · π/6` about the motion centre |
+//! | Cube | vertical cube turn; face width `1 − 2p` then `2p − 1`, black at the edge-on midpoint |
+//! | CubeZoom | Cube plus vertical squash `1 − 0.5·\|2p − 1\|` |
+//! | Merge | outgoing recedes left (`1 − 0.5p`), incoming advances from the right (`0.5 + 0.5p`), each fading through black |
+//! | AlphaFade | dissolve weighted by the target's alpha: `p · a_to / 255` |
 use crate::{
     InputKind, InputState, ProjectState, Result, TransitionKind, TransitionState, invalid,
     overlay_text,
@@ -428,16 +467,89 @@ pub fn program(
     let target = t.and_then(|t| p.input(t.to));
     let from = source(from, w, h, ms)?;
     let target = target.map(|input| source(input, w, h, ms)).transpose()?;
-    program_from_sources(p, t, black, w, h, &from, target.as_deref())
+    program_from_sources_at(p, t, black, w, h, &from, target.as_deref(), ms)
 }
 
-/// Paint only the enabled title-panel rectangles. The previous per-pixel loop
-/// checked every overlay on every pixel, which dominated full-HD composition.
-fn paint_overlay_panels(out: &mut [[u8; 4]], w: u32, h: u32, overlays: &[crate::OverlayState]) {
-    for (index, overlay) in overlays.iter().enumerate() {
+/// The pixel rectangle of one standard overlay channel, clamped to the raster.
+fn overlay_panel_rect(
+    index: usize,
+    position: crate::Position,
+    w: u32,
+    h: u32,
+) -> (u32, u32, u32, u32) {
+    let (left, top) = overlay_text::panel_fractions(index, position);
+    let x0 = ((left * w as f32).floor() as i64).clamp(0, i64::from(w)) as u32;
+    let x1 = (((left + overlay_text::PANEL_WIDTH) * w as f32).ceil() as i64).clamp(0, i64::from(w))
+        as u32;
+    let y0 = ((top * h as f32).floor() as i64).clamp(0, i64::from(h)) as u32;
+    let y1 = (((top + overlay_text::PANEL_HEIGHT) * h as f32).ceil() as i64).clamp(0, i64::from(h))
+        as u32;
+    (x0, y0, x1, y1)
+}
+
+/// Composite each enabled standard channel's bound input as a picture-in-
+/// picture filling the channel's panel rectangle. The panel chrome and the
+/// caption raster paint over it, so the picture sits underneath the caption
+/// text. Offline, media-backed or missing inputs render the deterministic
+/// black placeholder, exactly like a full-frame source would.
+fn paint_overlay_pips(
+    p: &ProjectState,
+    out: &mut [[u8; 4]],
+    w: u32,
+    h: u32,
+    ms: u64,
+) -> Result<()> {
+    for (index, overlay) in p.overlays.standard.iter().enumerate() {
         if !overlay.enabled {
             continue;
         }
+        let Some(bound) = p.overlays.binding(index).and_then(|id| p.input(id)) else {
+            continue;
+        };
+        let (x0, y0, x1, y1) = overlay_panel_rect(index, overlay.position, w, h);
+        if x1 <= x0 || y1 <= y0 {
+            continue;
+        }
+        let pw = x1 - x0;
+        let (left, top) = overlay_text::panel_fractions(index, overlay.position);
+        let right = left + overlay_text::PANEL_WIDTH;
+        let bottom = top + overlay_text::PANEL_HEIGHT;
+        let frame = source(bound, pw, y1 - y0, ms)?;
+        for y in y0..y1 {
+            for x in x0..x1 {
+                // The same fraction rule the panel painter and the caption
+                // tests use, so the integer bounding box can never smear the
+                // picture across the panel boundary.
+                let u = x as f32 / w as f32;
+                let v = y as f32 / h as f32;
+                if !(u >= left && u < right && v >= top && v < bottom) {
+                    continue;
+                }
+                let column = (x - x0) as usize;
+                let row = ((y - y0) as usize).saturating_mul(pw as usize);
+                let offset = (y as usize)
+                    .saturating_mul(w as usize)
+                    .saturating_add(x as usize);
+                if let (Some(pixel), Some(target)) = (frame.get(row + column), out.get_mut(offset))
+                {
+                    *target = *pixel;
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Paint the enabled title-panel chrome over the PiP pass. A channel with a
+/// bound input keeps only its accent bar so the picture stays visible; the
+/// previous per-pixel loop checked every overlay on every pixel, which
+/// dominated full-HD composition.
+fn paint_overlay_panels(out: &mut [[u8; 4]], w: u32, h: u32, overlays: &crate::OverlayBank) {
+    for (index, overlay) in overlays.standard.iter().enumerate() {
+        if !overlay.enabled {
+            continue;
+        }
+        let bound = overlays.binding(index).is_some();
         let (left, top) = overlay_text::panel_fractions(index, overlay.position);
         let x0 = ((left * w as f32).floor() as i64).clamp(0, i64::from(w)) as u32;
         let x1 = (((left + overlay_text::PANEL_WIDTH) * w as f32).ceil() as i64)
@@ -458,11 +570,13 @@ fn paint_overlay_panels(out: &mut [[u8; 4]], w: u32, h: u32, overlays: &[crate::
                         .saturating_mul(w as usize)
                         .saturating_add(x as usize);
                     if let Some(pixel) = out.get_mut(offset) {
-                        *pixel = if u < left + 0.008 {
-                            [39, 192, 207, 255]
-                        } else {
-                            blend(*pixel, [14, 29, 42, 255], 0.94)
-                        };
+                        if u < left + 0.008 {
+                            *pixel = [39, 192, 207, 255];
+                        } else if !bound {
+                            // A bound channel keeps its picture; only the
+                            // accent bar marks the panel over it.
+                            *pixel = blend(*pixel, [14, 29, 42, 255], 0.94);
+                        }
                     }
                 }
             }
@@ -472,6 +586,9 @@ fn paint_overlay_panels(out: &mut [[u8; 4]], w: u32, h: u32, overlays: &[crate::
 
 /// Composite already processed sources, with independent source clocks/effects.
 /// Titles/backgrounds and fade-to-black are applied after source processing.
+///
+/// Overlay input frames are composited at clock zero here; callers that own a
+/// compositor clock use [`program_from_sources_at`].
 pub fn program_from_sources(
     p: &ProjectState,
     t: Option<&TransitionState>,
@@ -480,6 +597,25 @@ pub fn program_from_sources(
     h: u32,
     from: &[[u8; 4]],
     target: Option<&[[u8; 4]]>,
+) -> Result<Vec<[u8; 4]>> {
+    program_from_sources_at(p, t, black, w, h, from, target, 0)
+}
+
+/// [`program_from_sources`] with the compositor clock that animates overlay
+/// input frames, so a bound input's picture-in-picture moves with the same
+/// clock that generated the main surfaces. The parameter list mirrors
+/// [`program_from_sources`] plus the clock; grouping it into a struct would
+/// churn every existing caller for no behaviour change.
+#[allow(clippy::too_many_arguments)]
+pub fn program_from_sources_at(
+    p: &ProjectState,
+    t: Option<&TransitionState>,
+    black: f32,
+    w: u32,
+    h: u32,
+    from: &[[u8; 4]],
+    target: Option<&[[u8; 4]]>,
+    ms: u64,
 ) -> Result<Vec<[u8; 4]>> {
     let size = dimensions(w, h)?;
     if from.len() != size
@@ -493,7 +629,7 @@ pub fn program_from_sources(
     }
     if t.is_none() {
         let mut out = from.to_vec();
-        finish_program(&mut out, p, w, h, black);
+        finish_program(&mut out, p, w, h, black, ms)?;
         return Ok(out);
     }
     if let Some(t) = t
@@ -505,7 +641,7 @@ pub fn program_from_sources(
             from
         };
         let mut out = surface.to_vec();
-        finish_program(&mut out, p, w, h, black);
+        finish_program(&mut out, p, w, h, black, ms)?;
         return Ok(out);
     }
     if let Some(t) = t
@@ -513,14 +649,14 @@ pub fn program_from_sources(
     {
         let to = target.ok_or_else(|| invalid("Target surface missing"))?;
         let mut out = fade_surfaces(from, to, t.progress);
-        finish_program(&mut out, p, w, h, black);
+        finish_program(&mut out, p, w, h, black, ms)?;
         return Ok(out);
     }
     let to = target.ok_or_else(|| invalid("Target surface missing"))?;
     let kind = t.map_or(TransitionKind::Cut, |t| t.kind);
     let progress = t.map_or(0.0, |t| t.progress);
     let mut out = transition_rows(kind, progress, w, h, from, to)?;
-    finish_program(&mut out, p, w, h, black);
+    finish_program(&mut out, p, w, h, black, ms)?;
     Ok(out)
 }
 
@@ -941,8 +1077,16 @@ fn transition_reference(
     Ok(out)
 }
 
-fn finish_program(out: &mut [[u8; 4]], p: &ProjectState, w: u32, h: u32, black: f32) {
-    paint_overlay_panels(out, w, h, &p.overlays.standard);
+fn finish_program(
+    out: &mut [[u8; 4]],
+    p: &ProjectState,
+    w: u32,
+    h: u32,
+    black: f32,
+    ms: u64,
+) -> Result<()> {
+    paint_overlay_pips(p, out, w, h, ms)?;
+    paint_overlay_panels(out, w, h, &p.overlays);
     // Captions belong to the overlay layer: they are rasterized after the panel
     // geometry and before any fade-to-black so Program output, the native window
     // and future recorders all show the same picture as the operator monitor.
@@ -950,6 +1094,7 @@ fn finish_program(out: &mut [[u8; 4]], p: &ProjectState, w: u32, h: u32, black: 
     if black > 0.0 {
         fade_to_black(out, black);
     }
+    Ok(())
 }
 
 #[inline]

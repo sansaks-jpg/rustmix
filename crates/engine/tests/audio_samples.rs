@@ -291,3 +291,89 @@ fn bus_solo_and_mute_affect_only_the_selected_destinations() {
     mixer.render(&batch, &mut output);
     assert_eq!(output.buses[1][BLOCK_FRAMES - 1], [0.0; 2]);
 }
+
+#[test]
+fn per_source_taps_measure_post_gain_pre_clamp_levels_per_input() {
+    let mut loud = SourceConfig::new(InputId(1));
+    loud.gain_db = 12.0;
+    loud.sends = [false, true, false, false, false, false, false, false, false];
+    let mut quiet = SourceConfig::new(InputId(2));
+    quiet.gain_db = -6.0;
+    let mut muted = SourceConfig::new(InputId(3));
+    muted.muted = true;
+    let mut mixer = mixer(vec![loud, quiet, muted]);
+    let mut loud_samples = [[0.0; 2]; BLOCK_FRAMES];
+    loud_samples[0] = [0.75, -0.75];
+    let loud_block = AudioBlock::new(SAMPLE_RATE, &loud_samples).unwrap();
+    let quiet_block = block([0.5, -0.25]);
+    let sources = [
+        SourceBlock {
+            id: InputId(1),
+            block: &loud_block,
+        },
+        SourceBlock {
+            id: InputId(2),
+            block: &quiet_block,
+        },
+    ];
+    let batch = AudioInputBatch::new(&sources).unwrap();
+    let mut output = AudioOutput::default();
+    mixer.render(&batch, &mut output);
+    let loud_gain = 10.0_f32.powf(12.0 / 20.0);
+    let quiet_gain = 10.0_f32.powf(-6.0 / 20.0);
+
+    // The loud tap measures post-gain, pre-clamp: 0.75 at +12 dB is ~2.99,
+    // far beyond full scale, and nothing clamps it at the tap.
+    let loud_tap = output.metrics.sources[0].unwrap();
+    assert_eq!(loud_tap.id, InputId(1));
+    close(loud_tap.meter.peak[0], 0.75 * loud_gain);
+    close(loud_tap.meter.peak[1], 0.75 * loud_gain);
+    close(
+        loud_tap.meter.rms[0],
+        0.75 * loud_gain / (BLOCK_FRAMES as f32).sqrt(),
+    );
+    close(
+        loud_tap.meter.rms[1],
+        0.75 * loud_gain / (BLOCK_FRAMES as f32).sqrt(),
+    );
+    assert_eq!(loud_tap.meter.clipped_samples, 2);
+
+    // The quiet tap is a constant block, so per-channel RMS equals its peak.
+    let quiet_tap = output.metrics.sources[1].unwrap();
+    assert_eq!(quiet_tap.id, InputId(2));
+    close(quiet_tap.meter.peak[0], 0.5 * quiet_gain);
+    close(quiet_tap.meter.peak[1], 0.25 * quiet_gain);
+    close(quiet_tap.meter.rms[0], 0.5 * quiet_gain);
+    close(quiet_tap.meter.rms[1], 0.25 * quiet_gain);
+    assert_eq!(quiet_tap.meter.clipped_samples, 0);
+
+    // Mute gates the tap to silence before bus sends are even considered.
+    let muted_tap = output.metrics.sources[2].unwrap();
+    assert_eq!(muted_tap.id, InputId(3));
+    assert_eq!(muted_tap.meter.peak, [0.0; 2]);
+    assert_eq!(muted_tap.meter.rms, [0.0; 2]);
+    assert_eq!(muted_tap.meter.clipped_samples, 0);
+
+    // Slots beyond the configured source count stay empty.
+    assert!(output.metrics.sources[3..].iter().all(Option::is_none));
+
+    // Cross-check the taps against the buses: Bus A carries only the loud
+    // source and Master only the quiet one, both at unity send and bus gain,
+    // so each pre-clamp bus meter peak must equal its source tap peak.
+    close(output.metrics.buses[1].peak[0], loud_tap.meter.peak[0]);
+    close(output.metrics.buses[1].peak[1], loud_tap.meter.peak[1]);
+    close(output.metrics.buses[0].peak[0], quiet_tap.meter.peak[0]);
+    close(output.metrics.buses[0].peak[1], quiet_tap.meter.peak[1]);
+    assert!(output.buses[2].iter().all(|frame| *frame == [0.0; 2]));
+
+    // A missing block is counted silence: taps stay identified but read zero.
+    mixer.render(&AudioInputBatch::new(&[]).unwrap(), &mut output);
+    for (index, id) in [(0, InputId(1)), (1, InputId(2)), (2, InputId(3))] {
+        let tap = output.metrics.sources[index].unwrap();
+        assert_eq!(tap.id, id);
+        assert_eq!(tap.meter.peak, [0.0; 2]);
+        assert_eq!(tap.meter.rms, [0.0; 2]);
+        assert_eq!(tap.meter.clipped_samples, 0);
+    }
+    assert_eq!(output.metrics.underrun_sources, 3);
+}

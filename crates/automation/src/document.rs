@@ -154,8 +154,11 @@ pub fn render(project: &ProjectState, telemetry: &Telemetry) -> String {
     x.push_str("</outputs>");
 
     // ---- overlays ---------------------------------------------------------
-    // All sixteen channels render empty: the engine's overlay bank is caption
-    // panels without input bindings, so an occupied element would be false.
+    // All sixteen channels render as self-closing empty elements. The engine's
+    // standard channels now carry optional input bindings, but the analysed
+    // evidence for an *occupied* channel's element content is not in the
+    // repository, so the document keeps the verified empty shape rather than
+    // inventing an unverified wire form.
     x.push_str("<overlays>");
     for number in 1..=16 {
         let _ = write!(x, "<overlay number=\"{number}\" />");

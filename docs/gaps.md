@@ -1,5 +1,67 @@
 # Known gaps
 
+UI-040 (2026-10-24) completes the bounded follow-up to the UI-039 reference
+alignment. Eight plan items landed, eight families were reviewed and deferred,
+and the stale documentation rows were reconciled:
+
+- **Standard overlay channels 1–8 bind inputs (PiP):** a serde-default
+  `OverlayBank::inputs` array, the validated `overlay.input.set` command and a
+  CPU render path compositing the bound input under the existing caption text.
+  Old project files load unchanged; input removal clears bindings. Evidence:
+  engine overlays suite 14 passed (5 new integration + 3 new unit tests).
+- **Wire-verified overlay/transport functions on the HTTP control API:**
+  `OverlayInput1–8` (+`Off`) map onto the binding command, `Stinger1–8` onto the
+  existing stinger trigger, `OverlayInput9–16` are rejected with the
+  "channels 9-16 are Stingers 1-8" reason, and `PlayPause` now works by reading
+  the engine's public per-input clock (`Engine::playback` /
+  `PlaybackClock::paused`) and dispatching the existing pause/play commands.
+  The pre-UI-040 catch-all that rejected the whole `OverlayInput*`/`Stinger*`
+  family is gone. Evidence: automation api_contract 14 passed (9→14).
+- **Per-input and per-bus meters:** the engine computes per-source post-gain
+  pre-clamp `SourceMeter` taps (`AudioMetrics.sources`) and the audio session
+  publishes them; the mixer strips render measured input and bus meters with
+  the `audio.input.<n>.meter` / `audio.bus.<n>.meter` automation IDs, and the
+  Overlay panel gained per-channel input assignment controls
+  (`overlay.channel.<n>.input`) with a readable disabled reason. Meters show
+  honest zeros while monitoring is off — levels are never faked. Evidence:
+  audio_samples 9 passed (incl. the per-source tap impulse test), UI suite 188
+  passed, hosted `--ui-audio-smoke` exit 0 with its new stage-14 meter
+  assertions and artifacts/overlay-panel.png inspected for the new row.
+- **Reference-corrected details:** preset category labels renamed to the
+  verified catalogue names Aqua/Blue (ids and colour values unchanged, so
+  existing projects load), and golden-frame tests now pin every one of the 20
+  transition effects' motion curves at 25/50/75% (transitions suite 8 passed
+  incl. `golden_frames_pin_every_effect_curve`).
+- **Deferred (owner none, deliberate):** network sources (NDI/SRT/RTSP/WebRTC),
+  capture-card backends, recording/streaming/replay backends, browser inputs
+  and a web controller, VST3 hosting, PTZ/data sources/virtual sets/GT title
+  runtime, the TCP text protocol, and colour correction/LUT. Reasons: licence
+  review required (AGENTS §2.2), no clean-room behaviour spec, no headless test
+  target, or no backend without which a start/stop control would fake live
+  output. See the deferred table in [feature-matrix](feature-matrix.md).
+- **Verification:** the workspace gate passed on 2026-10-24 — `cargo fmt --all
+  -- --check`, `cargo clippy --workspace --all-targets --locked -- -D warnings`,
+  `cargo test --workspace --all-targets --locked` (360 passed, 0 failed, 1
+  opt-in ignored: engine 147, platform 11, automation 14, UI 188) and
+  `cargo build -p rustmix --locked`. The UI-039 note about seven failing UI
+  tests from an in-flight dock edit is resolved: the dock now includes the
+  Overlays panel again and all 188 UI tests pass.
+- **No ADR was needed:** no crate boundary, dependency edge, safety strategy or
+  persistence schema changed. The overlay binding is a serde-default field on
+  the existing bank (no schema bump), the meters extend the existing
+  post-gain pre-clamp measure-and-clip contract, the control-function mapping
+  encodes re-verified wire semantics as data, and PlayPause reuses existing
+  commands. The one naming choice (bank-level parallel array instead of a field
+  on `OverlayState`) is a reversible implementation detail forced by ui-egui
+  struct literals, not an architecture decision (AGENTS §12.2).
+- **Reference re-verification recorded:** the re-verification pass confirmed
+  14 claims (grouped into seven recorded corrections: OverlayInput1–8 only,
+  Off clears while Out does not, SetLayer without Alpha/Rotation, no
+  `<fullscreen>` output child element, Aqua/Blue catalogue names, five
+  transport setup|arm pairs, and the further document-internal contradictions)
+  in the inventory: [reference-audit.md](reference-audit.md) and the
+  `reverification` object in [reference-audit.json](reference-audit.json).
+
 UI-039 (2026-10-24) aligns the fundamental switcher feature set with the verified
 reference study (installed vMix 29.0.0.48, SHA-256 `05a67e53c184d8547d2668cac3814dce34cd40e4cb0fa3e6df28acdd5a57fad5`;
 existing mapping in `rustmix-reference/vmix` re-verified against the binary — identity,
@@ -206,7 +268,7 @@ UI-009 audit (2026-10-18): the UI-008 GPU/output labels were not evidence of med
 | ID | Priority | Gap / next action |
 |---|---|---|
 | G01 | P0 for broadcast | Program is a native UI demo, without a dedicated real-time output scheduler. Introduce immutable frame metadata and an independent Program consumer before live claims. |
-| G02 | P0 for broadcast | Audio is partially implemented: a fixed 48 kHz stereo block mixer with Master/Aux A/Aux B and guest returns, strict WAV decode, typed WAV/microphone descriptors and a Windows WASAPI adapter with an explicitly started monitoring session passed the native descriptor workflow in hosted run 39270445070. No audio device or callback is hardware-qualified, no A/V synchronization or mix-minus hardware test exists, and the main mixer's meters remain simulations. Next: physical device callback/underrun soak, resampling quality review and A/V clock alignment. |
+| G02 | P0 for broadcast | Audio is partially implemented: a real 48 kHz sample mixer with the nine-bus schema-11 matrix (Master, A–G, Headphones), per-input nine-way sends, mix-minus guest returns, strict WAV decode, typed WAV/microphone descriptors and a Windows WASAPI adapter with an explicitly started monitoring session. Per-source post-gain pre-clamp meter taps feed measured input/bus meters in the mixer strips (UI-040); the mixer no longer shows only simulated levels while monitoring runs. No audio device or callback is hardware-qualified, no A/V synchronization or mix-minus hardware test exists, no loudness/true-peak metering, and the headphone bus has no dedicated device output. Next: physical device callback/underrun soak, resampling quality review and A/V clock alignment. |
 | G03 | P1 | No custom GPU compositor or CPU/GPU golden parity. Current CPU demo uploads to egui's wgpu surface. |
 | G04 | P1 | UI-010 bounded PNG ingest/persistence/relink/source edits passed hosted acceptance, including run39111788801. Local MP4 video decode now exists and is experimentally accepted in hosted run 39273839106 (generated 160×90 H.264 fixture only; video-only, no MP4 audio). Camera/device capture and network ingest remain absent. |
 | G05 | P1 | No encoders, recoverable recording or network streams. Controls remain disabled. |

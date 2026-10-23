@@ -44,12 +44,27 @@ pub(crate) struct AudioUi {
     add_error: Option<String>,
 }
 impl AudioUi {
-    pub(crate) fn master_peaks(&self) -> [f32; 2] {
-        if self.monitoring_active() {
-            self.status.as_ref().map_or([0.0; 2], |status| status.peak)
-        } else {
-            [0.0; 2]
+    /// Measured per-input peak from the engine mixer tap; zero while Audio is
+    /// off or the input is not part of the running monitoring session.
+    pub(crate) fn input_peaks(&self, id: InputId) -> [f32; 2] {
+        if !self.monitoring_active() {
+            return [0.0; 2];
         }
+        self.status
+            .as_ref()
+            .and_then(|status| status.sources.iter().find(|source| source.id == id))
+            .map_or([0.0; 2], |source| source.peak)
+    }
+    /// Measured peak of the mixer bus at `bus` (0 = Master); zero while Audio
+    /// is off or the bus index is outside the mixer's measured set.
+    pub(crate) fn bus_peaks(&self, bus: usize) -> [f32; 2] {
+        if !self.monitoring_active() {
+            return [0.0; 2];
+        }
+        self.status
+            .as_ref()
+            .and_then(|status| status.buses.get(bus))
+            .map_or([0.0; 2], |meter| meter.peak)
     }
     pub(crate) fn source_position(&self, id: InputId) -> Option<(u64, Option<u64>)> {
         if !self.monitoring_active() {
@@ -532,7 +547,7 @@ impl RustMixApp {
                 let mut body_ui = ui.new_child(egui::UiBuilder::new().max_rect(body).layout(egui::Layout::top_down(egui::Align::Min)));
                 body_ui.set_clip_rect(body.intersect(ui.clip_rect()));
                 egui::ScrollArea::vertical().max_height(height).show(&mut body_ui, |ui| {
-                    ui.label("Real local Master audio · 48 kHz stereo. The main mixer controls gain/mute/sends and shows measured Master peaks. Per-input peak metering is unavailable.");
+                    ui.label("Real local Master audio · 48 kHz stereo. The main mixer controls gain/mute/sends and shows measured Master and per-input peaks while monitoring runs.");
                     ui.colored_label(PREVIEW, "Start monitoring opens the selected speakers/headphones and all configured microphones. Use headphones to avoid feedback. Closing this dialog keeps monitoring running; Stop releases the devices.");
                     let active = self.audio_ui.is_active();
                     let picker = egui::ComboBox::from_id_salt("dialog.audio_io.output")
@@ -567,6 +582,10 @@ impl RustMixApp {
                         }
                         for source in &status.sources {
                             ui.label(format!("Input {} · ready {} · capturing {} · paused {} · ended {} · 48 kHz frame {}/{}", source.id.0, source.ready, source.capturing, source.paused, source.ended, source.position_frames, source.duration_frames));
+                            ui.label("Measured input block peak / RMS (post-gain, pre-clamp; not loudness or true peak)");
+                            for ((peak, rms), channel) in source.peak.iter().zip(source.rms).zip(["L", "R"]) {
+                                ui.label(format!("{channel}: peak {peak:.4} · RMS {rms:.4}"));
+                            }
                             if let Some(error) = &source.error { ui.colored_label(RED, error); }
                         }
                     }
@@ -609,6 +628,7 @@ impl RustMixApp {
 mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used, clippy::indexing_slicing)]
     use super::*;
+    use rustmix_engine::audio_engine::{AudioMeter, BUS_COUNT};
 
     fn frame(app: &mut RustMixApp, ctx: &egui::Context, events: Vec<egui::Event>, size: [f32; 2]) {
         let _ = ctx.run_ui(
@@ -873,6 +893,7 @@ mod tests {
                 clipped_samples: 0,
                 peak: [0.25, 0.5],
                 rms: [0.125, 0.25],
+                buses: [AudioMeter::default(); BUS_COUNT],
                 sources: Vec::new(),
                 error: Some("Selected playback device unavailable; refresh and retry".into()),
             });

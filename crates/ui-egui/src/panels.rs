@@ -1973,11 +1973,10 @@ impl RustMixApp {
                             .get(index)
                             .copied()
                             .unwrap_or("Bus");
-                        let peaks = if index == 0 {
-                            self.audio_ui.master_peaks()
-                        } else {
-                            [0.0; 2]
-                        };
+                        // Measured per-bus peak from the audio worker's mixer
+                        // output; zero while Audio is off — never fake levels.
+                        // Master is bus 0 of the same measured set.
+                        let peaks = self.audio_ui.bus_peaks(index);
                         let changed = self.strip(
                             ui,
                             (format!("bus.{index}"), label),
@@ -1996,9 +1995,10 @@ impl RustMixApp {
                         let rail = mixer_rail(ui, rail_width, height, "INPUTS");
                         self.automation.insert("audio.rail.inputs".into(), rail);
                         for input in audio_inputs {
-                            // Per-input measured peaks are not published by
-                            // the audio worker yet. Never animate fake levels.
-                            let peaks = [0.0; 2];
+                            // Measured per-input peak from the audio worker's
+                            // post-gain tap; zero while Audio is off — never
+                            // fake levels.
+                            let peaks = self.audio_ui.input_peaks(input.id);
                             let changed = self.strip(
                                 ui,
                                 (format!("input.{}", input.id.0), &input.name),
@@ -2020,7 +2020,10 @@ impl RustMixApp {
             });
     }
 
-    fn strip(
+    /// One mixer channel strip. `peaks` are the meter feed injected by the
+    /// caller (measured while monitoring runs, silent otherwise); tests inject
+    /// synthetic values through the same parameter.
+    pub(crate) fn strip(
         &mut self,
         ui: &mut egui::Ui,
         identity: (String, &str),
@@ -2180,9 +2183,9 @@ impl RustMixApp {
                             let (meter_rect, meter_response) =
                                 ui.allocate_exact_size(egui::vec2(14.0, fader_h), Sense::hover());
                             meter_response.on_hover_text(if input_id.is_some() {
-                                "Input peak metering unavailable"
+                                "Measured input peak · silent while Audio is off"
                             } else {
-                                "Measured Master peak · silent while Audio is off"
+                                "Measured bus peak · silent while Audio is off"
                             });
                             self.automation
                                 .insert(format!("audio.{id}.meter"), meter_rect);
@@ -2295,7 +2298,18 @@ impl RustMixApp {
     }
 
     pub(crate) fn overlays(&mut self, ui: &mut egui::Ui) {
-        let overlays = self.engine.project().overlays.standard.clone();
+        let project = self.engine.project().clone();
+        let overlays = project.overlays.standard.clone();
+        let options: Vec<(InputId, String)> = project
+            .inputs
+            .iter()
+            .map(|input| {
+                (
+                    input.id,
+                    format!("{} · {}", project.input_number(input.id), input.name),
+                )
+            })
+            .collect();
         egui::ScrollArea::vertical()
             .id_salt("graphics.scroll")
             .show(ui, |ui| {
@@ -2340,6 +2354,12 @@ impl RustMixApp {
                                 },
                             );
                         });
+                        self.overlay_input_assignment(
+                            ui,
+                            i,
+                            project.overlays.binding(i),
+                            &options,
+                        );
                         egui::CollapsingHeader::new("Title / position")
                             .default_open(i == 0)
                             .show(ui, |ui| {
@@ -2377,6 +2397,91 @@ impl RustMixApp {
                     });
                 }
             });
+    }
+
+    /// Standard-channel input assignment row (`overlay.input.set`): a selector
+    /// over the project's inputs plus an explicit Clear control. The engine
+    /// turns the channel on when an input is bound and off when it is cleared;
+    /// the UI only dispatches the typed command.
+    pub(crate) fn overlay_input_assignment(
+        &mut self,
+        ui: &mut egui::Ui,
+        slot: usize,
+        binding: Option<InputId>,
+        options: &[(InputId, String)],
+    ) {
+        let channel = slot + 1;
+        let selected = match binding {
+            Some(id) => options
+                .iter()
+                .find(|(bound, _)| *bound == id)
+                .map(|(_, label)| label.clone())
+                .unwrap_or_else(|| "Missing input".to_owned()),
+            None => "No input".to_owned(),
+        };
+        ui.horizontal(|ui| {
+            ui.label(RichText::new("Input").small().color(DIM));
+            if options.is_empty() {
+                // A validated project keeps at least one input, but the UI
+                // must stay legible if none exist: a disabled selector with a
+                // visible reason instead of an empty dropdown.
+                let selector = ui.add_enabled_ui(false, |ui| {
+                    egui::ComboBox::from_id_salt("overlay-input")
+                        .width(170.0)
+                        .selected_text(selected)
+                        .show_ui(ui, |_| {});
+                });
+                self.automation.insert(
+                    format!("overlay.channel.{channel}.input"),
+                    selector.response.rect,
+                );
+                let reason = ui.label(
+                    RichText::new("Add an input first — nothing to bind")
+                        .small()
+                        .color(DIM),
+                );
+                self.automation.insert(
+                    format!("overlay.channel.{channel}.input.reason"),
+                    reason.rect,
+                );
+                let clear =
+                    ui.add_enabled(false, egui::Button::new(RichText::new("Clear").small()));
+                self.automation
+                    .insert(format!("overlay.channel.{channel}.input.clear"), clear.rect);
+                return;
+            }
+            let mut draft = binding;
+            let combo = egui::ComboBox::from_id_salt("overlay-input")
+                .width(170.0)
+                .selected_text(selected)
+                .show_ui(ui, |ui| {
+                    for (index, (id, label)) in options.iter().enumerate() {
+                        let pick = ui.selectable_value(&mut draft, Some(*id), label);
+                        self.automation.insert(
+                            format!("overlay.channel.{channel}.input.option.{index}"),
+                            pick.rect,
+                        );
+                    }
+                });
+            self.automation.insert(
+                format!("overlay.channel.{channel}.input"),
+                combo.response.rect,
+            );
+            let clear = ui.add_enabled(
+                binding.is_some(),
+                egui::Button::new(RichText::new("Clear").small()),
+            );
+            self.automation
+                .insert(format!("overlay.channel.{channel}.input.clear"), clear.rect);
+            if clear.clicked() {
+                self.actions
+                    .push(Action::Engine(Command::SetOverlayInput(slot, None)));
+            }
+            if draft != binding {
+                self.actions
+                    .push(Action::Engine(Command::SetOverlayInput(slot, draft)));
+            }
+        });
     }
 
     pub(crate) fn dialogs(&mut self, ctx: &egui::Context) {
@@ -2908,6 +3013,102 @@ mod processing_tests {
     }
 
     #[test]
+    fn strip_meters_render_injected_peaks_from_the_bottom_of_the_well() {
+        const METER_GREEN: Color32 = Color32::from_rgb(35, 195, 65);
+        let run = |peaks: [f32; 2]| -> (egui::FullOutput, Rect) {
+            let mut app = RustMixApp::headless();
+            let ctx = egui::Context::default();
+            let mut meter = Rect::NOTHING;
+            let output = ctx.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(Rect::from_min_size(
+                        egui::Pos2::ZERO,
+                        egui::vec2(400.0, 320.0),
+                    )),
+                    ..Default::default()
+                },
+                |ui| {
+                    ui.horizontal_top(|ui| {
+                        let input = app.engine.project().inputs.first().cloned().unwrap();
+                        app.strip(
+                            ui,
+                            (format!("input.{}", input.id.0), &input.name),
+                            input.audio,
+                            peaks,
+                            240.0,
+                            Some(input.id),
+                        );
+                        meter = *app
+                            .automation
+                            .get(&format!("audio.input.{}.meter", input.id.0))
+                            .unwrap();
+                    });
+                },
+            );
+            (output, meter)
+        };
+        let level_fills = |output: &egui::FullOutput, meter: Rect| -> Vec<(Color32, Rect)> {
+            output
+                .shapes
+                .iter()
+                .filter_map(|clipped| match &clipped.shape {
+                    egui::Shape::Rect(rect) if meter.expand(1.0).contains_rect(rect.rect) => {
+                        Some((rect.fill, rect.rect))
+                    }
+                    _ => None,
+                })
+                .filter(|(fill, rect)| {
+                    (*fill == METER_GREEN || *fill == RED) && rect.height() >= 1.0
+                })
+                .collect()
+        };
+        // A silent feed paints only the dark meter well, never a level fill.
+        let (output, meter) = run([0.0, 0.0]);
+        assert!(
+            meter.height() >= 68.0,
+            "the meter column keeps the fader height"
+        );
+        assert!(
+            level_fills(&output, meter).is_empty(),
+            "a silent meter feed must paint no level fill"
+        );
+        // Injected stereo peaks paint two bottom-anchored dB-scaled fills.
+        let (output, meter) = run([0.75, 0.05]);
+        let fills = level_fills(&output, meter);
+        assert_eq!(fills.len(), 2, "one fill per channel: {fills:?}");
+        let mut painted = fills.into_iter();
+        let (left_fill, left_rect) = painted.next().unwrap();
+        let (right_fill, right_rect) = painted.next().unwrap();
+        assert_eq!(left_fill, METER_GREEN);
+        assert_eq!(right_fill, METER_GREEN);
+        assert!(
+            left_rect.right() <= right_rect.left(),
+            "channel fills stay side by side: {left_rect:?} {right_rect:?}"
+        );
+        assert!(
+            left_rect.height() > right_rect.height(),
+            "0.75 must render above the 0.05 feed"
+        );
+        for (peak, rect) in [(0.75_f32, left_rect), (0.05, right_rect)] {
+            let expected = meter.height() * (audio::db(peak) + 60.0) / 60.0;
+            assert!(
+                (rect.height() - expected).abs() <= 1.0,
+                "peak {peak} must fill {expected} px, got {rect:?}"
+            );
+            assert!(
+                (rect.bottom() - meter.bottom()).abs() <= 0.5,
+                "level fills anchor at the well bottom"
+            );
+        }
+        // Beyond full scale the clip indicator takes over the channel fill.
+        let (output, meter) = run([1.0, 0.5]);
+        let fills = level_fills(&output, meter);
+        assert_eq!(fills.len(), 2);
+        assert_eq!(fills.first().map(|(fill, _)| *fill), Some(RED));
+        assert_eq!(fills.get(1).map(|(fill, _)| *fill), Some(METER_GREEN));
+    }
+
+    #[test]
     fn mixer_rails_scale_with_viewport_even_inside_a_narrow_scrolling_dock() {
         for width in [400.0, 1100.0, 1600.0, 1920.0] {
             let mut app = RustMixApp::headless();
@@ -2961,7 +3162,7 @@ mod processing_tests {
             }
             assert!(!app.automation.contains_key("audio.rail.inputs"));
             assert!(app.automation.contains_key("audio.bus.0.strip"));
-            assert_eq!(app.audio_ui.master_peaks(), [0.0; 2]);
+            assert_eq!(app.audio_ui.bus_peaks(0), [0.0; 2]);
             for input in &app.engine.project().inputs {
                 assert_eq!(app.transport_position(input), (0, None));
             }
@@ -2994,7 +3195,7 @@ mod processing_tests {
             path: "not-opened.wav".into(),
         });
         assert_eq!(app.transport_position(&input), (0, None));
-        assert_eq!(app.audio_ui.master_peaks(), [0.0; 2]);
+        assert_eq!(app.audio_ui.bus_peaks(0), [0.0; 2]);
     }
 
     #[test]

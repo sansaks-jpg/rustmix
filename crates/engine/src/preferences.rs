@@ -23,8 +23,8 @@ pub fn default_categories() -> Vec<CategoryDefinition> {
         ("Green", [47, 140, 98]),
         ("Orange", [218, 132, 47]),
         ("Purple", [146, 91, 180]),
-        ("Azure", [48, 145, 194]),
-        ("Midnight Blue", [65, 84, 145]),
+        ("Aqua", [48, 145, 194]),
+        ("Blue", [65, 84, 145]),
     ];
     (0_u8..22)
         .map(|id| {
