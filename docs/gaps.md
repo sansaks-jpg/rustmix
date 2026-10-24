@@ -1,5 +1,41 @@
 # Known gaps
 
+UI-041 (2026-10-24) verification sweep of the UI-040 alignment: four
+reference areas (overlays, audio, transitions, transport) were freshly
+re-derived from the installed vMix 29.0.0.48 and thirteen implementation
+units checked — ten correct, three discrepancies confirmed and fixed in the
+working tree (state-document occupied-overlay shape, stale overlay doc rows,
+clock-0 Program PiP). **Contested units: none. Not-fixed units: none.**
+Gate re-run green after the fixes (363 passed / 0 failed / 1 opt-in ignored —
+see [testing](testing.md) UI-041). Reference behavior that remains
+unevidenced (do not implement against it as a contract; strength recorded in
+[reference-notes](reference-notes.md)):
+
+- **Overlay channels 9–16 ≡ Stinger1–8 numbering** — inferred only from the
+  shared 16-slot persisted OverlaySettings array; no inspected doc states
+  the numbering outright. The control API's "channels 9-16 are Stingers
+  1-8" reason rests on this inference.
+- **Transition ordinals** (Fade=0..Cut=19) and **stinger `Effect=100`
+  semantics** — inferred from declaration order and docs wording; the
+  Constant table was not read.
+- **PiP motion during an ordinary (non-stinger) transition** — implied by
+  the live-layer-stack evidence, stated nowhere verbatim; RustMix's clocked
+  PiP makes no parity claim here.
+- **`meterF1`/`meterF2` scale/unit and meter ballistics** — not officially
+  documented; RustMix's dBFS peak/RMS meters are its own contract.
+- **`PlayPause` on transport-less inputs** — undocumented in the reference
+  (one forum report: "no effect"); RustMix deliberately rejects it with the
+  engine's disabled reason rather than silently no-oping until evidence
+  exists.
+- **Unchanged from UI-040:** stinger channels 9–16 remain
+  configuration-only (G20 — no clip compositing, timing raster or effects);
+  no per-channel effects/timing/alpha/transforms on standard overlay
+  channels; the eight per-pixel transition effects are still unbenchmarked
+  at Full HD; per-bus metering beyond published bus peaks, loudness/true-peak
+  metering, device qualification, and the deferred families (network
+  sources, capture cards, record/stream/replay backends, browser inputs,
+  VST3, TCP text protocol, colour correction/LUT) all remain open.
+
 UI-040 (2026-10-24) completes the bounded follow-up to the UI-039 reference
 alignment. Eight plan items landed, eight families were reviewed and deferred,
 and the stale documentation rows were reconciled:

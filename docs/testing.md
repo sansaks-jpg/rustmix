@@ -1,5 +1,108 @@
 # Verification
 
+UI-041 (2026-10-24) — reference-verification sweep of the UI-040 alignment
+work (commit `101c41f` plus its in-flight fixes); runs under the UI-036 owner
+instruction. Method: four reference areas were freshly re-derived from the
+installed vMix 29.0.0.48 (SHA-256 in the UI-039 gaps entry) — overlays,
+audio, transitions, transport — and thirteen implementation units were
+checked against that evidence. Verdicts: ten correct, three discrepancies;
+all three discrepancies were confirmed and fixed in this session's working
+tree (uncommitted changes preserved per the owner branch policy); zero
+contested, zero not fixed. The re-derived evidence and its per-answer
+strength are recorded in [reference-notes](reference-notes.md); the outcome
+table below cites what this session actually read and ran.
+
+Discrepancies confirmed and fixed (fix sites read and tests located this
+session; re-covered by the gate run below):
+
+- **overlay-xml-state-shape** — the state document rendered all sixteen
+  channels as self-closing empty elements, with a comment claiming the
+  occupied-channel evidence "is not in the repository". The fresh
+  re-derivation produced the official DeveloperAPI.html sample shape:
+  an occupied channel carries the bound input's NUMBER as element text
+  (direct evidence). Fixed: `document.rs` renders
+  `<overlay number="N">input</overlay>` for occupied standard channels using
+  the same numbering as `<input number=…>`/`<preview>`
+  (crates/automation/src/document.rs:158-186); empty channels and stinger
+  channels 9–16 keep the self-closing form; a binding that no longer
+  resolves renders empty rather than a wrong number. New api_contract test
+  `occupied_overlay_channels_carry_the_bound_input_number_as_element_text`
+  (crates/automation/tests/api_contract.rs:40); suite 14→15. Gap notes
+  updated everywhere the old claim lived: the feature-matrix limitation,
+  crates/automation/README.md, reference-audit.md:69 (area 4) and
+  reference-audit.json `areas[3]` (JSON re-validated this session:
+  30 areas, area-4 gap text present).
+- **docs-overlay-rows** — the channel 2–8 rows of reference-audit.md and the
+  feature-matrix Graphics/Overlays limitation still carried the stale
+  "no source overlays" wording that `101c41f` had already obsoleted.
+  Fixed: rows now carry the exact `101c41f` channel-1 wording (verified
+  this session at reference-audit.md:171-178; `grep -c "no source overlay"`
+  over docs/feature-matrix.md, docs/reference-audit.md and
+  docs/reference-audit.json returns 0 hits in each).
+- **live-pip-clock** — the Program composite sampled bound overlay inputs at
+  clock 0, so a playing input's picture-in-picture never animated on
+  Program. Fixed at both ends: `render::program_from_sources_clocked`
+  resolves the PiP clock per bound input (crates/engine/src/render.rs:637-688)
+  with `program_from_sources_at` delegating through a constant resolver
+  (render.rs:616-627), and the UI composites through it with each input's own
+  `engine.playback(id).position_ms()` — the same clock that generates that
+  input's full-frame surface — plus a `pip_clocks` field in the composite
+  cache key so an advancing transport invalidates the cached composite
+  (crates/ui-egui/src/program.rs:208-220, 457-470). New tests
+  `clocked_pips_follow_each_bound_inputs_own_clock`
+  (crates/engine/tests/overlays.rs:278; suite 14→15) and
+  `a_bound_overlay_pip_advances_with_the_input_transport_on_program`
+  (crates/ui-egui/src/program.rs:627; suite 188→189). The settings-dialog
+  draft visualization deliberately keeps clock 0: it is the documented
+  no-live-mutation draft on a synthetic background, not Program output.
+
+Units verified correct (no change needed): input-backed-overlay-channels
+(channel-geometry PiP under the caption text), overlay-control-functions
+(wire mapping incl. Off-as-clear and the 9–16 stinger reason),
+ui-overlay-input-assignment, per-source-audio-meters (post-gain pre-clamp
+taps), nine-bus-routing (Master + A–G + Headphones),
+ui-meter-strips, transition-set-mapping (member-by-member 20-effect set
+comparison against the re-extracted enum), playpause-control-function
+(toggle via the public per-input clock), category-catalogue-rename
+(Aqua/Blue; Azure and MidnightBlue do not exist in the reference binary),
+and control-api-coverage-sweep (every dispatch arm against the five
+families).
+
+Workspace gate — all four commands run and passing in this session on the
+integrated tree (owner laptop, Windows x64, GNU toolchain, Rust 1.94.1;
+TMP/TEMP/TMPDIR redirected into `<workspace>/target/tmp` per the UI-040
+environment note, no retry needed):
+
+- `cargo fmt --all -- --check` — pass.
+- `cargo clippy --workspace --all-targets --locked -- -D warnings` — pass,
+  no warnings.
+- `cargo test --workspace --all-targets --locked` — **363 passed, 0 failed,
+  1 ignored** (the pre-existing opt-in `render_perf` release benchmark),
+  0 filtered; 22 test binaries. Per suite: engine lib 42; engine
+  integration audio_samples 9, audio_sources 4, categories 8, inputs 10,
+  outputs 10, overlays 15, presets 6, production 8, source_capabilities 3,
+  transitions 8, video_sources 7, wav 7, workflow 11, render_perf 0
+  (+1 ignored) — engine total 148; platform lib 5, video_buffers 4,
+  video_decode 2 (generated MP4 fixture present in `artifacts/`) —
+  platform total 11; automation api_contract 15; UI 189.
+- `cargo build -p rustmix --locked` — pass.
+- Inventory guards re-run after the doc edits: `pwsh -File
+  scripts/check-reference-coverage.ps1` and `pwsh -File
+  scripts/check-repository.ps1` — both pass ("Reference inventory verified:
+  30 areas, 40 input types, 20 effects, 16 overlay/stinger channels,
+  9 audio destinations, 12 UI workflows, 777 unique shortcut function names
+  in 29 groups … Full reference match: False", the expected state while
+  protocol/hardware/cadence qualification is unqualified).
+
+Not covered by this entry: unchanged from UI-040 — no physical
+camera/microphone/display/audio device, GPU drain/teardown workflows, the
+Full HD benchmark of the eight per-pixel effects, hosted CI execution,
+long-duration/soak qualification, and the deferred families in
+[gaps](gaps.md). Reference behavior that remains unevidenced (overlay
+9–16 ≡ stinger numbering, transition ordinals, meterF scale, PiP motion
+during ordinary transitions, PlayPause on transport-less inputs) is listed
+in [reference-notes](reference-notes.md).
+
 UI-040 (2026-10-24) — reference-alignment follow-up; runs under the UI-036 owner
 instruction (local build/manual laptop acceptance precedes push; GitHub compiles
 and packages without running tests). Everything below was executed in this

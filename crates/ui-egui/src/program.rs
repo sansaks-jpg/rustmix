@@ -212,6 +212,11 @@ struct CompositeKey {
     transition: Option<(TransitionKind, u32)>,
     black: u32,
     overlays: OverlayBank,
+    /// Per standard channel (0..8) the bound input's playback position; 0 for
+    /// an unbound channel or an input without a transport. The clock advances
+    /// with the transport, so an animated picture-in-picture invalidates the
+    /// cached composite instead of serving a frame frozen at clock 0.
+    pip_clocks: [u64; overlays::STANDARD_CHANNELS],
 }
 #[derive(Default)]
 pub(crate) struct ProgramRenderer {
@@ -392,6 +397,21 @@ impl ProgramRenderer {
         self.monitor_cache = Some((Arc::clone(&full), Arc::clone(&monitor)));
         Ok((full, monitor))
     }
+    /// Per standard channel (0..8) the bound input's playback position, 0 for
+    /// an unbound channel or an input without a transport. Feeds the composite
+    /// cache key so an advancing bound transport invalidates the cached
+    /// Program composite instead of serving a frozen picture-in-picture.
+    fn pip_clocks(project: &ProjectState, engine: &Engine) -> [u64; overlays::STANDARD_CHANNELS] {
+        let mut clocks = [0_u64; overlays::STANDARD_CHANNELS];
+        for (slot, clock) in clocks.iter_mut().enumerate() {
+            *clock = project
+                .overlays
+                .binding(slot)
+                .and_then(|id| engine.playback(id))
+                .map_or(0, |p| p.position_ms());
+        }
+        clocks
+    }
     fn render_at(
         &mut self,
         engine: &Engine,
@@ -427,13 +447,14 @@ impl ProgramRenderer {
             transition: transition.map(|t| (t.kind, t.progress.to_bits())),
             black: engine.black_level().to_bits(),
             overlays: project.overlays.clone(),
+            pip_clocks: Self::pip_clocks(project, engine),
         };
         if let Some((old, pixels)) = &self.composite
             && *old == key
         {
             return Ok(Arc::clone(pixels));
         }
-        let pixels = Arc::new(render::program_from_sources(
+        let pixels = Arc::new(render::program_from_sources_clocked(
             project,
             transition,
             engine.black_level(),
@@ -441,6 +462,11 @@ impl ProgramRenderer {
             size[1],
             &from,
             target.as_ref().map(|(p, _)| p.as_slice()),
+            // Each bound input's picture-in-picture is generated at its own
+            // playback position — the same clock that generated its
+            // full-frame surface — so a playing bound input animates on
+            // Program while a paused one stays parked with its surface.
+            &|id| engine.playback(id).map_or(0, |p| p.position_ms()),
         )?);
         self.composite = Some((key, Arc::clone(&pixels)));
         Ok(pixels)
@@ -596,6 +622,46 @@ mod tests {
         }
         assert_eq!(renderer.surfaces.len(), 1);
         assert_eq!(renderer.cached_bytes(), 640 * 360 * 4);
+    }
+    #[test]
+    fn a_bound_overlay_pip_advances_with_the_input_transport_on_program() {
+        let mut engine = Engine::default();
+        // Program is the static Colour input; standard channel 1 carries the
+        // Grid input. TakeInput parked input 1 as Preview, so resume its
+        // transport explicitly — the bound input animates independently of
+        // Program.
+        engine.execute(Command::TakeInput(InputId(6)), 0).unwrap();
+        engine
+            .execute(Command::SetOverlayInput(0, Some(InputId(1))), 0)
+            .unwrap();
+        engine
+            .execute(Command::SetInputPaused(InputId(1), false), 0)
+            .unwrap();
+        engine.tick(0);
+        let mut renderer = ProgramRenderer::default();
+        let sources = HashMap::new();
+        let first = renderer.render(&engine, &sources).unwrap();
+        // An unchanged transport clock reuses the cached composite.
+        assert!(Arc::ptr_eq(
+            &first,
+            &renderer.render(&engine, &sources).unwrap()
+        ));
+        // The bound transport advances; the picture-in-picture must move with
+        // it on Program instead of staying frozen at clock 0.
+        engine.tick(5000);
+        let moved = renderer.render(&engine, &sources).unwrap();
+        assert!(!Arc::ptr_eq(&first, &moved));
+        assert_ne!(first.as_slice(), moved.as_slice());
+        // Pausing the bound transport parks the picture: further ticks keep
+        // reusing the cached composite rather than animating the PiP.
+        engine
+            .execute(Command::SetInputPaused(InputId(1), true), 5000)
+            .unwrap();
+        engine.tick(9000);
+        assert!(Arc::ptr_eq(
+            &moved,
+            &renderer.render(&engine, &sources).unwrap()
+        ));
     }
     #[test]
     fn a_new_decoded_raster_generation_invalidates_the_cached_surface() {

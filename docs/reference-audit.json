@@ -115,7 +115,7 @@
     "crates/engine/tests/overlays.rs"
    ],
    "scope": "Eight standard channels compose a bound input (PiP) under the caption text via overlay.input.set, plus title/subtitle panels, staged text/position edits, F1-F8 defaults and a verified 4-to-5 schema migration inside the 16-channel bank",
-   "gap": "No per-channel effects/timing/alpha/transforms on standard channels; stinger channels 9-16 hold model/trigger/cut-point state but render no clip; the occupied-channel state-document content form is not evidenced"
+   "gap": "No per-channel effects/timing/alpha/transforms on standard channels; stinger channels 9-16 hold model/trigger/cut-point state but render no clip; the state document renders an occupied standard channel with the bound input number as element text (DeveloperAPI.html sample) and empty/stinger channels self-closed"
   },
   {
    "id": 5,

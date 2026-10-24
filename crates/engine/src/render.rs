@@ -40,7 +40,7 @@
 //! | Merge | outgoing recedes left (`1 − 0.5p`), incoming advances from the right (`0.5 + 0.5p`), each fading through black |
 //! | AlphaFade | dissolve weighted by the target's alpha: `p · a_to / 255` |
 use crate::{
-    InputKind, InputState, ProjectState, Result, TransitionKind, TransitionState, invalid,
+    InputId, InputKind, InputState, ProjectState, Result, TransitionKind, TransitionState, invalid,
     overlay_text,
 };
 /// Per-pixel reference shader. Production uses the row-oriented
@@ -488,7 +488,9 @@ fn overlay_panel_rect(
 }
 
 /// Composite each enabled standard channel's bound input as a picture-in-
-/// picture filling the channel's panel rectangle. The panel chrome and the
+/// picture filling the channel's panel rectangle, generated at the input's
+/// own compositor clock (`clock(id)`), so a playing bound input animates on
+/// Program and a paused one stays parked. The panel chrome and the
 /// caption raster paint over it, so the picture sits underneath the caption
 /// text. Offline, media-backed or missing inputs render the deterministic
 /// black placeholder, exactly like a full-frame source would.
@@ -497,13 +499,16 @@ fn paint_overlay_pips(
     out: &mut [[u8; 4]],
     w: u32,
     h: u32,
-    ms: u64,
+    clock: &dyn Fn(InputId) -> u64,
 ) -> Result<()> {
     for (index, overlay) in p.overlays.standard.iter().enumerate() {
         if !overlay.enabled {
             continue;
         }
-        let Some(bound) = p.overlays.binding(index).and_then(|id| p.input(id)) else {
+        let Some(id) = p.overlays.binding(index) else {
+            continue;
+        };
+        let Some(bound) = p.input(id) else {
             continue;
         };
         let (x0, y0, x1, y1) = overlay_panel_rect(index, overlay.position, w, h);
@@ -514,7 +519,7 @@ fn paint_overlay_pips(
         let (left, top) = overlay_text::panel_fractions(index, overlay.position);
         let right = left + overlay_text::PANEL_WIDTH;
         let bottom = top + overlay_text::PANEL_HEIGHT;
-        let frame = source(bound, pw, y1 - y0, ms)?;
+        let frame = source(bound, pw, y1 - y0, clock(id))?;
         for y in y0..y1 {
             for x in x0..x1 {
                 // The same fraction rule the panel painter and the caption
@@ -588,7 +593,8 @@ fn paint_overlay_panels(out: &mut [[u8; 4]], w: u32, h: u32, overlays: &crate::O
 /// Titles/backgrounds and fade-to-black are applied after source processing.
 ///
 /// Overlay input frames are composited at clock zero here; callers that own a
-/// compositor clock use [`program_from_sources_at`].
+/// compositor clock use [`program_from_sources_at`] (one clock) or
+/// [`program_from_sources_clocked`] (a clock per bound input).
 pub fn program_from_sources(
     p: &ProjectState,
     t: Option<&TransitionState>,
@@ -601,8 +607,8 @@ pub fn program_from_sources(
     program_from_sources_at(p, t, black, w, h, from, target, 0)
 }
 
-/// [`program_from_sources`] with the compositor clock that animates overlay
-/// input frames, so a bound input's picture-in-picture moves with the same
+/// [`program_from_sources`] with a single compositor clock applied to every
+/// bound overlay input's picture-in-picture, so a bound input moves with the
 /// clock that generated the main surfaces. The parameter list mirrors
 /// [`program_from_sources`] plus the clock; grouping it into a struct would
 /// churn every existing caller for no behaviour change.
@@ -617,6 +623,27 @@ pub fn program_from_sources_at(
     target: Option<&[[u8; 4]]>,
     ms: u64,
 ) -> Result<Vec<[u8; 4]>> {
+    program_from_sources_clocked(p, t, black, w, h, from, target, &|_| ms)
+}
+
+/// [`program_from_sources_at`] with the overlay picture-in-picture clock
+/// resolved per bound input: `clock(id)` is the compositor clock for the
+/// input occupying a standard channel. The operator surface path passes each
+/// bound input's own playback position — the same clock that generated its
+/// full-frame surface — so a playing input animates inside its panel and a
+/// paused input's picture stays parked with its surface, even when several
+/// channels carry inputs with different clocks.
+#[allow(clippy::too_many_arguments)]
+pub fn program_from_sources_clocked(
+    p: &ProjectState,
+    t: Option<&TransitionState>,
+    black: f32,
+    w: u32,
+    h: u32,
+    from: &[[u8; 4]],
+    target: Option<&[[u8; 4]]>,
+    clock: &dyn Fn(InputId) -> u64,
+) -> Result<Vec<[u8; 4]>> {
     let size = dimensions(w, h)?;
     if from.len() != size
         || target.is_some_and(|pixels| pixels.len() != size)
@@ -629,7 +656,7 @@ pub fn program_from_sources_at(
     }
     if t.is_none() {
         let mut out = from.to_vec();
-        finish_program(&mut out, p, w, h, black, ms)?;
+        finish_program(&mut out, p, w, h, black, clock)?;
         return Ok(out);
     }
     if let Some(t) = t
@@ -641,7 +668,7 @@ pub fn program_from_sources_at(
             from
         };
         let mut out = surface.to_vec();
-        finish_program(&mut out, p, w, h, black, ms)?;
+        finish_program(&mut out, p, w, h, black, clock)?;
         return Ok(out);
     }
     if let Some(t) = t
@@ -649,14 +676,14 @@ pub fn program_from_sources_at(
     {
         let to = target.ok_or_else(|| invalid("Target surface missing"))?;
         let mut out = fade_surfaces(from, to, t.progress);
-        finish_program(&mut out, p, w, h, black, ms)?;
+        finish_program(&mut out, p, w, h, black, clock)?;
         return Ok(out);
     }
     let to = target.ok_or_else(|| invalid("Target surface missing"))?;
     let kind = t.map_or(TransitionKind::Cut, |t| t.kind);
     let progress = t.map_or(0.0, |t| t.progress);
     let mut out = transition_rows(kind, progress, w, h, from, to)?;
-    finish_program(&mut out, p, w, h, black, ms)?;
+    finish_program(&mut out, p, w, h, black, clock)?;
     Ok(out)
 }
 
@@ -1083,9 +1110,9 @@ fn finish_program(
     w: u32,
     h: u32,
     black: f32,
-    ms: u64,
+    clock: &dyn Fn(InputId) -> u64,
 ) -> Result<()> {
-    paint_overlay_pips(p, out, w, h, ms)?;
+    paint_overlay_pips(p, out, w, h, clock)?;
     paint_overlay_panels(out, w, h, &p.overlays);
     // Captions belong to the overlay layer: they are rasterized after the panel
     // geometry and before any fade-to-black so Program output, the native window

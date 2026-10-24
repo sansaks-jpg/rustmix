@@ -22,7 +22,8 @@ fn fresh_session_renders_the_reference_document_shape() {
     assert!(xml.contains("<transition number=\"2\" effect=\"Merge\" duration=\"1000\" />"));
     assert!(xml.contains("<transition number=\"3\" effect=\"Wipe\" duration=\"1000\" />"));
     assert!(xml.contains("<transition number=\"4\" effect=\"Merge\" duration=\"1000\" />"));
-    // Sixteen self-closing overlay channels.
+    // Sixteen overlay channels; the fresh demo session binds no input, so
+    // every channel renders the self-closing empty form.
     assert_eq!(xml.matches("<overlay number=").count(), 16);
     assert!(!xml.contains("</overlay>"));
     // Two fullscreen plus four external outputs.
@@ -33,6 +34,36 @@ fn fresh_session_renders_the_reference_document_shape() {
     assert!(xml.contains("<streaming>False</streaming>"));
     // Master audio block with capitalised booleans.
     assert!(xml.contains("<master volume=\"100\" muted=\"False\" meterF1=\"0\" meterF2=\"0\""));
+}
+
+#[test]
+fn occupied_overlay_channels_carry_the_bound_input_number_as_element_text() {
+    let mut engine = Engine::from_project(ProjectState::demo()).unwrap();
+    // OverlayInput2 binds input 5 on standard channel 2.
+    rustmix_automation::dispatch(
+        &mut engine,
+        &parse_query("Function=OverlayInput2&Input=5"),
+        0,
+    )
+    .unwrap();
+    assert_eq!(engine.project().overlays.binding(1), Some(InputId(5)));
+    let xml = document::render(engine.project(), &Telemetry::default());
+    // The evidenced occupied form (official DeveloperAPI.html sample:
+    // <overlay number="2">1</overlay>): the bound input's NUMBER — the same
+    // numbering as <input number=…>/<preview> — as element text.
+    assert!(xml.contains("<overlay number=\"2\">5</overlay>"));
+    // The other fifteen channels keep the self-closing empty form.
+    assert_eq!(xml.matches("<overlay number=").count(), 16);
+    assert_eq!(xml.matches("</overlay>").count(), 1);
+    assert!(xml.contains("<overlay number=\"1\" />"));
+    assert!(xml.contains("<overlay number=\"16\" />"));
+
+    // Off clears the channel, restoring the self-closing empty form.
+    rustmix_automation::dispatch(&mut engine, &parse_query("Function=OverlayInput2Off"), 0)
+        .unwrap();
+    let xml = document::render(engine.project(), &Telemetry::default());
+    assert!(!xml.contains("</overlay>"));
+    assert!(xml.contains("<overlay number=\"2\" />"));
 }
 
 #[test]

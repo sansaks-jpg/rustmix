@@ -5,7 +5,8 @@
 //! load-bearing and deliberately not prettified:
 //!
 //! * booleans render as capitalised `True` / `False`;
-//! * an empty overlay channel is a self-closing element.
+//! * an empty overlay channel is a self-closing element, while an occupied
+//!   standard channel carries the bound input's number as element text.
 use std::fmt::Write;
 
 use rustmix_engine::{
@@ -154,14 +155,33 @@ pub fn render(project: &ProjectState, telemetry: &Telemetry) -> String {
     x.push_str("</outputs>");
 
     // ---- overlays ---------------------------------------------------------
-    // All sixteen channels render as self-closing empty elements. The engine's
-    // standard channels now carry optional input bindings, but the analysed
-    // evidence for an *occupied* channel's element content is not in the
-    // repository, so the document keeps the verified empty shape rather than
-    // inventing an unverified wire form.
+    // Standard channels 1–8: an occupied channel carries the bound input's
+    // NUMBER as element text — the shape evidenced by the official
+    // DeveloperAPI.html sample (`<overlay number="2">1</overlay>`, fetched
+    // twice during the reference pass) — using the same numbering as
+    // `<input number=…>`/`<preview>` (`ProjectState::input_number`). An empty
+    // channel keeps the self-closing form. Stinger channels 9–16 bind no
+    // input and always render self-closed. A binding that no longer resolves
+    // to a current input renders empty rather than a wrong number.
     x.push_str("<overlays>");
-    for number in 1..=16 {
-        let _ = write!(x, "<overlay number=\"{number}\" />");
+    let mut number = 1_usize;
+    for binding in &project.overlays.inputs {
+        let occupied = binding
+            .as_ref()
+            .map(|id| project.input_number(*id))
+            .filter(|input_number| *input_number != 0);
+        match occupied {
+            Some(input_number) => {
+                let _ = write!(x, "<overlay number=\"{number}\">{input_number}</overlay>");
+            }
+            None => {
+                let _ = write!(x, "<overlay number=\"{number}\" />");
+            }
+        }
+        number = number.saturating_add(1);
+    }
+    for stinger in number..=16 {
+        let _ = write!(x, "<overlay number=\"{stinger}\" />");
     }
     x.push_str("</overlays>");
 

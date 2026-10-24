@@ -11,8 +11,17 @@ per-channel input-assignment row for standard channels 1–8
 (`overlay.channel.<n>.input`, selector + Clear dispatching
 `Command::SetOverlayInput`, with a readable "Add an input first — nothing to
 bind" reason when nothing is assignable); it dispatches typed commands only and
-the engine owns putting a channel on/off Program. Evidence: UI suite 188 passed
-in the workspace gate (incl. `strip_meters_render_injected_peaks_from_the_bottom_of_the_well`,
+the engine owns putting a channel on/off Program. The Program worker's composite
+(`ProgramRenderer::render_at`) renders each bound channel's picture-in-picture
+through `engine::render::program_from_sources_clocked` at that bound input's own
+playback position — the same clock that generates its full-frame surface — with
+the per-channel clock in `CompositeKey`, so a playing bound input animates on
+Program, a paused one stays parked, and the cached composite invalidates as the
+clock advances instead of serving a frame frozen at clock 0. Evidence: UI suite
+188 passed in the workspace gate, 189 on the 2026-10-24 fix-up re-run
+(`cargo test -p rustmix-ui --locked`, adding
+`a_bound_overlay_pip_advances_with_the_input_transport_on_program`; incl.
+`strip_meters_render_injected_peaks_from_the_bottom_of_the_well`,
 `mixer_strips_render_meter_columns_with_stable_ids_for_every_visible_strip`,
 `overlay_channel_input_selector_dispatches_the_typed_engine_command` and
 `overlay_input_selector_disables_with_a_readable_reason_without_assignable_inputs`);

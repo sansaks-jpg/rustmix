@@ -275,6 +275,67 @@ fn bound_input_composites_into_the_panel_under_the_caption_ink() {
 }
 
 #[test]
+fn clocked_pips_follow_each_bound_inputs_own_clock() {
+    let (w, h) = (640u32, 360u32);
+    let from = vec![[10, 20, 30, 255]; (w * h) as usize];
+    let mut project = ProjectState::demo();
+    // Channel 1 carries the Grid input, channel 2 the Geometry input; both
+    // panels sit at the lower left, stacked by the channel offset.
+    project.overlays.standard[0].enabled = true;
+    *project.overlays.binding_mut(0).unwrap() = Some(InputId(1));
+    project.overlays.standard[1].enabled = true;
+    *project.overlays.binding_mut(1).unwrap() = Some(InputId(2));
+
+    let single = |ms: u64| {
+        render::program_from_sources_at(&project, None, 0.0, w, h, &from, None, ms).unwrap()
+    };
+    let clocked = |one: u64, two: u64| {
+        render::program_from_sources_clocked(&project, None, 0.0, w, h, &from, None, &|id| {
+            if id == InputId(1) { one } else { two }
+        })
+        .unwrap()
+    };
+
+    // A constant resolver is exactly the single-clock composite.
+    assert_eq!(clocked(0, 0), single(0));
+    assert_eq!(clocked(4000, 4000), single(4000));
+
+    // Independent clocks: channel 1 renders at ms = 4000 while channel 2
+    // renders at ms = 0, each inside its own panel rectangle.
+    let mixed = clocked(4000, 0);
+    let at_4000 = single(4000);
+    let at_0 = single(0);
+    assert_ne!(mixed, at_0, "channel 1's clock must move its own picture");
+    assert_ne!(
+        mixed, at_4000,
+        "channel 2's clock must stay independent of channel 1's"
+    );
+    let panel = |index: usize, left: f32, top: f32| -> bool {
+        let x = index as u32 % w;
+        let y = index as u32 / w;
+        let u = x as f32 / w as f32;
+        let v = y as f32 / h as f32;
+        (left..left + 0.56).contains(&u) && (top..top + 0.095).contains(&v)
+    };
+    for (index, (mixed_pixel, fast)) in mixed.iter().zip(at_4000.iter()).enumerate() {
+        if panel(index, 0.05, 0.78) {
+            assert_eq!(
+                mixed_pixel, fast,
+                "channel 1's panel follows its own input's clock (ms = 4000)"
+            );
+        }
+    }
+    for (index, (mixed_pixel, slow)) in mixed.iter().zip(at_0.iter()).enumerate() {
+        if panel(index, 0.05, 0.78 - 0.105) {
+            assert_eq!(
+                mixed_pixel, slow,
+                "channel 2's panel follows its own input's clock (ms = 0)"
+            );
+        }
+    }
+}
+
+#[test]
 fn overlay_input_bindings_survive_save_load_and_legacy_files() {
     let mut e = Engine::default();
     e.execute(Command::SetOverlayInput(2, Some(InputId(3))), 0)

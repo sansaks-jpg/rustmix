@@ -7,14 +7,22 @@ command (`Command::SetOverlayInput`); assigning binds and enables the channel,
 clearing unbinds and disables it, and input removal clears bindings while
 preserving the caption panel. `render::paint_overlay_pips` composites the bound
 input's frame into the panel rectangle under the existing caption text (black
-placeholder for offline/media inputs), and `render::program_from_sources_at`
-animates the composite on the compositor clock while `program_from_sources`
-keeps its signature (clock 0). `audio_engine` computes per-source post-gain
+placeholder for offline/media inputs); `render::program_from_sources_at`
+animates the composite on a single compositor clock, and
+`render::program_from_sources_clocked` resolves the clock per bound input —
+the operator surface passes each bound input's own playback position, so a
+playing picture-in-picture animates on Program while a paused one stays parked
+— while `program_from_sources` keeps its signature (clock 0). `audio_engine`
+computes per-source post-gain
 pre-clamp `SourceMeter` taps on `AudioMetrics.sources` under the existing
 measure-and-clip contract, and `categories` default labels are the verified
 reference catalogue names Aqua/Blue (persisted definition ids and colour values
-unchanged). Evidence: engine suite 147 passed in the 2026-10-24 workspace gate —
-overlays 14 (5 new integration + 3 new unit), transitions 8 including
+unchanged). Evidence: engine suite 147 passed in the 2026-10-24 workspace gate
+(overlays 14 at that point) and 148 passed on the 2026-10-24 fix-up re-run
+(`cargo test -p rustmix-engine --locked`, 1 opt-in release-mode `render_perf`
+benchmark ignored, as in the gate) —
+overlays 15 (the 15th integration test added
+`clocked_pips_follow_each_bound_inputs_own_clock`), transitions 8 including
 `golden_frames_pin_every_effect_curve` (all 20 effects pinned at 25/50/75% with
 FNV-1a frame hashes; per-effect curve parameters documented in the render module
 docs), audio_samples 9 including the per-source tap impulse test, categories 8.
@@ -94,7 +102,7 @@ Headless synthetic UI domain. `Engine::execute` validates typed commands; `tick`
 
 Engine tests run on GitHub Actions. The engine exposes no hardware, GPU types or output encoders; it does not open audio/video devices or files. Local MP4 decoding belongs to the platform/UI workers, and real audio rendering is driven by the UI session.
 
-`playback` owns independent monotonic clocks for each procedural source through `input.pause`, `input.restart`, `input.loop` and `inputs.pause`. Global source pause preserves local pause states and timed transitions continue. `render::program_from_sources` composites validated processed surfaces, then overlays and FTB; `render::program_from_sources_at(ms)` renders the same composition at an explicit compositor-clock offset so bound overlay inputs animate. Source transports are not decoder support and are not persisted in project files.
+`playback` owns independent monotonic clocks for each procedural source through `input.pause`, `input.restart`, `input.loop` and `inputs.pause`. Global source pause preserves local pause states and timed transitions continue. `render::program_from_sources` composites validated processed surfaces, then overlays and FTB; `render::program_from_sources_at(ms)` renders the same composition at an explicit single compositor clock, and `render::program_from_sources_clocked(clock)` resolves the clock per bound input so several bound inputs can animate (or stay parked) independently. Source transports are not decoder support and are not persisted in project files.
 
 `input::InputConfig` persists PNG descriptors and validated processing parameters since schema 2. Schema 1 migration supplies identity settings; older schemas load through the current migration chain. `AddInputAt`, `DuplicateInput` and `ApplyInput` are headless atomic commands; layer graphs are acyclic and removal clears dependencies. The engine does not open image paths; a media-free renderer shows black for external-image descriptors until a consumer supplies decoded surfaces.
 

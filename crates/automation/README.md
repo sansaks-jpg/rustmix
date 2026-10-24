@@ -8,10 +8,11 @@ minimal HTTP server. The crate contains no switcher logic of its own —
 
 - `document` renders engine state with the observed element/attribute
   vocabulary and capitalised `True`/`False` booleans. `<version>` identifies
-  *this* implementation, never the reference product. Known gap, documented in
-  `document.rs`: all sixteen overlay channels render as empty self-closing
-  elements because the occupied-channel content form is not evidenced anywhere
-  in this repository's captured material.
+  *this* implementation, never the reference product. Overlay channels follow
+  the official DeveloperAPI.html sample shape: an occupied standard channel
+  carries the bound input's number as element text
+  (`<overlay number="2">1</overlay>`), and empty channels — plus the stinger
+  channels 9–16, which bind no input — render as empty self-closing elements.
 - `control` accepts 25 executable function spellings (`accepted_functions()`):
   `OverlayInput1–8` and `OverlayInput<n>Off` (mapped onto `overlay.input.set`),
   `Stinger1–8` (mapped onto the stinger trigger), `PlayPause` (reads the
@@ -32,8 +33,8 @@ minimal HTTP server. The crate contains no switcher logic of its own —
   deferred family in `docs/gaps.md`.
 
 Verification: `cargo test -p rustmix-automation --locked` runs the api_contract
-suite — 14 tests as of UI-040 (2026-10-24), re-run green in the workspace gate
+suite — 15 tests as of UI-040 (2026-10-24), re-run green in the workspace gate
 recorded in `docs/testing.md`, covering the Off-clears/Out-preserves bounds,
 the 9–16 stinger reason, vocabulary bounds (unknown spellings stay
-`UnknownFunction`), PlayPause playing/paused/no-transport inputs and the state
-document shape.
+`UnknownFunction`), PlayPause playing/paused/no-transport inputs, the occupied
+overlay channel document form and the rest of the state document shape.
