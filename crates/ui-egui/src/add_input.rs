@@ -3,7 +3,13 @@ use super::dialogs::{ADD_CATEGORIES, GENERATOR_SAMPLES, VIDEO_TAB, light_form_fr
 use super::*;
 
 // Preserve existing automation ordinals; presentation order is explicit.
-pub(super) const CATEGORY_ORDER: [usize; 8] = [VIDEO_TAB, 22, 1, 11, 14, 12, 13, 0];
+// The full reference-ordered catalog (UI-032): every category is inspectable,
+// including unavailable ones with their reason, and the functional Photos,
+// Web Browser and Camera pages stay reachable from the sidebar.
+pub(super) const CATEGORY_ORDER: [usize; 26] = [
+    VIDEO_TAB, 0, 21, 2, 22, 23, 5, 7, 8, 24, 1, 9, 10, 11, 12, 13, 14, 16, 17, 18, 19, 25, 3, 4,
+    6, 15,
+];
 
 pub(super) fn unavailable_reason(tab: usize) -> Option<&'static str> {
     match tab {
@@ -715,9 +721,8 @@ mod tests {
             assert!(app.add_image.is_some());
             assert!(app.add_disabled_reason().is_none());
             if target == 24 {
-                assert!(!app.automation.contains_key("dialog.add.category.24"));
-                // Compatibility validation remains exercised for hidden legacy drafts.
-                app.select_add_category(target);
+                // Video Delay is an inspectable unavailable sidebar row again.
+                click(&mut app, &ctx, "dialog.add.category.24");
             } else {
                 click(&mut app, &ctx, &format!("dialog.add.category.{target}"));
             }
@@ -991,12 +996,12 @@ mod tests {
         key(&mut app, &ctx, egui::Key::Tab, egui::Modifiers::NONE);
         key(&mut app, &ctx, egui::Key::Enter, egui::Modifiers::NONE);
         assert_eq!(
-            app.add_tab, 11,
-            "Tab then Enter selects the Colour row following Image"
+            app.add_tab, 9,
+            "Tab then Enter selects the Photos row following Image"
         );
-        assert!(app.automation.contains_key("dialog.add.name"));
+        assert!(app.automation.contains_key("dialog.add.photos.folder"));
         assert!(!app.automation.contains_key("dialog.add.unavailable"));
-        assert!(app.add_disabled_reason().is_none());
+        assert!(app.add_disabled_reason().is_some());
         assert_eq!(*app.engine.project(), before);
     }
 }

@@ -13,8 +13,8 @@ use std::sync::mpsc::TryRecvError;
 const MAX_MP4_BYTES: u64 = 4 * 1024 * 1024 * 1024;
 
 #[derive(Clone)]
-struct VideoProbe {
-    path: String,
+pub(crate) struct VideoProbe {
+    pub(crate) path: String,
     width: u32,
     height: u32,
     frame_rate_numerator: u32,
@@ -51,7 +51,7 @@ pub(crate) struct VideoSlot {
     pub(crate) pending_seek_ms: Option<u64>,
 }
 
-fn bounded_reason(reason: &str) -> String {
+pub(crate) fn bounded_reason(reason: &str) -> String {
     let mut text = String::with_capacity(160);
     for character in reason.chars().filter(|character| !character.is_control()) {
         if text.len().saturating_add(character.len_utf8()) > 160 {
@@ -81,12 +81,13 @@ fn present_video_error(input_fx: &mut HashMap<InputId, InputFx>, id: InputId, er
     fx.image_error = Some(bounded_reason(error));
 }
 
-fn default_video_label(path: &str) -> String {
+/// File-stem label bounded to 64 bytes with control characters removed.
+pub(crate) fn file_stem_label(path: &str, fallback: &str) -> String {
     let mut label = String::new();
     for character in Path::new(path)
         .file_stem()
         .and_then(|name| name.to_str())
-        .unwrap_or("Video file")
+        .unwrap_or(fallback)
         .chars()
         .filter(|character| !character.is_control())
     {
@@ -96,14 +97,14 @@ fn default_video_label(path: &str) -> String {
         label.push(character);
     }
     if label.trim().is_empty() {
-        "Video file".into()
+        fallback.into()
     } else {
         label
     }
 }
 
 #[cfg(windows)]
-fn probe_video(path: PathBuf) -> std::result::Result<VideoProbe, String> {
+pub(crate) fn probe_video(path: PathBuf) -> std::result::Result<VideoProbe, String> {
     // Only reached from the bounded probe worker. `VideoFile` starts COM and
     // Media Foundation on its own thread and releases them when it is dropped.
     let path_string = path
@@ -133,7 +134,7 @@ fn probe_video(path: PathBuf) -> std::result::Result<VideoProbe, String> {
 }
 
 #[cfg(not(windows))]
-fn probe_video(_path: PathBuf) -> std::result::Result<VideoProbe, String> {
+pub(crate) fn probe_video(_path: PathBuf) -> std::result::Result<VideoProbe, String> {
     // A descriptor must never imply that a decode backend exists here.
     Err("Local MP4 decoding requires Windows Media Foundation".into())
 }
@@ -579,7 +580,7 @@ impl RustMixApp {
             ui.horizontal(|ui| {
                 ui.add_sized([40.0, 26.0], egui::Label::new("Name"));
                 let name_width = (ui.available_width() - 178.0).max(80.0);
-                let hint = default_video_label(&self.video_ui.path);
+                let hint = file_stem_label(&self.video_ui.path, "Video file");
                 let name = ui.add_sized(
                     [name_width, 26.0],
                     egui::TextEdit::singleline(&mut self.video_ui.label)
@@ -670,7 +671,7 @@ impl RustMixApp {
             return false;
         }
         let label = if self.video_ui.label.trim().is_empty() {
-            default_video_label(&probe.path)
+            file_stem_label(&probe.path, "Video file")
         } else {
             self.video_ui.label.trim().to_owned()
         };
@@ -809,7 +810,7 @@ mod tests {
         assert_eq!(added.name, "é".repeat(32));
         assert_eq!(app.engine.project().program, before.program);
         assert_eq!(app.engine.project().preview, before.preview);
-        assert_eq!(default_video_label(""), "Video file");
+        assert_eq!(file_stem_label("", "Video file"), "Video file");
     }
 
     #[test]

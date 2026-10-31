@@ -122,7 +122,7 @@ impl RustMixApp {
         added
     }
 
-    fn commit_png_input(&mut self, fx: InputFx, index: usize) -> bool {
+    pub(crate) fn commit_png_input(&mut self, fx: InputFx, index: usize) -> bool {
         let mut name = String::new();
         let path = fx.media_path.as_deref().unwrap_or("PNG image.png");
         for ch in Path::new(path)

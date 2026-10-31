@@ -8,8 +8,8 @@ use std::io::Read;
 use std::sync::mpsc::TryRecvError;
 
 #[derive(Clone)]
-struct WavInfo {
-    path: String,
+pub(crate) struct WavInfo {
+    pub(crate) path: String,
     sample_rate: u32,
     frames: usize,
 }
@@ -132,7 +132,7 @@ fn selected_device(devices: &[AudioDevice], selected: Option<&str>, default: &st
     }
 }
 
-fn validate_wav(path: PathBuf) -> std::result::Result<WavInfo, String> {
+pub(crate) fn validate_wav(path: PathBuf) -> std::result::Result<WavInfo, String> {
     let path_string = path
         .to_str()
         .ok_or_else(|| "WAV path must be valid text".to_owned())?

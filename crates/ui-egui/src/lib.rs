@@ -7,6 +7,7 @@ mod audio_smoke;
 mod controls;
 mod core_scope;
 mod dialogs;
+mod drop_source;
 mod extended_output;
 mod extra_sources;
 mod inputs;
@@ -555,6 +556,9 @@ pub struct RustMixApp {
     profile: Option<profile::Profile>,
     pub(crate) input_fx: HashMap<InputId, InputFx>,
     media_loader: media::MediaLoader,
+    /// Drag-and-drop intake: bounded validation queue; commits happen in
+    /// `poll_drop_source` after the worker reports a valid source.
+    drop_intake: drop_source::DropIntake,
     image_picker: Option<Receiver<media::PickerDone>>,
     add_image: Option<InputFx>,
     properties_fx: Option<InputFx>,
@@ -863,6 +867,7 @@ impl RustMixApp {
             profile: None,
             input_fx,
             media_loader: media::MediaLoader::default(),
+            drop_intake: drop_source::DropIntake::default(),
             image_picker: None,
             add_image: None,
             properties_fx: None,
@@ -1049,6 +1054,7 @@ impl RustMixApp {
     fn reset_editors(&mut self) {
         self.stop_audio_for_project_change();
         self.stop_video_players();
+        self.drop_intake.reset();
         self.search_open = false;
         self.category = None;
         self.input_filter.clear();
@@ -1934,6 +1940,9 @@ impl RustMixApp {
                     ("image", 1, "PNG image"),
                     ("audio", 12, "WAV audio"),
                     ("microphone", 13, "Microphone"),
+                    ("photos", 9, "Photos slideshow"),
+                    ("browser", 17, "Web browser"),
+                    ("camera", 22, "Camera"),
                     ("generators", 0, "Generators"),
                     ("shapes", 3, "Moving shapes"),
                     ("bars", 6, "Reference bars"),
@@ -2281,6 +2290,7 @@ impl RustMixApp {
         }
         self.poll_job(&ctx);
         self.poll_media();
+        self.poll_drop_source(&ctx);
         self.poll_audio(&ctx);
         self.poll_extra_source();
         self.poll_video(&ctx);
@@ -2288,7 +2298,7 @@ impl RustMixApp {
         let dropped = ctx.input(|i| i.raw.dropped_files.clone());
         for file in dropped {
             if let Some(path) = file.path {
-                self.handle_dropped_file(&path, &ctx);
+                self.handle_dropped_file(&path);
             }
         }
         self.shortcuts(&ctx);
@@ -2486,7 +2496,11 @@ impl RustMixApp {
         }
     }
 
-    pub(crate) fn handle_dropped_file(&mut self, path: &Path, ctx: &egui::Context) {
+    /// Classify one dropped file. Supported media is queued for the same
+    /// bounded validation the Add Input dialog performs; everything else is
+    /// refused with the operator-readable reason instead of committing a
+    /// descriptor the engine would reject or a source that cannot decode.
+    pub(crate) fn handle_dropped_file(&mut self, path: &Path) {
         let Some(ext) = path
             .extension()
             .and_then(|e| e.to_str())
@@ -2496,87 +2510,35 @@ impl RustMixApp {
             return;
         };
         let path_str = path.to_string_lossy().to_string();
-        let name = path
-            .file_stem()
-            .and_then(|s| s.to_str())
-            .unwrap_or("Input")
-            .to_string();
-
-        let is_blank = self.engine.project().is_blank_template();
-        let index = if is_blank {
-            0
-        } else {
-            self.engine.project().inputs.len()
-        };
-
+        // Windows paths are case-insensitive; media extensions were already
+        // lowercased above, so the project suffix must match either case.
+        let lower_path = path_str.to_ascii_lowercase();
         match ext.as_str() {
-            "mp4" | "mov" | "mkv" | "avi" | "webm" => {
-                let config = InputConfig {
-                    video_source: Some(VideoSource::File {
-                        path: path_str.clone(),
-                    }),
-                    audio_source: Some(AudioSource::WavFile {
-                        path: path_str.clone(),
-                    }),
-                    ..InputConfig::default()
-                };
-                if self
-                    .try_execute(Command::AddInputAt {
-                        name,
-                        kind: InputKind::Color,
-                        config,
-                        index,
-                    })
-                    .is_some()
-                {
-                    self.submit_program();
-                    ctx.request_repaint();
-                }
+            "mp4" => self.queue_drop(path, drop_source::DropMedia::Video),
+            "wav" => self.queue_drop(path, drop_source::DropMedia::Audio),
+            "png" => self.queue_drop(path, drop_source::DropMedia::Image),
+            "mov" | "mkv" | "avi" | "webm" | "m4v" | "ts" | "m2ts" | "mpg" | "mpeg" | "wmv"
+            | "flv" => {
+                self.say(
+                    "Only MP4 video files are supported; convert the file, then drop it again."
+                        .into(),
+                    true,
+                );
             }
-            "png" | "jpg" | "jpeg" | "bmp" => {
-                let config = InputConfig {
-                    media_path: Some(path_str.clone()),
-                    ..InputConfig::default()
-                };
-                if let Some(result) = self.try_execute(Command::AddInputAt {
-                    name,
-                    kind: InputKind::Color,
-                    config,
-                    index,
-                }) && let Some(id) = result.affected.first()
-                {
-                    self.media_loader.enqueue(
-                        path.to_path_buf(),
-                        media::MediaTarget::Restore {
-                            id: *id,
-                            path: path_str,
-                        },
-                    );
-                    self.submit_program();
-                    ctx.request_repaint();
-                }
+            "mp3" | "m4a" | "aac" | "flac" | "ogg" | "opus" | "wma" => {
+                self.say(
+                    "Only WAV audio is supported (PCM16 or float32, mono/stereo, up to 120 seconds)."
+                        .into(),
+                    true,
+                );
             }
-            "wav" | "mp3" => {
-                let config = InputConfig {
-                    audio_source: Some(AudioSource::WavFile {
-                        path: path_str.clone(),
-                    }),
-                    ..InputConfig::default()
-                };
-                if self
-                    .try_execute(Command::AddInputAt {
-                        name,
-                        kind: InputKind::Color,
-                        config,
-                        index,
-                    })
-                    .is_some()
-                {
-                    self.submit_program();
-                    ctx.request_repaint();
-                }
+            "jpg" | "jpeg" | "bmp" | "gif" | "tif" | "tiff" | "webp" => {
+                self.say(
+                    "Only PNG images are supported (up to 32 MiB / 4096 pixels).".into(),
+                    true,
+                );
             }
-            "json" if path_str.ends_with(".rustmix.json") => {
+            "json" if lower_path.ends_with(".rustmix.json") => {
                 self.start_load(Some(path.to_path_buf()));
             }
             _ => {

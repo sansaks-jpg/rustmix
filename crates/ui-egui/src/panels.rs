@@ -2420,7 +2420,7 @@ impl RustMixApp {
                             .small()
                             .color(DIM),
                     );
-                    if let Some(active) = self.engine.stinger().copied() {
+                    if let Some(active) = self.engine.stinger().cloned() {
                         ui.label(
                             RichText::new(format!(
                                 "● Stinger {} active (cut {} ms)",

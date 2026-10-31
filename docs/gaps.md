@@ -36,6 +36,31 @@ dependencies or bumping the project schema:
   `dialog.overlay.capability.source` now report `Title panel / PiP` and
   `Bound input PiP` to match the UI-040 PiP implementation.
 
+UI-042 (2026-10-24) drag-and-drop add-input repair: the drop handler was
+audited against the engine's actual validation and found broken for every
+media type it claimed. A dropped MP4 built a config with both
+`video_source` and `audio_source`, which `InputConfig::validate` always
+rejects ("Assign only one PNG, audio or video source"), so video drops never
+added an input; MOV/MKV/AVI/WEBM/MP3/JPEG/BMP drops were classified as
+supported but rejected by the engine's `.mp4`/`.wav`/`.png` extension rules
+with confusing errors; WAV drops committed without the content validation
+the dialog performs; PNG drops committed before decode so a broken file
+became an error-state input. All four paths now share one bounded
+`rustmix-drop-intake` worker (`crates/ui-egui/src/drop_source.rs`): MP4 is
+probed through the same Media Foundation worker as the dialog, WAV runs
+`validate_wav`, PNG runs `decode_png`, and only a validated single-source
+descriptor is committed (with recent-files history and ready pixels for
+PNG). Unsupported formats are refused with the operator-readable reason;
+failed validation leaves the project untouched; a replaced project discards
+late results by generation. Ten regressions cover the E2E paths (real MP4
+fixture, generated WAV/PNG), refusals, invariants, bounds and project
+change; fmt/clippy/`cargo test --workspace --all-targets --locked`
+(22 green result lines incl. 199 UI tests) and the app build all pass
+locally on Windows x64. Still open: drops are qualified only against the
+160×90 MP4 fixture and local Windows; no hosted native capture of the drop
+workflow yet; MP4 remains video-only (companion-WAV audio, no in-container
+audio decode).
+
 UI-041 (2026-10-24) verification sweep of the UI-040 alignment: four
 reference areas (overlays, audio, transitions, transport) were freshly
 re-derived from the installed vMix 29.0.0.48 and thirteen implementation

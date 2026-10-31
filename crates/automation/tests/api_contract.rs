@@ -443,6 +443,26 @@ fn live_play_pause_set_fader_and_playlist_stepping_execute_on_the_engine() {
         rustmix_automation::dispatch(&mut engine, &parse_query("Function=NextPlayListEntry"), 40),
         Err(DispatchError::Rejected(_))
     ));
+    let mut playlist = engine.project().playlists[0].clone();
+    let transition = rustmix_engine::TransitionSlot {
+        kind: TransitionKind::Cut,
+        duration_ms: 500,
+    };
+    playlist.items = vec![
+        rustmix_engine::PlaylistItem {
+            input: InputId(1),
+            hold_ms: 5_000,
+            transition,
+        },
+        rustmix_engine::PlaylistItem {
+            input: InputId(2),
+            hold_ms: 5_000,
+            transition,
+        },
+    ];
+    engine
+        .execute(Command::UpdatePlaylist(playlist), 45)
+        .unwrap();
     rustmix_automation::dispatch(&mut engine, &parse_query("Function=StartPlayList"), 50).unwrap();
     assert_eq!(engine.playlist_run().unwrap().index, 0);
     rustmix_automation::dispatch(&mut engine, &parse_query("Function=NextPlayListEntry"), 60)

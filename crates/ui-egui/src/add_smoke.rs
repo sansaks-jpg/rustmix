@@ -1,7 +1,7 @@
 //! Opt-in hosted screenshots and real sidebar/cancel clicks for Add Input only.
 use super::*;
 
-const SHOTS: [(&str, usize, &[&str]); 6] = [
+const SHOTS: [(&str, usize, &[&str]); 9] = [
     (
         "add-image",
         1,
@@ -18,7 +18,11 @@ const SHOTS: [(&str, usize, &[&str]); 6] = [
         11,
         &["name", "colour.gradient", "colour.bars"],
     ),
-    ("add-title-unavailable", 14, &["unavailable"]),
+    (
+        "add-title",
+        14,
+        &["name", "title.lower_third", "title.title_banner"],
+    ),
     (
         "add-audio",
         12,
@@ -29,6 +33,13 @@ const SHOTS: [(&str, usize, &[&str]); 6] = [
         13,
         &["audio.capture", "audio.name", "audio.refresh"],
     ),
+    ("add-camera", 22, &["camera.device", "camera.refresh"]),
+    (
+        "add-photos",
+        9,
+        &["photos.folder", "photos.browse", "photos.interval"],
+    ),
+    ("add-browser", 17, &["browser.url", "browser.size"]),
     ("add-generators", 0, &["name", "generator.0", "preview"]),
 ];
 
@@ -110,7 +121,7 @@ impl RustMixApp {
                 }
                 s.stage = 10;
             }
-            10..=27 => {
+            10..=36 => {
                 let offset = s.stage - 10;
                 let Some((name, tab, fields)) = SHOTS.get((offset / 3) as usize) else {
                     return Err(Error::Invalid("Unknown Add Input capture".into()));
@@ -126,9 +137,10 @@ impl RustMixApp {
                                 "PNG draft survived category change".into(),
                             ));
                         }
-                        if matches!(*tab, 12 | 14) && self.add_disabled_reason().is_none() {
+                        if matches!(*tab, 9 | 12 | 17 | 22) && self.add_disabled_reason().is_none()
+                        {
                             return Err(Error::Invalid(
-                                "Unvalidated/unavailable input enabled OK".into(),
+                                "Unchecked source or unvalidated input enabled OK".into(),
                             ));
                         }
                         s.stage += 1;
@@ -179,7 +191,7 @@ impl RustMixApp {
                     _ => {}
                 }
             }
-            28 => {
+            37 => {
                 if self.add_open
                     || self.rec_active
                     || self.stream_active
