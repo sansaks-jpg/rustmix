@@ -474,8 +474,7 @@ fn audio_mute_solo_master_and_bus_routing_functions_mutate_channels_atomically()
     assert!(!engine.project().input(InputId(1)).unwrap().audio.muted);
 
     // Solo / SoloOn / SoloOff
-    rustmix_automation::dispatch(&mut engine, &parse_query("Function=SoloOn&Input=1"), 30)
-        .unwrap();
+    rustmix_automation::dispatch(&mut engine, &parse_query("Function=SoloOn&Input=1"), 30).unwrap();
     assert!(engine.project().input(InputId(1)).unwrap().audio.solo);
     rustmix_automation::dispatch(&mut engine, &parse_query("Function=Solo&Input=1"), 40).unwrap();
     assert!(!engine.project().input(InputId(1)).unwrap().audio.solo);
@@ -515,4 +514,3 @@ fn audio_mute_solo_master_and_bus_routing_functions_mutate_channels_atomically()
         Err(DispatchError::BadParameter { name: "Value", .. })
     ));
 }
-

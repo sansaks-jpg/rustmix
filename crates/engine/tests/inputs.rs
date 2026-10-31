@@ -393,4 +393,3 @@ fn countdown_duration_validates_persists_and_scales_progress_bar() {
     let restored: InputConfig = serde_json::from_value(json).unwrap();
     assert_eq!(restored.countdown_duration_ms, 60_000);
 }
-

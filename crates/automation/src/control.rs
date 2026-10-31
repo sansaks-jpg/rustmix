@@ -540,12 +540,7 @@ pub fn dispatch(engine: &mut Engine, req: &Request, now: u64) -> Result<Outcome,
                 .map_err(|e| DispatchError::Rejected(e.to_string()));
         }
         "MasterAudio" | "MasterAudioOn" | "MasterAudioOff" => {
-            let mut channel = engine
-                .project()
-                .buses
-                .first()
-                .cloned()
-                .unwrap_or_default();
+            let mut channel = engine.project().buses.first().cloned().unwrap_or_default();
             channel.muted = match name.as_str() {
                 "MasterAudio" => !channel.muted,
                 "MasterAudioOn" => false,
