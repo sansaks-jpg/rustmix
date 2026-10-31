@@ -20,6 +20,12 @@ jobs:
         with:
           toolchain: 1.94.1
           components: rustfmt, clippy
+      - name: Ensure Cargo.lock exists
+        shell: pwsh
+        run: |
+          if (-not (Test-Path -LiteralPath Cargo.lock)) {
+            cargo generate-lockfile
+          }
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: native-ui-v2-complete
@@ -33,6 +39,11 @@ jobs:
         run: cargo check --workspace --locked
       - name: Clippy (warnings are errors)
         run: cargo clippy --workspace --all-targets --locked -- -D warnings
+      - name: Generate MP4 test fixture
+        shell: pwsh
+        run: ./scripts/ci-video-fixture.ps1
+      - name: Run workspace tests
+        run: cargo test --workspace --all-targets --locked
       - name: Build release on GitHub only
         run: cargo build --release --workspace --locked
       - name: Package Windows executable
