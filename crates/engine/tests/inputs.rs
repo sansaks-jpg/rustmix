@@ -345,3 +345,52 @@ fn blank_template_lifecycle_and_non_looping_behavior() {
     assert_eq!(engine.project().inputs[1].id, id2);
     assert!(!engine.playback(id2).unwrap().looping());
 }
+
+#[test]
+fn countdown_duration_validates_persists_and_scales_progress_bar() {
+    let mut e = Engine::default();
+    let before = e.project().clone();
+    for invalid_ms in [0, 999, 86_400_001] {
+        let mut input = before.inputs[6].clone();
+        input.config.countdown_duration_ms = invalid_ms;
+        assert!(
+            e.execute(Command::UpdateInput(input), 0).is_err(),
+            "duration {invalid_ms} ms must be rejected"
+        );
+        assert_eq!(e.project(), &before);
+    }
+
+    let mut countdown = e.project().inputs[6].clone();
+    assert_eq!(countdown.kind, InputKind::Countdown);
+    assert_eq!(countdown.config.countdown_duration_ms, 60_000);
+    countdown.config.countdown_duration_ms = 10_000;
+    e.execute(Command::UpdateInput(countdown.clone()), 0)
+        .unwrap();
+    assert_eq!(
+        e.project()
+            .input(countdown.id)
+            .unwrap()
+            .config
+            .countdown_duration_ms,
+        10_000
+    );
+
+    // At ms = 5_000, a 10s countdown is at 50% remaining, whereas a 60s countdown is at ~91.7%.
+    let default_countdown = &before.inputs[6];
+    let custom_countdown = e.project().input(countdown.id).unwrap();
+    let frame_10s = render::source(custom_countdown, 100, 50, 5_000).unwrap();
+    let frame_60s = render::source(default_countdown, 100, 50, 5_000).unwrap();
+    assert_ne!(frame_10s, frame_60s);
+    // Row 45 (v = 0.90 > 0.82) at column 40 (u = 0.40 < 0.50) is teal, column 60 (u = 0.60 > 0.50) is dark.
+    assert_eq!(frame_10s[45 * 100 + 40], [35, 174, 157, 255]);
+    assert_eq!(frame_10s[45 * 100 + 60], [17, 28, 34, 255]);
+
+    // Legacy JSON without countdown_duration_ms deserializes with the 60_000 ms default.
+    let mut json = serde_json::to_value(InputConfig::default()).unwrap();
+    json.as_object_mut()
+        .unwrap()
+        .remove("countdown_duration_ms");
+    let restored: InputConfig = serde_json::from_value(json).unwrap();
+    assert_eq!(restored.countdown_duration_ms, 60_000);
+}
+

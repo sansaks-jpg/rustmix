@@ -601,7 +601,11 @@ impl RustMixApp {
             self.engine
                 .playback(input.id)
                 .map_or(0, |clock| clock.position_ms()),
-            Some(playback::DEMO_DURATION_MS),
+            Some(if input.kind == InputKind::Countdown {
+                input.config.countdown_duration_ms.max(1_000)
+            } else {
+                playback::DEMO_DURATION_MS
+            }),
         )
     }
 
@@ -788,11 +792,24 @@ impl RustMixApp {
                     .engine
                     .playback(id)
                     .map_or(0, |clock| clock.position_ms());
-                let remaining = 60 - (clock / 1000) % 60;
+                let period_s = (input.config.countdown_duration_ms / 1_000).max(1);
+                let remaining = period_s.saturating_sub((clock / 1_000) % period_s);
+                let label = if remaining >= 3_600 {
+                    format!(
+                        "{:02}:{:02}:{:02}",
+                        remaining / 3_600,
+                        (remaining % 3_600) / 60,
+                        remaining % 60
+                    )
+                } else if period_s <= 60 {
+                    format!("00:{remaining:02}")
+                } else {
+                    format!("{:02}:{:02}", remaining / 60, remaining % 60)
+                };
                 ui.painter().text(
                     rect.center(),
                     Align2::CENTER_CENTER,
-                    format!("00:{remaining:02}"),
+                    label,
                     FontId::monospace(rect.height() * 0.22),
                     tint,
                 );
@@ -2396,6 +2413,127 @@ impl RustMixApp {
                         ui.separator();
                     });
                 }
+                ui.add_space(4.0);
+                ui.horizontal(|ui| {
+                    ui.label(
+                        RichText::new("STINGER CHANNELS (9–16 · STINGER 1–8)")
+                            .small()
+                            .color(DIM),
+                    );
+                    if let Some(active) = self.engine.stinger().copied() {
+                        ui.label(
+                            RichText::new(format!(
+                                "● Stinger {} active (cut {} ms)",
+                                active.slot + 1,
+                                active.cut_point_ms
+                            ))
+                            .small()
+                            .color(TEAL)
+                            .strong(),
+                        );
+                        let stop = ui.small_button("Stop stinger");
+                        self.automation
+                            .insert("overlay.stinger.stop".into(), stop.rect);
+                        if stop.clicked() {
+                            self.actions.push(Action::Engine(Command::StopStinger));
+                        }
+                    }
+                });
+                let stingers = project.overlays.stingers;
+                for (slot, mut stinger) in stingers.into_iter().enumerate() {
+                    let stinger_num = slot + 1;
+                    let channel_num = overlays::STANDARD_CHANNELS + stinger_num;
+                    ui.push_id(("stinger", slot), |ui| {
+                        let before = stinger;
+                        ui.horizontal(|ui| {
+                            ui.label(
+                                RichText::new(format!("{channel_num:02} · S{stinger_num}"))
+                                    .color(TEAL)
+                                    .strong(),
+                            );
+                            let selected = match stinger.stinger_input {
+                                Some(id) => options
+                                    .iter()
+                                    .find(|(bound, _)| *bound == id)
+                                    .map(|(_, label)| label.clone())
+                                    .unwrap_or_else(|| "Missing input".to_owned()),
+                                None => "No input".to_owned(),
+                            };
+                            let combo = egui::ComboBox::from_id_salt(("stinger-input", slot))
+                                .width(150.0)
+                                .selected_text(selected)
+                                .show_ui(ui, |ui| {
+                                    for (index, (id, label)) in options.iter().enumerate() {
+                                        let pick = ui.selectable_value(
+                                            &mut stinger.stinger_input,
+                                            Some(*id),
+                                            label,
+                                        );
+                                        self.automation.insert(
+                                            format!(
+                                                "overlay.stinger.{stinger_num}.input.option.{index}"
+                                            ),
+                                            pick.rect,
+                                        );
+                                    }
+                                });
+                            self.automation.insert(
+                                format!("overlay.stinger.{stinger_num}.input"),
+                                combo.response.rect,
+                            );
+                            let clear = ui.add_enabled(
+                                stinger.stinger_input.is_some(),
+                                egui::Button::new(RichText::new("Clear").small()),
+                            );
+                            self.automation.insert(
+                                format!("overlay.stinger.{stinger_num}.clear"),
+                                clear.rect,
+                            );
+                            if clear.clicked() {
+                                stinger.stinger_input = None;
+                            }
+                            let cut = ui.add(
+                                egui::DragValue::new(&mut stinger.cut_point_ms)
+                                    .range(0..=overlays::MAX_CUT_POINT_MS)
+                                    .speed(50.0)
+                                    .prefix("Cut ")
+                                    .suffix(" ms"),
+                            );
+                            self.automation.insert(
+                                format!("overlay.stinger.{stinger_num}.cut_point"),
+                                cut.rect,
+                            );
+                            let under = ui.checkbox(
+                                &mut stinger.display_underneath_overlays,
+                                "Under overlays",
+                            );
+                            self.automation.insert(
+                                format!("overlay.stinger.{stinger_num}.underneath"),
+                                under.rect,
+                            );
+                            let can_trigger = self
+                                .engine
+                                .enabled(&Command::TriggerStinger(slot))
+                                .is_ok();
+                            let trigger = ui.add_enabled(
+                                can_trigger,
+                                egui::Button::new(RichText::new("Trigger").small()),
+                            );
+                            self.automation.insert(
+                                format!("overlay.stinger.{stinger_num}.trigger"),
+                                trigger.rect,
+                            );
+                            if trigger.clicked() {
+                                self.actions
+                                    .push(Action::Engine(Command::TriggerStinger(slot)));
+                            }
+                        });
+                        if stinger != before {
+                            self.actions
+                                .push(Action::Engine(Command::SetStinger(slot, stinger)));
+                        }
+                    });
+                }
             });
     }
 
@@ -3343,5 +3481,43 @@ mod processing_tests {
             output.get(&InputId(1)).and_then(|p| p.get(22 * 160 + 125)),
             Some(&[50, 20, 10, 255])
         );
+    }
+
+    #[test]
+    fn countdown_transport_duration_and_stinger_panel_controls_dispatch_typed_commands() {
+        let mut app = RustMixApp::headless();
+        let ctx = egui::Context::default();
+        app.theme(&ctx);
+        app.add_kind = InputKind::Countdown;
+        app.add_countdown_seconds = 15;
+        app.add_name = "Custom Timer".into();
+        app.add_tab = 15;
+        app.add_number = app.engine.project().inputs.len() + 1;
+        assert!(app.request_add_input());
+        let added = app.engine.project().inputs.last().cloned().unwrap();
+        assert_eq!(added.kind, InputKind::Countdown);
+        assert_eq!(added.config.countdown_duration_ms, 15_000);
+        assert_eq!(app.transport_position(&added), (0, Some(15_000)));
+
+        let _ = ctx.run_ui(
+            egui::RawInput {
+                screen_rect: Some(Rect::from_min_size(
+                    egui::Pos2::ZERO,
+                    egui::vec2(1200.0, 900.0),
+                )),
+                ..Default::default()
+            },
+            |ui| app.overlays(ui),
+        );
+        for stinger in 1..=8 {
+            assert!(
+                app.automation
+                    .contains_key(&format!("overlay.stinger.{stinger}.input"))
+            );
+            assert!(
+                app.automation
+                    .contains_key(&format!("overlay.stinger.{stinger}.trigger"))
+            );
+        }
     }
 }

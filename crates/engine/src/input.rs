@@ -206,6 +206,14 @@ pub enum ImageFit {
     Stretch,
 }
 
+pub const DEFAULT_COUNTDOWN_DURATION_MS: u64 = 60_000;
+pub const MIN_COUNTDOWN_DURATION_MS: u64 = 1_000;
+pub const MAX_COUNTDOWN_DURATION_MS: u64 = 86_400_000;
+
+const fn default_countdown_duration_ms() -> u64 {
+    DEFAULT_COUNTDOWN_DURATION_MS
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct InputConfig {
@@ -229,6 +237,9 @@ pub struct InputConfig {
     /// bounded runtime feed, never inside the saved project.
     pub video_source: Option<VideoSource>,
     pub image_fit: ImageFit,
+    /// Configurable countdown cycle duration in milliseconds (1s..=24h; default 60s).
+    #[serde(default = "default_countdown_duration_ms")]
+    pub countdown_duration_ms: u64,
 }
 impl Default for InputConfig {
     fn default() -> Self {
@@ -248,6 +259,7 @@ impl Default for InputConfig {
             audio_source: None,
             video_source: None,
             image_fit: ImageFit::Contain,
+            countdown_duration_ms: DEFAULT_COUNTDOWN_DURATION_MS,
         }
     }
 }
@@ -259,6 +271,13 @@ impl InputConfig {
         {
             return Err(invalid(
                 "Assign only one PNG, audio or video source to an input",
+            ));
+        }
+        if !(MIN_COUNTDOWN_DURATION_MS..=MAX_COUNTDOWN_DURATION_MS)
+            .contains(&self.countdown_duration_ms)
+        {
+            return Err(invalid(
+                "Countdown duration must be between 1 and 86400 seconds",
             ));
         }
         if let Some(source) = &self.audio_source {

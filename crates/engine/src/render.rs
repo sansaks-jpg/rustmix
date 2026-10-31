@@ -139,7 +139,8 @@ fn pixel(input: &InputState, x: u32, y: u32, w: u32, h: u32, ms: u64) -> [u8; 4]
         }
         InputKind::Color => mix(0.25 + 0.75 * u),
         InputKind::Countdown => {
-            if v > 0.82 && u < 1.0 - (ms % 60000) as f32 / 60000.0 {
+            let duration_ms = input.config.countdown_duration_ms.max(1);
+            if v > 0.82 && u < 1.0 - (ms % duration_ms) as f32 / duration_ms as f32 {
                 [35, 174, 157, 255]
             } else {
                 [17, 28, 34, 255]
@@ -321,7 +322,8 @@ pub fn source_into(
             }
         }
         InputKind::Countdown => {
-            let remaining = 1.0 - (ms % 60000) as f32 / 60000.0;
+            let duration_ms = input.config.countdown_duration_ms.max(1);
+            let remaining = 1.0 - (ms % duration_ms) as f32 / duration_ms as f32;
             for y in 0..h {
                 let band = row_v(y, h) > 0.82;
                 band_rows.row(out, u8::from(band), |out| {

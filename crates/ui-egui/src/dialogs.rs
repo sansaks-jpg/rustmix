@@ -901,6 +901,41 @@ impl RustMixApp {
                                         let colour = ui.color_edit_button_srgb(&mut draft.color);
                                         app.automation.insert("dialog.properties.colour".into(), colour.rect);
                                     });
+                                    if draft.kind == InputKind::Countdown {
+                                        left_col.horizontal(|ui| {
+                                            ui.spacing_mut().item_spacing.x = 8.0;
+                                            aligned_field_label(ui, "Duration", label_width);
+                                            let current_ms = app
+                                                .properties_fx
+                                                .as_ref()
+                                                .map_or(draft.config.countdown_duration_ms, |fx| {
+                                                    fx.config.countdown_duration_ms
+                                                });
+                                            let mut seconds = u32::try_from(
+                                                (current_ms / 1_000).clamp(1, 86_400),
+                                            )
+                                            .unwrap_or(60);
+                                            let dur = ui.add(
+                                                egui::DragValue::new(&mut seconds)
+                                                    .range(1..=86_400)
+                                                    .speed(1.0)
+                                                    .suffix(" s"),
+                                            );
+                                            app.automation.insert(
+                                                "dialog.properties.countdownDuration".into(),
+                                                dur.rect,
+                                            );
+                                            if dur.changed() {
+                                                let ms = u64::from(seconds.clamp(1, 86_400))
+                                                    .saturating_mul(1_000);
+                                                draft.config.countdown_duration_ms = ms;
+                                                if let Some(fx) = app.properties_fx.as_mut() {
+                                                    fx.config.countdown_duration_ms = ms;
+                                                }
+                                                app.last_demo_frame = None;
+                                            }
+                                        });
+                                    }
                                     if let Some(fx) = app.properties_fx.as_mut() {
                                         left_col.horizontal(|ui| {
                                             ui.spacing_mut().item_spacing.x = 8.0;
@@ -1663,8 +1698,8 @@ impl RustMixApp {
                                 ui.set_min_width((pane_width - 14.0).max(0.0));
                                 egui::Grid::new("overlay.capabilities").num_columns(2).spacing([8.0, 3.0]).show(ui, |ui| {
                                     for (id, label, value, reason) in [
-                                        ("type", "Type", "Title panel only", "Only title-panel composition is implemented."),
-                                        ("source", "Source overlay", "Unavailable", "Input-as-overlay composition is not implemented."),
+                                        ("type", "Type", "Title panel / PiP", "Title-panel captions and bound-input PiP composition are active."),
+                                        ("source", "Source overlay", "Bound input PiP", "Assign an input in the Overlay panel to composite it as a PiP box."),
                                         ("effect", "Effect / timing", "Unavailable", "Overlay transitions and duration controls are not implemented."),
                                         ("alpha", "Alpha", "Unavailable", "Independent channel alpha is not implemented."),
                                         ("transform", "Transform / border", "Unavailable", "Free transforms and borders are not implemented."),

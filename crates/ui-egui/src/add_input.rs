@@ -551,6 +551,32 @@ impl RustMixApp {
                     }
                 }
             }
+            if self.add_kind == InputKind::Countdown {
+                ui.horizontal(|ui| {
+                    ui.label("Duration");
+                    let duration = ui.add(
+                        egui::DragValue::new(&mut self.add_countdown_seconds)
+                            .range(1..=86_400)
+                            .speed(1.0)
+                            .suffix(" s"),
+                    );
+                    self.automation
+                        .insert("dialog.add.countdown.duration".into(), duration.rect);
+                    for (preset_s, label) in
+                        [(10_u32, "10s"), (30, "30s"), (60, "60s"), (300, "5m")]
+                    {
+                        let preset =
+                            ui.selectable_label(self.add_countdown_seconds == preset_s, label);
+                        self.automation.insert(
+                            format!("dialog.add.countdown.preset.{preset_s}"),
+                            preset.rect,
+                        );
+                        if preset.clicked() {
+                            self.add_countdown_seconds = preset_s;
+                        }
+                    }
+                });
+            }
             if let Some((_, texture)) = &self.add_preview {
                 let w = ui.available_width().clamp(100.0, 320.0);
                 let r = ui.add(egui::Image::new((

@@ -380,6 +380,21 @@ fn accepted_functions_carry_the_wire_overlay_and_transport_vocabulary() {
     let accepted = rustmix_automation::control::accepted_functions();
     for name in [
         "PlayPause",
+        "LivePlayPause",
+        "NextPlayListEntry",
+        "PreviousPlayListEntry",
+        "SetFader",
+        "Audio",
+        "AudioOn",
+        "AudioOff",
+        "MasterAudio",
+        "MasterAudioOn",
+        "MasterAudioOff",
+        "Solo",
+        "SoloOn",
+        "SoloOff",
+        "AudioBusOn",
+        "AudioBusOff",
         "OverlayInput1",
         "OverlayInput8",
         "OverlayInput1Off",
@@ -398,3 +413,106 @@ fn engine_cut_matches_the_wire_cut_semantics() {
     assert_eq!(engine.project().program, InputId(2));
     assert_eq!(engine.project().preview, InputId(1));
 }
+
+#[test]
+fn live_play_pause_set_fader_and_playlist_stepping_execute_on_the_engine() {
+    let mut engine = Engine::from_project(ProjectState::demo()).unwrap();
+    // LivePlayPause toggles the active Program input (Input 1) without needing Input=...
+    assert!(!engine.playback(InputId(1)).unwrap().paused());
+    rustmix_automation::dispatch(&mut engine, &parse_query("Function=LivePlayPause"), 0).unwrap();
+    assert!(engine.playback(InputId(1)).unwrap().paused());
+    rustmix_automation::dispatch(&mut engine, &parse_query("Function=LivePlayPause"), 10).unwrap();
+    assert!(!engine.playback(InputId(1)).unwrap().paused());
+
+    // SetFader maps 0..=255 onto manual T-Bar progress and exchanges Program/Preview at 255.
+    assert!(matches!(
+        rustmix_automation::dispatch(&mut engine, &parse_query("Function=SetFader&Value=256"), 20),
+        Err(DispatchError::BadParameter { name: "Value", .. })
+    ));
+    rustmix_automation::dispatch(&mut engine, &parse_query("Function=SetFader&Value=128"), 20)
+        .unwrap();
+    assert!(engine.transition().unwrap().manual);
+    rustmix_automation::dispatch(&mut engine, &parse_query("Function=SetFader&Value=255"), 30)
+        .unwrap();
+    assert!(engine.transition().is_none());
+    assert_eq!(engine.project().program, InputId(2));
+    assert_eq!(engine.project().preview, InputId(1));
+
+    // Playlist stepping works when a playlist is active and rejects when stopped.
+    assert!(matches!(
+        rustmix_automation::dispatch(&mut engine, &parse_query("Function=NextPlayListEntry"), 40),
+        Err(DispatchError::Rejected(_))
+    ));
+    rustmix_automation::dispatch(&mut engine, &parse_query("Function=StartPlayList"), 50).unwrap();
+    assert_eq!(engine.playlist_run().unwrap().index, 0);
+    rustmix_automation::dispatch(&mut engine, &parse_query("Function=NextPlayListEntry"), 60)
+        .unwrap();
+    assert_eq!(engine.playlist_run().unwrap().index, 1);
+    rustmix_automation::dispatch(
+        &mut engine,
+        &parse_query("Function=PreviousPlayListEntry"),
+        70,
+    )
+    .unwrap();
+    assert_eq!(engine.playlist_run().unwrap().index, 0);
+}
+
+#[test]
+fn audio_mute_solo_master_and_bus_routing_functions_mutate_channels_atomically() {
+    let mut engine = Engine::from_project(ProjectState::demo()).unwrap();
+    let initial_muted = engine.project().input(InputId(1)).unwrap().audio.muted;
+    rustmix_automation::dispatch(&mut engine, &parse_query("Function=Audio&Input=1"), 0).unwrap();
+    assert_eq!(
+        engine.project().input(InputId(1)).unwrap().audio.muted,
+        !initial_muted
+    );
+    rustmix_automation::dispatch(&mut engine, &parse_query("Function=AudioOff&Input=1"), 10)
+        .unwrap();
+    assert!(engine.project().input(InputId(1)).unwrap().audio.muted);
+    rustmix_automation::dispatch(&mut engine, &parse_query("Function=AudioOn&Input=1"), 20)
+        .unwrap();
+    assert!(!engine.project().input(InputId(1)).unwrap().audio.muted);
+
+    // Solo / SoloOn / SoloOff
+    rustmix_automation::dispatch(&mut engine, &parse_query("Function=SoloOn&Input=1"), 30)
+        .unwrap();
+    assert!(engine.project().input(InputId(1)).unwrap().audio.solo);
+    rustmix_automation::dispatch(&mut engine, &parse_query("Function=Solo&Input=1"), 40).unwrap();
+    assert!(!engine.project().input(InputId(1)).unwrap().audio.solo);
+    rustmix_automation::dispatch(&mut engine, &parse_query("Function=SoloOff&Input=1"), 50)
+        .unwrap();
+    assert!(!engine.project().input(InputId(1)).unwrap().audio.solo);
+
+    // MasterAudio / MasterAudioOn / MasterAudioOff
+    rustmix_automation::dispatch(&mut engine, &parse_query("Function=MasterAudioOff"), 60).unwrap();
+    assert!(engine.project().buses[0].muted);
+    rustmix_automation::dispatch(&mut engine, &parse_query("Function=MasterAudio"), 70).unwrap();
+    assert!(!engine.project().buses[0].muted);
+    rustmix_automation::dispatch(&mut engine, &parse_query("Function=MasterAudioOn"), 80).unwrap();
+    assert!(!engine.project().buses[0].muted);
+
+    // AudioBusOn / AudioBusOff for M and A..G
+    rustmix_automation::dispatch(
+        &mut engine,
+        &parse_query("Function=AudioBusOn&Input=1&Value=A"),
+        90,
+    )
+    .unwrap();
+    assert!(engine.project().input(InputId(1)).unwrap().audio.sends[1]);
+    rustmix_automation::dispatch(
+        &mut engine,
+        &parse_query("Function=AudioBusOff&Input=1&Value=A"),
+        100,
+    )
+    .unwrap();
+    assert!(!engine.project().input(InputId(1)).unwrap().audio.sends[1]);
+    assert!(matches!(
+        rustmix_automation::dispatch(
+            &mut engine,
+            &parse_query("Function=AudioBusOn&Input=1&Value=Z"),
+            110
+        ),
+        Err(DispatchError::BadParameter { name: "Value", .. })
+    ));
+}
+

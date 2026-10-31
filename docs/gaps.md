@@ -1,5 +1,41 @@
 # Known gaps
 
+UI-042 (2026-10-31; source candidate, Windows toolchain verification pending):
+closes three actionable UI/UX and control-surface gaps without adding new
+dependencies or bumping the project schema:
+
+- **Configurable Countdown duration (`G09`):** `InputConfig::countdown_duration_ms`
+  (`#[serde(default = "default_countdown_duration_ms")]`, validated in
+  `1_000..=86_400_000` ms) replaces the hardcoded 60-second loop in the CPU
+  compositor (`render::source_into` / `render::pixel`), monitor digital clock
+  overlay (`MM:SS` / `HH:MM:SS`), and transport progress bar
+  (`panels::transport_position`). Operators can configure countdown duration in
+  both `Add Input -> Generators -> Countdown` (`dialog.add.countdown.duration`
+  plus `10s`/`30s`/`60s`/`5m` presets) and `Input Settings -> General`
+  (`dialog.properties.countdownDuration`).
+- **Expanded HTTP control API vocabulary (`rustmix-automation`):**
+  `accepted_functions()` grows from 25 to 40 executable functions from the
+  evidenced reference inventory (`docs/reference-notes.md` §53), adding
+  `LivePlayPause` (active Program or target input transport toggle),
+  `NextPlayListEntry` / `PreviousPlayListEntry` (`Command::PlaylistNext` /
+  `Command::PlaylistPrevious`), `SetFader` (`Value=0..=255` mapped to
+  `Command::SetManualProgress`), `Audio` / `AudioOn` / `AudioOff` (per-input
+  mute toggle/off/on), `MasterAudio` / `MasterAudioOn` / `MasterAudioOff`
+  (Master bus 0 mute toggle/off/on), `Solo` / `SoloOn` / `SoloOff` (per-input
+  solo toggle/on/off), and `AudioBusOn` / `AudioBusOff` (`Value=M|A..G`
+  per-input bus send routing).
+- **Operator Stinger 1–8 controls & truthful Overlay Settings capability labels
+  (`G20` / `G12`):** `Panel::Overlays` now exposes a `Stinger Channels (9–16 ·
+  Stinger 1–8)` section with per-stinger input selector
+  (`overlay.stinger.<n>.input`), Clear (`overlay.stinger.<n>.clear`), cut-point
+  ms (`overlay.stinger.<n>.cut_point`), underneath-overlays checkbox
+  (`overlay.stinger.<n>.underneath`), Trigger (`overlay.stinger.<n>.trigger`),
+  and active-stinger Stop (`overlay.stinger.stop`) dispatching
+  `Command::SetStinger`, `Command::TriggerStinger`, and `Command::StopStinger`.
+  `Overlay Settings` capability rows `dialog.overlay.capability.type` and
+  `dialog.overlay.capability.source` now report `Title panel / PiP` and
+  `Bound input PiP` to match the UI-040 PiP implementation.
+
 UI-041 (2026-10-24) verification sweep of the UI-040 alignment: four
 reference areas (overlays, audio, transitions, transport) were freshly
 re-derived from the installed vMix 29.0.0.48 and thirteen implementation
@@ -311,10 +347,10 @@ UI-009 audit (2026-10-18): the UI-008 GPU/output labels were not evidence of med
 | G06 | P1 | Crash recovery is manual checkpoint/backup loading; abrupt power-loss durability and filesystem fault injection need dedicated tests. |
 | G07 | P2 | Validated custom key/modifier remapping is implemented and verified in UI-012. Full per-widget automation metadata, command JSON schemas and accessibility review remain incomplete. |
 | G08 | P2 | Minimum 1100×700; dense panels use scrolling. Broader high-DPI/multi-monitor/physical-device QA remains needed. |
-| G09 | P2 | FTB/active transitions reset at load. Demo countdown loops every minute; no editable production countdown. |
+| G09 | P2 | FTB/active transitions reset at load. Countdown input duration is now configurable (`1_000..=86_400_000` ms via `InputConfig::countdown_duration_ms`, `Add Input`, and `Input Settings -> General`, UI-042); non-looping one-shot countdown completion triggers remain future work. |
 | G10 | P1 | Unsigned portable prototype only. No installer, SBOM standard, signing, upgrade/rollback or release audit. |
 | G11 | Closed for UI-005; P2 residual | Bounded dialog layout, navigation, footer visibility, monitor header controls, input/tile states and the UI-005 main-window fidelity passed hosted compilation/widget execution and native screenshot review at 1100×700, 1600×900 and 1920×1080 (hosted Windows run 39046367904, commit `a19fc03`, all steps green). Logical 734×466 widget coverage is prepared; physical 150% DPI and physical-device screenshot review remain unverified. |
-| G12 | Closed in UI-006 | Bounded `Overlay Settings` dialog (`dialog.overlay.*`) implemented for slots 1–4 with staged per-slot edits, live 16:9 normalized preview (`overlay_panel_rect`), and access from the Overlays panel, bottom `Overlay ⚙` button (`output.overlay.settings`), `☰` menu, and `Settings ▼` caret. Full-frame PIP/chroma overlay types and per-slot transition durations remain future engine work. |
+| G12 | Closed in UI-006 / updated UI-042 | Bounded `Overlay Settings` dialog (`dialog.overlay.*`) implemented for slots 1–8 with staged per-slot edits, live 16:9 normalized preview (`overlay_panel_rect`), and capability rows updated in UI-042 (`Title panel / PiP`, `Bound input PiP`) to match standard-channel PiP bindings. Chroma/keying overlay types and per-slot transition durations remain future engine work. |
 | G13 | Closed in UI-006 | Per-input audio routing (`InputPage::Audio`) is now directly reachable from Audio Mixer input strip `⚙` buttons (`audio.input.<id>.settings`), `"Audio Settings…"` on `Input Properties → General` (`dialog.properties.audioSettings`), and source tile context menus. |
 | G14 | Closed in UI-006 | Dialog sidebar buttons (`sidebar_button`) now render left-aligned labels with 16×16 colored badges and original procedural `egui::Painter` vector glyphs (`Grid`, `Geometry`, `Colour`, `Title`/`Overlay`, `Workspace`, etc.), eliminating centered-text overlap. |
 | G15 | Closed in UI-006 | `egui_dock::Style` now uses broadcast-dark tab bar surfaces, `TEAL` active/focused outlines, and high-contrast active tab typography without altering tab geometry. |
@@ -322,7 +358,7 @@ UI-009 audit (2026-10-18): the UI-008 GPU/output labels were not evidence of med
 | G17 | Closed in UI-006 | All eleven private reference screenshots (`Interface.png`, `Add Input.png`, `Input Settings.png`, `Settings.png`, `Overlay Settings.png`, `External.png`, `Multicoder.png`, `Playlist.png`, `Recording Setup.png`, `Shortcut.png`, `Streaming Setup.png`) were reviewed read-only and documented in [ui-reference.md](ui-reference.md). Unimplemented output/encoder dialogs remain disabled by design. |
 | G18 | Closed in UI-006 | Historical UI-006 label adjustment. Current tile control uses Audio with selected color for unmuted simulation; this is not real device audio or live-output status. |
 | G19 | Closed in UI-006 | Top toolbar `Open ▼`, `Save As ▼`, and `Settings ▼` carets now expose real actions (open, reload last saved, recover checkpoint, write immediate recovery checkpoint, and jump directly to individual Settings pages or Overlay Settings). |
-| G20 | P1 | Task 1.1 stinger channels (9-16) are configuration and Program/Preview bus exchange only: no stinger clip raster, no `display_underneath_overlays` compositing, no per-channel effects/alpha/timing, and no dedicated stinger UI (configured through `overlay.stinger.*` commands). Clip rendering depends on the media layer (G04). |
+| G20 | P1 | Task 1.1 stinger channels (9-16) expose operator UI configuration and trigger/stop controls in `Panel::Overlays` (`overlay.stinger.1..8.*`, UI-042) alongside `overlay.stinger.*` commands and cut-point Program/Preview exchange, but still have no stinger clip raster, no `display_underneath_overlays` compositing, and no per-channel effects/alpha/timing. Clip rendering depends on the media layer (G04). |
 
 Do not claim 1080p/4K processing based on the project-format selector; actual demo rasters are capped and only displayed in the native UI.
 

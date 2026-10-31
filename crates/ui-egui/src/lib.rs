@@ -580,6 +580,7 @@ pub struct RustMixApp {
     pub(crate) add_error: Option<String>,
     pub(crate) add_reveal: bool,
     pub(crate) add_kind: InputKind,
+    pub(crate) add_countdown_seconds: u32,
     pub(crate) add_number: usize,
     pub(crate) add_preview: Option<(InputKind, egui::TextureHandle)>,
     pub(crate) properties: Option<InputState>,
@@ -887,6 +888,7 @@ impl RustMixApp {
             add_error: None,
             add_reveal: true,
             add_kind: InputKind::Color,
+            add_countdown_seconds: 60,
             add_number: 1,
             add_preview: None,
             properties: None,
@@ -1051,6 +1053,7 @@ impl RustMixApp {
         self.category = None;
         self.input_filter.clear();
         self.add_open = false;
+        self.add_countdown_seconds = 60;
         self.add_image = None;
         self.add_png_path.clear();
         self.add_error = None;

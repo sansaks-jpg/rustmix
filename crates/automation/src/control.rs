@@ -265,6 +265,21 @@ pub fn accepted_functions() -> Vec<&'static str> {
         "Stinger8",
         "StartPlayList",
         "StopPlayList",
+        "NextPlayListEntry",
+        "PreviousPlayListEntry",
+        "LivePlayPause",
+        "SetFader",
+        "Audio",
+        "AudioOn",
+        "AudioOff",
+        "MasterAudio",
+        "MasterAudioOn",
+        "MasterAudioOff",
+        "Solo",
+        "SoloOn",
+        "SoloOff",
+        "AudioBusOn",
+        "AudioBusOff",
     ]
 }
 
@@ -474,7 +489,8 @@ pub fn dispatch(engine: &mut Engine, req: &Request, now: u64) -> Result<Outcome,
             .map_err(|e| DispatchError::Rejected(e.to_string()));
     }
     match name.as_str() {
-        "SetVolume" | "SetMute" | "SetSolo" => {
+        "SetVolume" | "SetMute" | "SetSolo" | "Audio" | "AudioOn" | "AudioOff" | "Solo"
+        | "SoloOn" | "SoloOff" | "AudioBusOn" | "AudioBusOff" => {
             let Some(id) = input else {
                 return Ok(Outcome::Noop);
             };
@@ -486,10 +502,57 @@ pub fn dispatch(engine: &mut Engine, req: &Request, now: u64) -> Result<Outcome,
             match name.as_str() {
                 "SetVolume" => channel.gain_db = volume_to_db(f32_value(req)?),
                 "SetMute" => channel.muted = bool_value(req)?,
-                _ => channel.solo = bool_value(req)?,
+                "SetSolo" => channel.solo = bool_value(req)?,
+                "Audio" => channel.muted = !channel.muted,
+                "AudioOn" => channel.muted = false,
+                "AudioOff" => channel.muted = true,
+                "Solo" => channel.solo = !channel.solo,
+                "SoloOn" => channel.solo = true,
+                "SoloOff" => channel.solo = false,
+                "AudioBusOn" | "AudioBusOff" => {
+                    let raw = required(req, "Value")?.trim();
+                    let bus_index = match raw.to_ascii_uppercase().as_str() {
+                        "M" | "MASTER" => 0,
+                        "A" => 1,
+                        "B" => 2,
+                        "C" => 3,
+                        "D" => 4,
+                        "E" => 5,
+                        "F" => 6,
+                        "G" => 7,
+                        _ => {
+                            return Err(DispatchError::BadParameter {
+                                name: "Value",
+                                value: raw.to_string(),
+                            });
+                        }
+                    };
+                    let send = channel.sends.get_mut(bus_index).ok_or_else(|| {
+                        DispatchError::Rejected("audio bus send slot is missing".into())
+                    })?;
+                    *send = name == "AudioBusOn";
+                }
+                _ => {}
             }
             return engine
                 .execute(Command::SetInputAudio(id, channel), now)
+                .map(|_| Outcome::Executed)
+                .map_err(|e| DispatchError::Rejected(e.to_string()));
+        }
+        "MasterAudio" | "MasterAudioOn" | "MasterAudioOff" => {
+            let mut channel = engine
+                .project()
+                .buses
+                .first()
+                .cloned()
+                .unwrap_or_default();
+            channel.muted = match name.as_str() {
+                "MasterAudio" => !channel.muted,
+                "MasterAudioOn" => false,
+                _ => true,
+            };
+            return engine
+                .execute(Command::SetBus(0, channel), now)
                 .map(|_| Outcome::Executed)
                 .map_err(|e| DispatchError::Rejected(e.to_string()));
         }
@@ -539,6 +602,18 @@ pub fn dispatch(engine: &mut Engine, req: &Request, now: u64) -> Result<Outcome,
         "FadeToBlack" => Command::FadeBlack,
         "StartPlayList" => Command::StartPlaylist { id: 1, selected: 0 },
         "StopPlayList" => Command::StopPlaylist,
+        "NextPlayListEntry" => Command::PlaylistNext,
+        "PreviousPlayListEntry" => Command::PlaylistPrevious,
+        "SetFader" => {
+            let step = u32_value(req)?;
+            if step > 255 {
+                return Err(DispatchError::BadParameter {
+                    name: "Value",
+                    value: step.to_string(),
+                });
+            }
+            Command::SetManualProgress(step as f32 / 255.0)
+        }
         "PreviewInputNext" | "PreviewInputPrevious" => {
             let project = engine.project();
             let count = project.inputs.len();
@@ -572,6 +647,14 @@ pub fn dispatch(engine: &mut Engine, req: &Request, now: u64) -> Result<Outcome,
                 }
                 None => Ok(Outcome::Noop),
             };
+        }
+        "LivePlayPause" => {
+            let id = input.unwrap_or_else(|| engine.project().program);
+            let paused = engine.playback(id).is_some_and(|clock| clock.paused());
+            return engine
+                .execute(Command::SetInputPaused(id, !paused), now)
+                .map(|_| Outcome::Executed)
+                .map_err(|e| DispatchError::Rejected(e.to_string()));
         }
         slot_effect @ ("SetTransitionEffect1"
         | "SetTransitionEffect2"

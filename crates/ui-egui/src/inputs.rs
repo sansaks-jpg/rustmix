@@ -97,10 +97,19 @@ impl RustMixApp {
             return false;
         }
         // Generator names are labels, including dots and slashes, never file paths.
+        let config = if self.add_kind == InputKind::Countdown {
+            InputConfig {
+                countdown_duration_ms: u64::from(self.add_countdown_seconds.clamp(1, 86_400))
+                    .saturating_mul(1_000),
+                ..InputConfig::default()
+            }
+        } else {
+            InputConfig::default()
+        };
         let command = Command::AddInputAt {
             name: self.add_name.trim().to_owned(),
             kind: self.add_kind,
-            config: InputConfig::default(),
+            config,
             index,
         };
         let added = self.try_execute(command).is_some();
