@@ -31,7 +31,17 @@ jobs:
           shared-key: native-ui-v2-complete
           cache-on-failure: false
       - name: Formatting
-        run: cargo fmt --all -- --check
+        shell: pwsh
+        run: |
+          cargo fmt --all -- --check
+          if ($LASTEXITCODE -ne 0) {
+            cargo fmt --all
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            $patch = git diff -- '*.rs' | Out-String
+            $encoded = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($patch))
+            Write-Output "::error title=Rustfmt patch (base64)::$encoded"
+            exit 1
+          }
       - name: Dependency layering and asset inventory
         shell: pwsh
         run: ./scripts/check-repository.ps1
