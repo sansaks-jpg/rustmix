@@ -283,9 +283,19 @@ impl RustMixApp {
                     let response=ui.add_sized([150.0,38.0],egui::Button::new("Cancel"));
                     self.automation.insert("dialog.new.cancel".into(),response.rect);
                     cancel=response.clicked();
-                    let response=ui.add_enabled(self.job.is_none() && (!dirty || self.new_preset.replace_unsaved),egui::Button::new("OK").min_size(Vec2::new(150.0,38.0)));
-                    self.automation.insert("dialog.new.confirm".into(),response.rect);
-                    create=response.clicked();
+                    let can_confirm =
+                        self.job.is_none() && (!dirty || self.new_preset.replace_unsaved);
+                    let response = ui
+                        .add_enabled(
+                            can_confirm,
+                            egui::Button::new("OK").min_size(Vec2::new(150.0, 38.0)),
+                        )
+                        .on_disabled_hover_text(
+                            "Save changes or check 'Replace the current unsaved preset' to continue.",
+                        );
+                    self.automation
+                        .insert("dialog.new.confirm".into(), response.rect);
+                    create = response.clicked();
                 });
             });
         if create {

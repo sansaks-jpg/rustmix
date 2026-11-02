@@ -152,10 +152,10 @@ impl RustMixApp {
                     &[
                         ("Mix format", "48 kHz · stereo".into()),
                         ("Monitoring", self.audio_ui.status_label().into()),
-                        ("Buses", "Master / A / B".into()),
+                        ("Buses", "9 buses · Master / A–G / Headphones".into()),
                         (
-                            "Legacy mixer meters",
-                            "Simulated; Audio I/O shows actual sample peak / RMS".into(),
+                            "Mixer meters",
+                            "Measured per-source and per-bus peak / RMS meters".into(),
                         ),
                         ("Recording / streaming", "Unavailable".into()),
                     ],

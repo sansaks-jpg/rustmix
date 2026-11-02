@@ -1,5 +1,22 @@
 # Known gaps
 
+UI-043 (2026-11-02): UI/UX reference alignment and discrepancy corrections:
+- **Audio bus routing alignment in External Output and Settings:** Exposes all 9 buses
+  (`Master`, `A`–`G`, `Headphones` via `BUS_LABELS`) in the External Output audio bus
+  combo box (`dialog.external.bus.*`) and Settings summary, resolving the discrepancy
+  where only 3 buses (`Master`, `A`, `B`) were previously exposed in the UI despite
+  full 9-bus engine routing support.
+- **Dynamic Input Properties resolution metadata:** Replaces static hardcoded
+  `"384x216 (demo)"` and `"640x360 (demo)"` with the active project's configured video
+  standard and monitor picture sizes (`video_standard().program_size()` and `monitor_size()`).
+- **T-Bar transition readout & context feedback:** Added monospace status / percentage
+  indicator (`"READY"`, `"T-BAR {pct}%"`, `"TAKE 100%"`) and context-aware hover text
+  to the center switcher T-Bar.
+- **Action disabled state & button hover feedback:** Added explicit disabled hover reasons
+  for `RemoveInput` when active on Program/Preview, `NewPreset` when unsaved changes require
+  acknowledgment, `Cut` when direct take is unavailable, and dynamic Live/Muted status tooltips
+  on per-tile audio buttons.
+
 UI-042 (2026-10-31; source candidate, Windows toolchain verification pending):
 closes three actionable UI/UX and control-surface gaps without adding new
 dependencies or bumping the project schema:

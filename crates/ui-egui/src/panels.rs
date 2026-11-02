@@ -1359,9 +1359,28 @@ impl RustMixApp {
                     );
                     ui.painter()
                         .rect_filled(knob, 3.0, Color32::from_rgb(20, 130, 240));
+                    let readout = if progress > 0.01 && progress < 0.99 {
+                        format!("T-BAR {:.0}%", progress * 100.0)
+                    } else if progress >= 0.99 {
+                        "TAKE 100%".to_string()
+                    } else {
+                        "READY".to_string()
+                    };
+                    ui.painter().text(
+                        egui::pos2(tbar_rect.center().x, tbar_rect.top() + 5.0),
+                        Align2::CENTER_CENTER,
+                        &readout,
+                        FontId::monospace(8.5),
+                        DIM,
+                    );
                     self.automation.insert("switcher.tbar".into(), tbar_rect);
-                    let tbar =
-                        tbar.on_hover_text("Manual T-Bar · drag left to right to blend PVW → PGM");
+                    let tbar = if can_tbar {
+                        tbar.on_hover_text(format!(
+                            "Manual T-Bar ({readout}) · drag left to right to blend PVW → PGM"
+                        ))
+                    } else {
+                        tbar.on_hover_text("Manual T-Bar (select different inputs on PVW and PGM)")
+                    };
                     if can_tbar
                         && (tbar.is_pointer_button_down_on() || tbar.dragged() || tbar.clicked())
                     {
@@ -1773,6 +1792,12 @@ impl RustMixApp {
                                                                 .strong(),
                                                         )
                                                         .min_size(egui::vec2(cell_w, controls_h)),
+                                                    )
+                                                    .on_disabled_hover_text(
+                                                        check
+                                                            .err()
+                                                            .map(|e| e.to_string())
+                                                            .unwrap_or_default(),
                                                     );
                                                     self.automation.insert(
                                                         format!("input.{}.cut", input.id.0),
@@ -1875,7 +1900,11 @@ impl RustMixApp {
                                                     let audio_resp = ui
                                                         .add_enabled(input.has_audio(), audio_btn)
                                                         .on_hover_text(if input.has_audio() {
-                                                            "Toggle Input Audio"
+                                                            if input.audio.muted {
+                                                                "Audio is Muted · Click to Unmute"
+                                                            } else {
+                                                                "Audio is Live · Click to Mute"
+                                                            }
                                                         } else {
                                                             "Audio is not available for this source"
                                                         });

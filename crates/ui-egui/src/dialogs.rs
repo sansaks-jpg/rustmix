@@ -952,22 +952,38 @@ impl RustMixApp {
                                         });
                                     }
                                     let metadata_label_width = (right_col.available_width()*0.33).clamp(110.0,180.0);
+                                    let [program_w, program_h] = app
+                                        .engine
+                                        .project()
+                                        .preferences
+                                        .video_standard()
+                                        .program_size();
+                                    let [monitor_w, monitor_h] = app
+                                        .engine
+                                        .project()
+                                        .preferences
+                                        .video_standard()
+                                        .monitor_size();
+                                    let preview_res =
+                                        format!("{monitor_w}×{monitor_h} (monitor)");
+                                    let program_res =
+                                        format!("{program_w}×{program_h} (program)");
                                     egui::Grid::new("input_props_right")
                                         .num_columns(2)
                                         .spacing([8.0, 4.0])
                                         .show(right_col, |ui| {
                                             for (key, label, value) in [
-                                                ("mouse","Mouse Click Action","Preview (fixed)"),
-                                                ("go","GO Action","Preview (fixed)"),
-                                                ("sourceAspect","Source Aspect Ratio", "Widescreen"),
-                                                ("previewResolution","Preview resolution", "384x216 (demo)"),
-                                                ("programResolution","Program resolution", "640x360 (demo)"),
-                                                ("deinterlacing","Deinterlacing", "None"),
+                                                ("mouse", "Mouse Click Action", "Preview (fixed)"),
+                                                ("go", "GO Action", "Preview (fixed)"),
+                                                ("sourceAspect", "Source Aspect Ratio", "Widescreen"),
+                                                ("previewResolution", "Preview resolution", preview_res.as_str()),
+                                                ("programResolution", "Program resolution", program_res.as_str()),
+                                                ("deinterlacing", "Deinterlacing", "None"),
                                             ] {
-                                                let reserved = aligned_field_label(ui,label,metadata_label_width);
-                                                app.automation.insert(format!("dialog.properties.metadata.{key}.label"),reserved);
+                                                let reserved = aligned_field_label(ui, label, metadata_label_width);
+                                                app.automation.insert(format!("dialog.properties.metadata.{key}.label"), reserved);
                                                 let text = ui.label(RichText::new(value).size(11.5).color(FORM_TEXT));
-                                                app.automation.insert(format!("dialog.properties.metadata.{key}"),text.rect);
+                                                app.automation.insert(format!("dialog.properties.metadata.{key}"), text.rect);
                                                 ui.end_row();
                                             }
                                         });
@@ -1489,8 +1505,11 @@ impl RustMixApp {
                                 };
                                 let bus = match output.config.audio_bus {
                                     None | Some(0) => "Master".to_string(),
-                                    Some(1) => "A".to_string(),
-                                    Some(2) => "B".to_string(),
+                                    Some(index @ 1..=8) => rustmix_engine::audio_engine::BUS_LABELS
+                                        .get(index as usize)
+                                        .copied()
+                                        .unwrap_or("Unknown")
+                                        .to_string(),
                                     Some(other) => format!("Bus {other}"),
                                 };
                                 ui.label(format!(
@@ -2000,17 +2019,26 @@ impl RustMixApp {
                         ui.label(RichText::new("Audio bus").size(11.5).color(FORM_TEXT));
                         let label = match draft.config.audio_bus {
                             None | Some(0) => "Master".to_string(),
-                            Some(1) => "A".to_string(),
-                            Some(2) => "B".to_string(),
+                            Some(index @ 1..=8) => rustmix_engine::audio_engine::BUS_LABELS
+                                .get(index as usize)
+                                .copied()
+                                .unwrap_or("Unknown")
+                                .to_string(),
                             Some(other) => format!("Bus {other}"),
                         };
                         let bus_picker = egui::ComboBox::from_id_salt("dialog.external.bus")
                             .width(120.0)
                             .selected_text(label)
                             .show_ui(ui, |ui| {
-                                for (value, name) in
-                                    [(None, "Master"), (Some(1_u8), "A"), (Some(2_u8), "B")]
+                                let mut buses = vec![(None, "Master")];
+                                for (idx, &bus_name) in rustmix_engine::audio_engine::BUS_LABELS
+                                    .iter()
+                                    .enumerate()
+                                    .skip(1)
                                 {
+                                    buses.push((Some(idx as u8), bus_name));
+                                }
+                                for (value, name) in buses {
                                     let r = ui.selectable_label(
                                         draft.config.audio_bus.unwrap_or(0) == value.unwrap_or(0),
                                         name,
@@ -2447,10 +2475,14 @@ impl RustMixApp {
             ui.add_space(12.0);
             ui.separator();
             ui.horizontal(|ui| {
+                let can_remove = self.engine.enabled(&Command::RemoveInput(id)).is_ok();
                 let confirm = ui.add_enabled(
-                    self.engine.enabled(&Command::RemoveInput(id)).is_ok(),
+                    can_remove,
                     egui::Button::new(RichText::new("Remove input").color(RED).strong())
                         .min_size(Vec2::new(118.0, 29.0)),
+                )
+                .on_disabled_hover_text(
+                    "Inputs currently on Program or Preview cannot be removed. Take another input first.",
                 );
                 self.automation
                     .insert("dialog.remove.confirm".into(), confirm.rect);
