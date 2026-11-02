@@ -479,11 +479,12 @@ impl RustMixApp {
             let status = if self.add_loading {
                 "Checking image…".into()
             } else if let Some(image) = &self.add_image {
-                image
-                    .image_size
-                    .map_or("Image ready".into(), |[w, h]| format!("{w}×{h} · image ready"))
+                image.image_size.map_or("Image ready".into(), |[w, h]| {
+                    format!("{w}×{h} · image ready")
+                })
             } else {
-                "PNG / JPEG / BMP · maximum 32 MiB / 4096 pixels. Clear selection keeps the file.".into()
+                "PNG / JPEG / BMP · maximum 32 MiB / 4096 pixels. Clear selection keeps the file."
+                    .into()
             };
             ui.add(egui::Label::new(RichText::new(&status).color(FORM_TEXT)).truncate())
                 .on_hover_text(status);

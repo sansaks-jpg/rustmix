@@ -94,10 +94,18 @@ mod tests {
     #[test]
     fn history_accepts_supported_video_containers() {
         let mut history = VideoHistory::default();
-        for path in ["C:/media/one.MOV", "C:/media/two.avi", "C:/media/three.wmv", "C:/media/four.m4v"] {
+        for path in [
+            "C:/media/one.MOV",
+            "C:/media/two.avi",
+            "C:/media/three.wmv",
+            "C:/media/four.m4v",
+        ] {
             assert!(history.record(path));
         }
-        assert_eq!(VideoHistory::from_json(Some(&history.to_json().unwrap())).paths(), history.paths());
+        assert_eq!(
+            VideoHistory::from_json(Some(&history.to_json().unwrap())).paths(),
+            history.paths()
+        );
     }
 
     #[test]

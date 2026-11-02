@@ -182,7 +182,10 @@ fn generated_mov_m4v_avi_and_wmv_decode_real_frames() {
         assert_eq!(video.source_size(), [160, 90], "{name}");
         let mut frames = Vec::new();
         for _ in 0..120 {
-            match video.read_frame().unwrap_or_else(|error| panic!("{name}: {error}")) {
+            match video
+                .read_frame()
+                .unwrap_or_else(|error| panic!("{name}: {error}"))
+            {
                 VideoRead::Frame(frame) => {
                     assert_eq!([frame.width, frame.height], [160, 90], "{name}");
                     assert_rgb(&frame, 40, 20, [255, 0, 0]);
@@ -196,7 +199,10 @@ fn generated_mov_m4v_avi_and_wmv_decode_real_frames() {
             }
         }
         assert_eq!(frames.len(), 2, "{name} must yield successive real frames");
-        assert!(frames[1].timestamp_100ns > frames[0].timestamp_100ns, "{name}");
+        assert!(
+            frames[1].timestamp_100ns > frames[0].timestamp_100ns,
+            "{name}"
+        );
     }
 }
 

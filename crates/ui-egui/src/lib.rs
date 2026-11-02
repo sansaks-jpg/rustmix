@@ -2535,7 +2535,8 @@ impl RustMixApp {
             }
             "gif" | "tif" | "tiff" | "webp" => {
                 self.say(
-                    "Only PNG, JPEG and BMP images are supported (up to 32 MiB / 4096 pixels).".into(),
+                    "Only PNG, JPEG and BMP images are supported (up to 32 MiB / 4096 pixels)."
+                        .into(),
                     true,
                 );
             }

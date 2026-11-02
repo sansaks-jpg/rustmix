@@ -40,7 +40,10 @@ fn local_video_container_descriptors_validate_and_round_trip() {
     ] {
         assert!(VideoSource::File { path: path.into() }.validate().is_err());
     }
-    assert_eq!((engine.project().program, engine.project().preview), (program, preview));
+    assert_eq!(
+        (engine.project().program, engine.project().preview),
+        (program, preview)
+    );
     let directory = tempfile::tempdir().unwrap();
     let path = directory.path().join("video-containers.json");
     persistence::save(&path, engine.project()).unwrap();

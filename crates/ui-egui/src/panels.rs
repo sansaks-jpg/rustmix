@@ -3368,7 +3368,10 @@ mod processing_tests {
                     |ui| app.audio(ui),
                 );
             }
-            assert_eq!(app.automation.contains_key("audio.input.1.strip"), has_audio);
+            assert_eq!(
+                app.automation.contains_key("audio.input.1.strip"),
+                has_audio
+            );
         }
     }
 

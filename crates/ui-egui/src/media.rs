@@ -211,7 +211,12 @@ mod tests {
             let decoded = decode_image(&path).unwrap();
             assert_eq!(decoded.original_size, [16, 9]);
             assert!(decoded.width <= 1920 && decoded.height <= 1080);
-            assert!(decoded.pixels.iter().all(|pixel| pixel.last() == Some(&255)));
+            assert!(
+                decoded
+                    .pixels
+                    .iter()
+                    .all(|pixel| pixel.last() == Some(&255))
+            );
             std::fs::write(&path, b"invalid image").unwrap();
             assert!(decode_image(&path).is_err());
         }

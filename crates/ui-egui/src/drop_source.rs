@@ -450,7 +450,11 @@ mod tests {
             "video-fixture.wmv",
         ] {
             let path = directory.join(name);
-            assert!(path.is_file(), "Missing generated fixture {}", path.display());
+            assert!(
+                path.is_file(),
+                "Missing generated fixture {}",
+                path.display()
+            );
             let mut app = RustMixApp::headless();
             let ctx = egui::Context::default();
             let before = (app.engine.project().program, app.engine.project().preview);
@@ -461,7 +465,10 @@ mod tests {
             assert!(app.engine.project().inputs.iter().any(|input| {
                 matches!(&input.config.video_source, Some(VideoSource::File { path: source }) if source == path.to_str().unwrap())
             }));
-            assert_eq!((app.engine.project().program, app.engine.project().preview), before);
+            assert_eq!(
+                (app.engine.project().program, app.engine.project().preview),
+                before
+            );
         }
     }
 
