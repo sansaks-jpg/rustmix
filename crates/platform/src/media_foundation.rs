@@ -659,6 +659,9 @@ impl VideoFile {
         let duration = unsafe {
             match sample.GetSampleDuration() {
                 Ok(value) if value > 0 => Some(value),
+                // Some Windows decoders report zero when the duration is unknown.
+                // The player falls back to the negotiated frame rate in that case.
+                Ok(0) => None,
                 Ok(_) => return Err(VideoError::Invalid("Invalid video sample duration")),
                 Err(error) if error.code() == MF_E_NO_SAMPLE_DURATION => None,
                 Err(error) => return mf("read video sample duration", Err(error)),
