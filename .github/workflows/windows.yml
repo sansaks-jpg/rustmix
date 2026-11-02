@@ -1,7 +1,7 @@
 name: Windows native UI
 on:
   push:
-    branches: [main, 'codex/**']
+    branches: [main, 'codex/**', 'arena/**']
     paths-ignore:
       - '**/*.md'
   workflow_dispatch:
@@ -57,7 +57,7 @@ jobs:
           $env:GITHUB_SHA | Set-Content dist/BUILD-COMMIT.txt
           ./scripts/collect-notices.ps1
           Get-FileHash -Algorithm SHA256 dist/rustmix.exe | Format-List | Out-File dist/SHA256.txt
-          'Experimental core build. This workflow compiles and packages without running automated tests. See AUDIT.md for local checks and their limits. Physical display/audio and production endurance are not qualified.' | Set-Content dist/BUILD-STATUS.txt
+          'Experimental core build. This workflow runs formatting, workspace checks, Clippy and tests before packaging. Physical display/audio and production endurance are not qualified; see AUDIT.md.' | Set-Content dist/BUILD-STATUS.txt
       - uses: actions/upload-artifact@v4
         if: ${{ success() && hashFiles('dist/rustmix.exe') != '' }}
         with:

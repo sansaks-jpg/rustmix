@@ -52,8 +52,8 @@ remain for compatibility; a menu or descriptor is not backend qualification.
 ## Windows build and verification
 
 The current owner request authorizes local deterministic checks and manual laptop
-acceptance before push. GitHub Actions compiles and packages the `.exe` **without
-running automated tests**. Packaging requires a successful build and includes
+acceptance before push. GitHub Actions runs workspace checks and tests, then
+compiles and packages the `.exe`. Packaging requires a successful build and includes
 `BUILD-COMMIT.txt`, `SHA256.txt` and `AUDIT.md` so the artifact can be traced to its
 source. It is an unsigned portable executable, not an installer.
 
