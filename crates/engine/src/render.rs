@@ -382,6 +382,38 @@ pub fn downscale(src: &[[u8; 4]], sw: u32, sh: u32, dw: u32, dh: u32) -> Result<
     if (sw, sh) == (dw, dh) {
         return Ok(src.to_vec());
     }
+    // The default Full HD monitor is exactly one third of Program in both
+    // orientations. Sum each 3x3 box directly, avoiding per-frame range maps
+    // and row accumulators while preserving the existing two-stage rounding.
+    if sw == dw * 3 && sh == dh * 3 {
+        let row_width = sw as usize;
+        let mut out = Vec::with_capacity(target_size);
+        for block in src.chunks_exact(row_width * 3) {
+            let mut rows = block.chunks_exact(row_width);
+            let (Some(top), Some(middle), Some(bottom)) = (rows.next(), rows.next(), rows.next())
+            else {
+                return Err(invalid("Downscale source row is missing"));
+            };
+            let (top, _) = top.as_chunks::<3>();
+            let (middle, _) = middle.as_chunks::<3>();
+            let (bottom, _) = bottom.as_chunks::<3>();
+            for (([a, b, c], [d, e, f]), [g, h, i]) in top.iter().zip(middle).zip(bottom) {
+                let mut sums = [0_u32; 4];
+                for pixel in [a, b, c, d, e, f, g, h, i] {
+                    let [red, green, blue, alpha] = *pixel;
+                    let [sr, sg, sb, sa] = &mut sums;
+                    *sr += u32::from(red);
+                    *sg += u32::from(green);
+                    *sb += u32::from(blue);
+                    *sa += u32::from(alpha);
+                }
+                // For nine samples, round(round(sum / 3) / 3) is exactly
+                // round(sum / 9), with no half-way case for either divisor.
+                out.push(sums.map(|sum| ((sum + 4) / 9) as u8));
+            }
+        }
+        return Ok(out);
+    }
     let mut x_ranges = Vec::with_capacity(dw as usize);
     let mut x_inverse = Vec::with_capacity(dw as usize);
     for dx in 0..dw {
@@ -1387,6 +1419,52 @@ mod tests {
         assert!(downscale(&source[..10], 32, 18, 16, 9).is_err());
         assert!(downscale(&source, 0, 18, 16, 9).is_err());
         assert_eq!(downscale(&source, 32, 18, 32, 18).unwrap(), source.to_vec());
+    }
+
+    #[test]
+    fn three_to_one_downscale_matches_the_reference_box_filter() {
+        // Include alpha, high-contrast edges and nonuniform rows: rounding is
+        // intentionally performed first horizontally, then vertically.
+        for (dw, dh) in [(1, 1), (2, 3), (7, 4), (4, 7), (640, 360), (360, 640)] {
+            let (sw, sh) = (dw * 3, dh * 3);
+            let source: Vec<[u8; 4]> = (0..sw * sh)
+                .map(|i| {
+                    [
+                        (i % 251) as u8,
+                        ((i * 7 + 19) % 256) as u8,
+                        ((i / 7 + i / sw) % 256) as u8,
+                        ((i * 17) % 256) as u8,
+                    ]
+                })
+                .collect();
+            let mut expected = Vec::new();
+            for y in 0..dh {
+                for x in 0..dw {
+                    let mut sums = [0_u32; 4];
+                    for sy in y * 3..y * 3 + 3 {
+                        for sx in x * 3..x * 3 + 3 {
+                            for (sum, channel) in sums
+                                .iter_mut()
+                                .zip(source.get((sy * sw + sx) as usize).unwrap())
+                            {
+                                *sum += u32::from(*channel);
+                            }
+                        }
+                    }
+                    expected.push(sums.map(|sum| (((sum + 1) / 3 + 1) / 3) as u8));
+                }
+            }
+            assert_eq!(downscale(&source, sw, sh, dw, dh).unwrap(), expected);
+            assert!(downscale(source.get(..source.len() - 1).unwrap(), sw, sh, dw, dh).is_err());
+        }
+        // The specialized single division must reproduce both rounded stages
+        // for every possible sum of nine eight-bit channel values.
+        for sum in 0..=9 * 255 {
+            assert_eq!(
+                scaled_average(scaled_average(sum, reciprocal(3)), reciprocal(3)),
+                (sum + 4) / 9
+            );
+        }
     }
 
     #[test]

@@ -2,6 +2,13 @@
 use super::*;
 use std::hash::{Hash, Hasher};
 const RATES: [(u32, u32); 3] = [(50, 1), (60000, 1001), (60, 1)];
+
+fn within_sample_target(fps: f64, nominal: f64, rendered: u64, skipped: u64, handoff: u64) -> bool {
+    let missed = skipped.saturating_add(handoff);
+    let opportunities = rendered.saturating_add(skipped);
+    rendered != 0 && fps >= nominal * 0.995 && missed as f64 / opportunities as f64 <= 0.001
+}
+
 #[derive(Default)]
 pub(crate) struct Profile {
     phase: usize,
@@ -94,6 +101,10 @@ impl RustMixApp {
         }
         let frames = self.video_stats.rendered.saturating_sub(baseline.rendered);
         let skipped = self.video_stats.skipped.saturating_sub(baseline.skipped);
+        let handoff = self
+            .video_stats
+            .handoff_dropped
+            .saturating_sub(baseline.handoff_dropped);
         let fps = frames as f64 * 1_000_000_000.0 / elapsed_ns as f64;
         let nominal = f64::from(n) / f64::from(d);
         if frames == 0 || first_pixels == fingerprint {
@@ -105,10 +116,13 @@ impl RustMixApp {
             "rate_numerator":n,"rate_denominator":d,"raster":self.program_full_size,
             "monitor_raster":self.engine.project().preferences.video_standard().monitor_size(),
             "seconds":elapsed_ns as f64/1e9,"frames_produced":frames,"frames_skipped":skipped,
-            "actual_fps":fps,"last_render_ms":self.video_stats.render_ms,"ui_fps":self.fps,
+            "handoff_dropped":handoff,
+            "actual_fps":fps,"last_render_ms":self.video_stats.render_ms,
+            "render_p50_ms":self.video_stats.render_p50_ms,"render_p95_ms":self.video_stats.render_p95_ms,
+            "render_p99_ms":self.video_stats.render_p99_ms,"ui_fps":self.fps,
             "cached_surface_bytes_upper_bound":self.video_stats.cached_bytes,
             "program_bytes":self.video_stats.program_bytes,
-            "moving_pixels":true,"within_sample_target":fps >= nominal*0.995 && skipped as f64/(frames+skipped) as f64 <= 0.001,
+            "moving_pixels":true,"within_sample_target":within_sample_target(fps, nominal, frames, skipped, handoff),
         }));
         profile.phase += 1;
         profile.configured = false;
@@ -292,4 +306,18 @@ fn measure_scene(
     }
     samples.sort_by(f64::total_cmp);
     Ok(samples)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn cadence_target_counts_contended_handoffs_as_missed_frames() {
+        assert!(within_sample_target(60.0, 60.0, 60, 0, 0));
+        assert!(!within_sample_target(60.0, 60.0, 60, 0, 1));
+        assert!(!within_sample_target(60.0, 60.0, 60, 1, 0));
+        assert!(!within_sample_target(59.0, 60.0, 60, 0, 0));
+        assert!(!within_sample_target(60.0, 60.0, 0, 0, 0));
+    }
 }

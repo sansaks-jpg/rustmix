@@ -2143,7 +2143,20 @@ impl RustMixApp {
                         format!("PGM — fps · drop {}", self.video_stats.skipped)
                     })
                     .color(DIM),
-                ).on_hover_text("Measured CPU Program cadence and skipped render deadlines; GPU displays the monitor texture.");
+                ).on_hover_ui(|ui| {
+                    if self.video_stats.fps > 0.0 {
+                        ui.label(format!(
+                            "Elapsed CPU Program render time, most recent window (up to 128 samples): p50 {:.2} ms · p95 {:.2} ms · p99 {:.2} ms. Skipped deadlines: {}. Contended frame handoffs: {}. GPU displays the monitor texture; these are not end-to-end latency measurements.",
+                            self.video_stats.render_p50_ms,
+                            self.video_stats.render_p95_ms,
+                            self.video_stats.render_p99_ms,
+                            self.video_stats.skipped,
+                            self.video_stats.handoff_dropped,
+                        ));
+                    } else {
+                        ui.label("Waiting for CPU Program timing samples; GPU displays the monitor texture.");
+                    }
+                });
                 self.automation.insert("status.program".into(), pgm.rect);
             }
             ui.label(RichText::new("UI FPS:").strong().color(DIM));
