@@ -7,6 +7,46 @@ use rustmix_engine::{
 };
 use std::sync::Arc;
 
+#[test]
+fn local_video_container_descriptors_validate_and_round_trip() {
+    let mut engine = Engine::default();
+    let program = engine.project().program;
+    let preview = engine.project().preview;
+    for path in ["one.MP4", "two.m4v", "three.MOV", "four.avi", "five.WMV"] {
+        let source = VideoSource::File { path: path.into() };
+        assert!(source.validate().is_ok());
+        let index = engine.project().inputs.len();
+        engine
+            .execute(
+                Command::AddInputAt {
+                    name: path.into(),
+                    kind: InputKind::Color,
+                    config: InputConfig {
+                        video_source: Some(source),
+                        ..Default::default()
+                    },
+                    index,
+                },
+                0,
+            )
+            .unwrap();
+    }
+    for path in [
+        "movie.mkv",
+        "movie.mp3",
+        "https://example.invalid/video.mov",
+        "//server/share/movie.avi",
+        "movie\n.wmv",
+    ] {
+        assert!(VideoSource::File { path: path.into() }.validate().is_err());
+    }
+    assert_eq!((engine.project().program, engine.project().preview), (program, preview));
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("video-containers.json");
+    persistence::save(&path, engine.project()).unwrap();
+    assert_eq!(persistence::load(&path).unwrap(), *engine.project());
+}
+
 fn metadata(sequence: u64, timestamp_100ns: i64) -> VideoFrameMetadata {
     VideoFrameMetadata {
         input_id: InputId(3),

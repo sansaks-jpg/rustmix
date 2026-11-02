@@ -51,11 +51,12 @@ fn committed_source_capabilities_override_names_colours_and_fallback_kinds() {
     );
     input.config.media_path = None;
     input.kind = InputKind::Color;
-    for (source, playback) in [
+    for (source, playback, audio) in [
         (
             VideoSource::File {
                 path: "movie.mp4".into(),
             },
+            true,
             true,
         ),
         (
@@ -64,12 +65,14 @@ fn committed_source_capabilities_override_names_colours_and_fallback_kinds() {
                 interval_ms: 1000,
             },
             true,
+            false,
         ),
         (
             VideoSource::Camera {
                 device_id: "test-only".into(),
                 format: None,
             },
+            false,
             false,
         ),
         (
@@ -79,14 +82,12 @@ fn committed_source_capabilities_override_names_colours_and_fallback_kinds() {
                 height: 1080,
             },
             false,
+            false,
         ),
     ] {
         input.config.video_source = Some(source);
         assert_eq!(input.has_playback(), playback);
-        assert!(
-            input.has_audio(),
-            "Video sources participate in audio routing, mixing and metering"
-        );
+        assert_eq!(input.has_audio(), audio);
     }
     input.config.video_source = None;
     input.config.audio_source = Some(AudioSource::WavFile {

@@ -59,7 +59,7 @@ fn rgb32_conversion_honours_a_nonzero_scanline_origin() {
 }
 
 #[test]
-fn decoder_rejects_network_or_non_mp4_descriptors_before_opening_a_reader() {
+fn decoder_rejects_network_or_unsupported_descriptors_before_opening_a_reader() {
     for path in [
         "https://example.invalid/video.mp4",
         "file:///C:/video.mp4",

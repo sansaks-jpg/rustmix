@@ -92,13 +92,22 @@ mod tests {
     }
 
     #[test]
-    fn preference_history_rejects_malformed_huge_remote_control_and_non_mp4_values() {
+    fn history_accepts_supported_video_containers() {
+        let mut history = VideoHistory::default();
+        for path in ["C:/media/one.MOV", "C:/media/two.avi", "C:/media/three.wmv", "C:/media/four.m4v"] {
+            assert!(history.record(path));
+        }
+        assert_eq!(VideoHistory::from_json(Some(&history.to_json().unwrap())).paths(), history.paths());
+    }
+
+    #[test]
+    fn preference_history_rejects_malformed_huge_remote_control_and_unsupported_values() {
         for json in [
             "not json",
             "{}",
             "[7]",
             "[\"https://example.com/file.mp4\"]",
-            "[\"C:/media/file.avi\"]",
+            "[\"C:/media/file.mkv\"]",
             "[\"C:/media/a\\n.mp4\"]",
         ] {
             assert!(

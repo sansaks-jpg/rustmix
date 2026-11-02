@@ -105,7 +105,7 @@ impl std::ops::DerefMut for InputFx {
     }
 }
 impl InputFx {
-    fn set_image(&mut self, image: media::DecodedPng) {
+    fn set_image(&mut self, image: media::DecodedImage) {
         self.media_path = Some(image.path);
         self.custom_rgba = Some((image.width, image.height, image.pixels));
         self.image_size = Some(image.original_size);
@@ -668,7 +668,7 @@ pub struct RustMixApp {
     pub(crate) program_output: program_output::ProgramOutput,
     pub(crate) extended_output: extended_output::ExtendedOutput,
     pub(crate) audio_ui: audio_controls::AudioUi,
-    /// Local MP4 add-dialog draft; no decoder starts until the descriptor commits.
+    /// Local video add-dialog draft; no decoder starts until the descriptor commits.
     pub(crate) video_ui: video_controls::VideoUi,
     pub(crate) source_ui: extra_sources::SourceUi,
     pub(crate) armed_sources: std::collections::HashSet<InputId>,
@@ -1937,7 +1937,7 @@ impl RustMixApp {
             let caret = caret_menu_button(ui, height, |ui| {
                 for (key, idx, label) in [
                     ("video", dialogs::VIDEO_TAB, "Video file"),
-                    ("image", 1, "PNG image"),
+                    ("image", 1, "Image"),
                     ("audio", 12, "WAV audio"),
                     ("microphone", 13, "Microphone"),
                     ("photos", 9, "Photos slideshow"),
@@ -2514,13 +2514,14 @@ impl RustMixApp {
         // lowercased above, so the project suffix must match either case.
         let lower_path = path_str.to_ascii_lowercase();
         match ext.as_str() {
-            "mp4" => self.queue_drop(path, drop_source::DropMedia::Video),
+            "mp4" | "m4v" | "mov" | "avi" | "wmv" => {
+                self.queue_drop(path, drop_source::DropMedia::Video);
+            }
             "wav" => self.queue_drop(path, drop_source::DropMedia::Audio),
-            "png" => self.queue_drop(path, drop_source::DropMedia::Image),
-            "mov" | "mkv" | "avi" | "webm" | "m4v" | "ts" | "m2ts" | "mpg" | "mpeg" | "wmv"
-            | "flv" => {
+            "png" | "jpg" | "jpeg" | "bmp" => self.queue_drop(path, drop_source::DropMedia::Image),
+            "mkv" | "webm" | "ts" | "m2ts" | "mpg" | "mpeg" | "flv" => {
                 self.say(
-                    "Only MP4 video files are supported; convert the file, then drop it again."
+                    "Use MP4, M4V, MOV, AVI or WMV video files; other formats are not supported."
                         .into(),
                     true,
                 );
@@ -2532,9 +2533,9 @@ impl RustMixApp {
                     true,
                 );
             }
-            "jpg" | "jpeg" | "bmp" | "gif" | "tif" | "tiff" | "webp" => {
+            "gif" | "tif" | "tiff" | "webp" => {
                 self.say(
-                    "Only PNG images are supported (up to 32 MiB / 4096 pixels).".into(),
+                    "Only PNG, JPEG and BMP images are supported (up to 32 MiB / 4096 pixels).".into(),
                     true,
                 );
             }

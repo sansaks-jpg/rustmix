@@ -173,7 +173,7 @@ impl VideoSource {
         };
         if !valid_audio_identity(path) {
             return Err(invalid(
-                "Video file source must reference a local MP4 path of at most 4096 bytes",
+                "Video file source must reference a local MP4, M4V, MOV, AVI or WMV path of at most 4096 bytes",
             ));
         }
         let mut colons = path.match_indices(':');
@@ -188,10 +188,14 @@ impl VideoSource {
             || !std::path::Path::new(path)
                 .extension()
                 .and_then(|extension| extension.to_str())
-                .is_some_and(|extension| extension.eq_ignore_ascii_case("mp4"))
+                .is_some_and(|extension| {
+                    ["mp4", "m4v", "mov", "avi", "wmv"]
+                        .iter()
+                        .any(|supported| extension.eq_ignore_ascii_case(supported))
+                })
         {
             return Err(invalid(
-                "Video file source must reference a local MP4 path of at most 4096 bytes",
+                "Video file source must reference a local MP4, M4V, MOV, AVI or WMV path of at most 4096 bytes",
             ));
         }
         Ok(())
@@ -228,7 +232,7 @@ pub struct InputConfig {
     pub chroma_key: bool,
     pub chroma_tolerance: f32,
     pub pip_source: Option<InputId>,
-    /// External PNG reference. Decoded pixels are a UI cache, never project JSON.
+    /// External still-image reference. Decoded pixels are a UI cache, never project JSON.
     pub media_path: Option<String>,
     /// Audio-only source; a consumer must display its explicit slate rather
     /// than presenting the input's procedural kind as decoded video.
@@ -270,7 +274,7 @@ impl InputConfig {
             || (self.audio_source.is_some() && self.video_source.is_some())
         {
             return Err(invalid(
-                "Assign only one PNG, audio or video source to an input",
+                "Assign only one image, audio or video source to an input",
             ));
         }
         if !(MIN_COUNTDOWN_DURATION_MS..=MAX_COUNTDOWN_DURATION_MS)
@@ -308,10 +312,14 @@ impl InputConfig {
                 || !std::path::Path::new(path)
                     .extension()
                     .and_then(|s| s.to_str())
-                    .is_some_and(|s| s.eq_ignore_ascii_case("png")))
+                    .is_some_and(|s| {
+                        ["png", "jpg", "jpeg", "bmp"]
+                            .iter()
+                            .any(|ext| s.eq_ignore_ascii_case(ext))
+                    }))
         {
             return Err(invalid(
-                "Image source must reference a PNG path of at most 4096 bytes",
+                "Image source must reference a PNG, JPEG or BMP path of at most 4096 bytes",
             ));
         }
         Ok(())

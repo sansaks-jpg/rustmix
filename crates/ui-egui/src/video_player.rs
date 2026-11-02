@@ -1,5 +1,6 @@
 //! Bounded source owners for MP4, cameras, Photos and Browser frames.
-//! No embedded MP4/browser/camera audio, GPU decode or A/V synchronization claim.
+//! No browser/camera audio, GPU decode or A/V synchronization claim. MP4 audio
+//! is handled separately by the experimental audio monitor, not this worker.
 //! Open/read/seek are synchronous Media Foundation calls on their owner worker.
 //! Stop/Drop request cancellation without blocking the UI; a blocked MF call
 //! can delay termination indefinitely. Its global worker permit is retained
@@ -43,6 +44,31 @@ impl Default for VideoControl {
             restart_generation: 0,
             seek_ms: None,
         }
+    }
+}
+impl VideoControl {
+    // State updates must not erase a seek the owner has not consumed yet.
+    // Several seeks coalesce to the most recent position.
+    fn update(
+        &mut self,
+        paused: bool,
+        looping: bool,
+        restart_generation: u64,
+        seek_ms: Option<u64>,
+    ) {
+        self.paused = paused;
+        self.looping = looping;
+        self.restart_generation = restart_generation;
+        if seek_ms.is_some() {
+            self.seek_ms = seek_ms;
+        }
+    }
+
+    #[cfg(any(windows, test))]
+    fn take_snapshot(&mut self) -> Self {
+        let snapshot = *self;
+        self.seek_ms = None;
+        snapshot
     }
 }
 struct Shared {
@@ -146,7 +172,7 @@ impl VideoPlayer {
         #[cfg(not(windows))]
         {
             let _ = (input_id, generation, source, repaint);
-            Err("Local MP4 video decoding requires Windows Media Foundation".into())
+            Err("Local video decoding requires Windows Media Foundation".into())
         }
     }
     pub fn feed(&self) -> Arc<VideoFeed> {
@@ -163,12 +189,7 @@ impl VideoPlayer {
             return;
         }
         if let Ok(mut control) = self.shared.control.lock() {
-            *control = VideoControl {
-                paused,
-                looping,
-                restart_generation,
-                seek_ms,
-            };
+            control.update(paused, looping, restart_generation, seek_ms);
         } else {
             self.shared
                 .record_failure("Video control handoff failed; recreate this source");
@@ -428,8 +449,11 @@ impl<R: FrameReader> Playback<R> {
     }
     fn step(&mut self, control: VideoControl, now: u64) -> Result<Step, String> {
         if let Some(target_ms) = control.seek_ms {
-            let target_100ns = (target_ms as i64).saturating_mul(10_000);
-            let _ = self.reader.seek_100ns(target_100ns);
+            let target_100ns = i64::try_from(target_ms)
+                .ok()
+                .and_then(|value| value.checked_mul(10_000))
+                .ok_or("Video seek position exceeds the supported range")?;
+            self.reader.seek_100ns(target_100ns)?;
             self.pending = None;
             self.pending_observed = false;
             self.force_discontinuity = true;
@@ -774,10 +798,11 @@ mod native {
         let mut playback = Playback::new(reader, Arc::clone(&shared.feed));
         let origin = Instant::now();
         while !shared.stop.load(Ordering::Acquire) {
-            let control = *shared
+            let control = shared
                 .control
                 .lock()
-                .map_err(|_| "Video control handoff failed")?;
+                .map_err(|_| "Video control handoff failed")?
+                .take_snapshot();
             let now = u64::try_from(origin.elapsed().as_nanos())
                 .map_err(|_| "Video monotonic session time overflow")?;
             let step = playback.step(control, now)?;
@@ -855,6 +880,49 @@ mod tests {
         };
         (Playback::new(reader, Arc::clone(&feed)), feed, seeks)
     }
+    #[test]
+    fn seek_handoff_is_one_shot_and_survives_state_updates() {
+        let mut control = VideoControl::default();
+        control.update(true, false, 0, Some(123));
+        control.update(false, true, 0, None);
+        assert_eq!(control.take_snapshot().seek_ms, Some(123));
+        assert_eq!(control.take_snapshot().seek_ms, None);
+
+        control.update(false, true, 0, Some(200));
+        control.update(false, true, 0, Some(300));
+        let (mut playback, _, seeks) = playback(vec![0, 1_000_000]);
+        let snapshot = control.take_snapshot();
+        assert_eq!(snapshot.seek_ms, Some(300));
+        playback.step(snapshot, 0).unwrap();
+        playback.step(control.take_snapshot(), 1_000_000).unwrap();
+        assert_eq!(seeks.load(Ordering::Relaxed), 1);
+    }
+
+    #[test]
+    fn seek_failure_and_unrepresentable_position_are_reported() {
+        struct FailingSeek;
+        impl FrameReader for FailingSeek {
+            fn read(&mut self) -> Result<ReadEvent, String> {
+                Ok(ReadEvent::End)
+            }
+            fn seek_zero(&mut self) -> Result<(), String> {
+                Err("seek failed".into())
+            }
+            fn seek_100ns(&mut self, _position: i64) -> Result<(), String> {
+                Err("seek failed".into())
+            }
+        }
+        let feed = Arc::new(VideoFeed::new(InputId(1), 9).unwrap());
+        let mut playback = Playback::new(FailingSeek, feed);
+        let mut control = VideoControl {
+            seek_ms: Some(1),
+            ..VideoControl::default()
+        };
+        assert!(playback.step(control, 0).is_err());
+        control.seek_ms = Some(u64::MAX);
+        assert!(playback.step(control, 0).is_err());
+    }
+
     #[test]
     fn exact_pts_pacing_pause_resume_and_discontinuity_never_accumulate_float_time() {
         let mut pacer = Pacer::default();

@@ -42,7 +42,7 @@ impl RustMixApp {
     pub(crate) fn apply_properties(&mut self, mut draft: InputState) -> bool {
         if self.properties_loading {
             self.say(
-                "Wait for the PNG to finish loading before applying".into(),
+                "Wait for the image to finish loading before applying".into(),
                 true,
             );
             return false;
@@ -124,11 +124,11 @@ impl RustMixApp {
 
     pub(crate) fn commit_png_input(&mut self, fx: InputFx, index: usize) -> bool {
         let mut name = String::new();
-        let path = fx.media_path.as_deref().unwrap_or("PNG image.png");
+        let path = fx.media_path.as_deref().unwrap_or("Image.png");
         for ch in Path::new(path)
             .file_stem()
             .and_then(|s| s.to_str())
-            .unwrap_or("PNG image")
+            .unwrap_or("Image")
             .chars()
         {
             if name.len() + ch.len_utf8() > 64 {
@@ -166,7 +166,7 @@ impl RustMixApp {
             .name("rustmix-image-picker".into())
             .spawn(move || {
                 let path = rfd::FileDialog::new()
-                    .add_filter("PNG image", &["png"])
+                    .add_filter("Images", &["png", "jpg", "jpeg", "bmp"])
                     .pick_file();
                 let _ = tx.send(media::PickerDone { target, path });
             });
@@ -247,7 +247,7 @@ impl RustMixApp {
         );
         if !self.properties_loading {
             self.say(
-                "PNG queue is full; try again after loading finishes".into(),
+                "Image queue is full; try again after loading finishes".into(),
                 true,
             );
         }
@@ -286,7 +286,7 @@ impl RustMixApp {
                         self.add_image = Some(fx);
                         self.add_preview = None;
                         self.add_error = None;
-                        self.say("PNG ready · press OK to add input".into(), false);
+                        self.say("Image ready · press OK to add input".into(), false);
                     }
                     Err(error) => {
                         self.add_image = None;
@@ -304,7 +304,7 @@ impl RustMixApp {
                 match result {
                     Ok(image) => {
                         self.properties_fx.get_or_insert_default().set_image(image);
-                        self.say("PNG ready · press OK to apply".into(), false);
+                        self.say("Image ready · press OK to apply".into(), false);
                     }
                     Err(error) => self.say(format!("{error}; current source retained"), true),
                 }

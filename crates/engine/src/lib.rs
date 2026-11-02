@@ -173,9 +173,14 @@ impl InputState {
             )
     }
 
-    /// Audio sources and video inputs participate in audio routing, mixing and metering.
+    /// Only source types with an audio path participate in the mixer. A file
+    /// may have no audio track; its availability is established at runtime.
     pub fn has_audio(&self) -> bool {
-        self.config.audio_source.is_some() || self.config.video_source.is_some()
+        self.config.audio_source.is_some()
+            || matches!(
+                self.config.video_source.as_ref(),
+                Some(VideoSource::File { .. })
+            )
     }
 
     pub fn is_procedural_playback(&self) -> bool {
@@ -190,11 +195,11 @@ impl InputState {
             source.label()
         } else if let Some(source) = &self.config.video_source {
             match source {
-                VideoSource::File { .. } => "MP4 video",
+                VideoSource::File { .. } => "Video file",
                 _ => source.label(),
             }
         } else if self.config.media_path.is_some() {
-            "PNG image"
+            "Image"
         } else {
             self.kind.label()
         }

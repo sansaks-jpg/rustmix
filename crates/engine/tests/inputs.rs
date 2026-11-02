@@ -36,6 +36,55 @@ fn input_assets_effects_and_order_survive_atomic_save() {
 }
 
 #[test]
+fn still_image_formats_survive_project_save_and_load() {
+    let mut engine = Engine::default();
+    let before = (engine.project().program, engine.project().preview);
+    for path in ["picture.PNG", "picture.JPG", "picture.jpeg", "picture.BmP"] {
+        let config = InputConfig {
+            media_path: Some(path.into()),
+            ..Default::default()
+        };
+        let index = engine.project().inputs.len();
+        engine
+            .execute(
+                Command::AddInputAt {
+                    name: path.into(),
+                    kind: InputKind::Color,
+                    config,
+                    index,
+                },
+                0,
+            )
+            .unwrap();
+    }
+    assert_eq!((engine.project().program, engine.project().preview), before);
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("images.json");
+    persistence::save(&path, engine.project()).unwrap();
+    assert_eq!(persistence::load(&path).unwrap(), *engine.project());
+    for path in ["image.gif", "image.webp", "image.mp4"] {
+        let config = InputConfig {
+            media_path: Some(path.into()),
+            ..Default::default()
+        };
+        let index = engine.project().inputs.len();
+        assert!(
+            engine
+                .execute(
+                    Command::AddInputAt {
+                        name: path.into(),
+                        kind: InputKind::Color,
+                        config,
+                        index,
+                    },
+                    0,
+                )
+                .is_err()
+        );
+    }
+}
+
+#[test]
 fn invalid_input_edits_are_atomic_and_cycles_are_rejected() {
     let mut e = Engine::default();
     let mut first = e.project().inputs[0].clone();

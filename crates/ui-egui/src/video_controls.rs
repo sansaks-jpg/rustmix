@@ -1,7 +1,8 @@
-//! Local MP4 video sources. Descriptor probing runs on a bounded worker; one
+//! Local video sources. Descriptor probing runs on a bounded worker; one
 //! owner thread per input decodes and paces frames into an engine `VideoFeed`.
 //! The UI thread never opens Media Foundation, decodes a sample or blocks on a
-//! decoder read. Audio tracks, cameras and network inputs are not provided.
+//! decoder read. Audio is handled separately; camera and network inputs have
+//! distinct source workers.
 use super::*;
 use crate::dialogs::VIDEO_TAB;
 use crate::video_player::VideoPlayer;
@@ -10,7 +11,7 @@ use std::sync::mpsc::TryRecvError;
 
 /// Bounded local-file size for the descriptor; the decoder itself streams.
 #[cfg_attr(not(windows), allow(dead_code))]
-const MAX_MP4_BYTES: u64 = 4 * 1024 * 1024 * 1024;
+const MAX_VIDEO_FILE_BYTES: u64 = 4 * 1024 * 1024 * 1024;
 
 #[derive(Clone)]
 pub(crate) struct VideoProbe {
@@ -109,7 +110,7 @@ pub(crate) fn probe_video(path: PathBuf) -> std::result::Result<VideoProbe, Stri
     // Media Foundation on its own thread and releases them when it is dropped.
     let path_string = path
         .to_str()
-        .ok_or_else(|| "MP4 path must be valid text".to_owned())?
+        .ok_or_else(|| "Video path must be valid text".to_owned())?
         .to_owned();
     VideoSource::File {
         path: path_string.clone(),
@@ -117,9 +118,9 @@ pub(crate) fn probe_video(path: PathBuf) -> std::result::Result<VideoProbe, Stri
     .validate()
     .map_err(|error| error.to_string())?;
     let metadata = std::fs::metadata(&path)
-        .map_err(|error| format!("Could not inspect MP4 ({:?})", error.kind()))?;
-    if !metadata.is_file() || metadata.len() == 0 || metadata.len() > MAX_MP4_BYTES {
-        return Err("Choose a regular local MP4 file".into());
+        .map_err(|error| format!("Could not inspect video file ({:?})", error.kind()))?;
+    if !metadata.is_file() || metadata.len() == 0 || metadata.len() > MAX_VIDEO_FILE_BYTES {
+        return Err("Choose a regular local video file of at most 4 GiB".into());
     }
     let file = rustmix_platform::media_foundation::VideoFile::open(&path)
         .map_err(|error| error.to_string())?;
@@ -136,7 +137,7 @@ pub(crate) fn probe_video(path: PathBuf) -> std::result::Result<VideoProbe, Stri
 #[cfg(not(windows))]
 pub(crate) fn probe_video(_path: PathBuf) -> std::result::Result<VideoProbe, String> {
     // A descriptor must never imply that a decode backend exists here.
-    Err("Local MP4 decoding requires Windows Media Foundation".into())
+    Err("Local video decoding requires Windows Media Foundation".into())
 }
 
 impl RustMixApp {
@@ -369,7 +370,7 @@ impl RustMixApp {
             .spawn(move || {
                 let chosen = if picker {
                     rfd::FileDialog::new()
-                        .add_filter("MP4 video", &["mp4"])
+                        .add_filter("Video files", &["mp4", "m4v", "mov", "avi", "wmv"])
                         .pick_file()
                 } else {
                     Some(PathBuf::from(path))
@@ -386,7 +387,7 @@ impl RustMixApp {
             self.video_ui.job_token = token;
             self.video_ui.add_error = None;
         } else {
-            self.video_ui.add_error = Some("Could not start MP4 validation".into());
+            self.video_ui.add_error = Some("Could not start video validation".into());
         }
     }
 
@@ -469,7 +470,7 @@ impl RustMixApp {
                             [path_width, 26.0],
                             egui::TextEdit::singleline(&mut self.video_ui.path)
                                 .char_limit(4096)
-                                .hint_text("MP4 video file"),
+                                .hint_text("MP4, M4V, MOV, AVI or WMV file"),
                         )
                     })
                     .inner;
@@ -511,7 +512,7 @@ impl RustMixApp {
                         .show(ui, |ui| {
                             if self.video_ui.history.paths().is_empty() {
                                 ui.label(
-                                    RichText::new("Choose Browse or enter an MP4 path.")
+                                    RichText::new("Choose Browse or enter a video file path.")
                                         .color(FORM_TEXT),
                                 );
                             }
@@ -622,14 +623,14 @@ impl RustMixApp {
                 };
                 (
                     format!(
-                        "{}×{} · {rate:.3} fps · Video only",
+                        "{}×{} · {rate:.3} fps · Format probed; audio not verified",
                         probe.width, probe.height
                     ),
                     FORM_TEXT,
                 )
             } else {
                 (
-                    "MP4 video only. Add audio as a separate input.".into(),
+                    "MP4 / M4V / MOV / AVI / WMV · codec availability depends on Windows. Audio is experimental.".into(),
                     FORM_TEXT,
                 )
             };
@@ -655,7 +656,7 @@ impl RustMixApp {
     pub(crate) fn confirm_video_input(&mut self, ctx: &egui::Context) -> bool {
         let Some(probe) = &self.video_ui.probe else {
             self.video_ui.add_error =
-                Some("Validate a supported local MP4 before adding it".into());
+                Some("Validate a supported local video before adding it".into());
             return false;
         };
         if probe.path != self.video_ui.path || self.video_ui.job.is_some() {
@@ -795,6 +796,32 @@ mod tests {
     }
 
     #[test]
+    fn checked_video_containers_commit_without_switching_program() {
+        for path in [
+            r"C:\media\clip.MOV",
+            r"C:\media\clip.m4v",
+            r"C:\media\clip.avi",
+            r"C:\media\clip.wmv",
+        ] {
+            let mut app = RustMixApp::headless();
+            let ctx = egui::Context::default();
+            app.theme(&ctx);
+            let before = (app.engine.project().program, app.engine.project().preview);
+            app.video_ui.path = path.into();
+            assert!(!app.confirm_video_input(&ctx));
+            app.video_ui.probe = Some(probe(path));
+            assert!(app.confirm_video_input(&ctx));
+            assert!(app.engine.project().inputs.iter().any(|input| {
+                matches!(&input.config.video_source, Some(VideoSource::File { path: selected }) if selected == path)
+            }));
+            assert_eq!(
+                (app.engine.project().program, app.engine.project().preview),
+                before
+            );
+        }
+    }
+
+    #[test]
     fn unnamed_video_uses_a_bounded_file_name_without_switching_preview_or_program() {
         let mut app = RustMixApp::headless();
         let ctx = egui::Context::default();
@@ -865,7 +892,7 @@ mod tests {
     }
 
     #[test]
-    fn probe_worker_rejects_non_mp4_off_thread_and_reports_disconnect() {
+    fn probe_worker_rejects_unsupported_file_off_thread_and_reports_disconnect() {
         let mut app = RustMixApp::headless();
         let ctx = egui::Context::default();
         app.theme(&ctx);
@@ -873,13 +900,13 @@ mod tests {
         let size = [1600.0, 900.0];
         app.add_open = true;
         app.add_tab = VIDEO_TAB;
-        app.video_ui.path = r"C:\media\clip.avi".into();
+        app.video_ui.path = r"C:\media\clip.mkv".into();
         app.start_video_probe(&ctx, false);
         wait_probe(&mut app, &ctx, size);
         assert!(app.video_ui.probe.is_none());
         let error = app.video_ui.add_error.as_deref().unwrap_or_default();
         assert!(
-            error.to_ascii_lowercase().contains("mp4"),
+            error.to_ascii_lowercase().contains("video"),
             "unexpected probe error: {error}"
         );
         assert_eq!(*app.engine.project(), before);
@@ -1058,7 +1085,7 @@ mod tests {
         frame(
             &mut app,
             &ctx,
-            vec![egui::Event::Text(r"C:\media\clip.avi".into())],
+            vec![egui::Event::Text(r"C:\media\clip.mkv".into())],
             size,
         );
         click(&mut app, &ctx, "dialog.add.video.validate", size);
