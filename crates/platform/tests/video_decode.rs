@@ -162,6 +162,51 @@ fn generated_mp4_decodes_actual_colours_motion_pts_eof_and_seek() {
 }
 
 #[test]
+fn generated_mov_m4v_avi_and_wmv_decode_real_frames() {
+    let mp4 = fixture_path();
+    let directory = mp4.parent().expect("Fixture must have a parent directory");
+    for name in [
+        "video-fixture.mov",
+        "video-fixture.m4v",
+        "video-fixture.avi",
+        "video-fixture.wmv",
+    ] {
+        let path = directory.join(name);
+        assert!(
+            path.is_file(),
+            "Missing {}; regenerate fixtures with scripts/ci-video-fixture.ps1",
+            path.display()
+        );
+        let mut video = VideoFile::open(&path)
+            .unwrap_or_else(|error| panic!("Could not open {}: {error}", path.display()));
+        assert_eq!(video.source_size(), [160, 90], "{name}");
+        let mut frames = Vec::new();
+        for _ in 0..120 {
+            match video
+                .read_frame()
+                .unwrap_or_else(|error| panic!("{name}: {error}"))
+            {
+                VideoRead::Frame(frame) => {
+                    assert_eq!([frame.width, frame.height], [160, 90], "{name}");
+                    assert_rgb(&frame, 40, 20, [255, 0, 0]);
+                    frames.push(frame);
+                    if frames.len() == 2 {
+                        break;
+                    }
+                }
+                VideoRead::StreamTick { .. } | VideoRead::NoSample { .. } => {}
+                VideoRead::EndOfStream => break,
+            }
+        }
+        assert_eq!(frames.len(), 2, "{name} must yield successive real frames");
+        assert!(
+            frames[1].timestamp_100ns > frames[0].timestamp_100ns,
+            "{name}"
+        );
+    }
+}
+
+#[test]
 fn corrupt_regular_mp4_is_reported_as_an_error_and_a_valid_source_still_opens() {
     let directory = tempfile::tempdir().unwrap();
     let corrupt = directory.path().join("corrupt.mp4");

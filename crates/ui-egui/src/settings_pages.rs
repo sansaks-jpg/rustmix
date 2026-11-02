@@ -101,12 +101,9 @@ impl RustMixApp {
                     &[
                         (
                             "Local video",
-                            "Windows Media Foundation · experimental video-only playback".into(),
+                            "Media Foundation · MP4 / M4V / MOV / AVI / WMV · experimental".into(),
                         ),
-                        (
-                            "Images",
-                            "PNG stills; photo lists also accept JPEG / BMP".into(),
-                        ),
+                        ("Images", "PNG / JPEG / BMP stills and photo lists".into()),
                         ("Local audio", "WAV → 48 kHz stereo local mixer".into()),
                         ("Hardware decode", "Not qualified".into()),
                         (

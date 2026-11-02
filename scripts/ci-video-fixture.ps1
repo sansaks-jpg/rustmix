@@ -48,8 +48,12 @@ $artifacts = [System.IO.Path]::GetFullPath($OutputDirectory)
 New-Item -ItemType Directory -Path $artifacts -Force | Out-Null
 $fixturePath = Join-Path $artifacts 'video-fixture.mp4'
 $manifestPath = Join-Path $artifacts 'video-fixture.json'
-if ((Test-Path -LiteralPath $fixturePath) -or (Test-Path -LiteralPath $manifestPath)) {
-    throw 'Video fixture outputs already exist; choose an empty output directory'
+$extraPaths = @('video-fixture.mov', 'video-fixture.m4v', 'video-fixture.avi', 'video-fixture.wmv') |
+    ForEach-Object { Join-Path $artifacts $_ }
+foreach ($output in @($fixturePath, $manifestPath) + $extraPaths) {
+    if (Test-Path -LiteralPath $output) {
+        throw 'Video fixture outputs already exist; choose an empty output directory'
+    }
 }
 
 $temporaryRoot = if ($env:RUNNER_TEMP) { $env:RUNNER_TEMP } else { [System.IO.Path]::GetTempPath() }
@@ -129,6 +133,32 @@ $encoding = Invoke-FixtureTool -Executable $ffmpegPath -Arguments $arguments
 if (-not (Test-Path -LiteralPath $fixturePath -PathType Leaf)) { throw 'FFmpeg did not create the expected MP4 fixture' }
 $fixture = Get-Item -LiteralPath $fixturePath
 if ($fixture.Length -lt 1000 -or $fixture.Length -gt 1048576) { throw 'Generated MP4 fixture has an unexpected size' }
+
+# Exercise real containers and codecs, not an MP4 renamed with a different suffix.
+# MOV and M4V contain the original H.264 stream; AVI and WMV are transcoded to
+# MJPEG and WMV2, respectively, both documented Media Foundation decoders.
+$variants = @(
+    @{ name = 'video-fixture.mov'; codec = 'H.264'; args = @('-c:v', 'copy', '-f', 'mov') },
+    @{ name = 'video-fixture.m4v'; codec = 'H.264'; args = @('-c:v', 'copy', '-f', 'mp4') },
+    @{ name = 'video-fixture.avi'; codec = 'MJPEG'; args = @('-c:v', 'mjpeg', '-q:v', '2', '-pix_fmt', 'yuvj420p') },
+    @{ name = 'video-fixture.wmv'; codec = 'WMV2'; args = @('-c:v', 'wmv2', '-q:v', '2', '-pix_fmt', 'yuv420p') }
+)
+$extraFixtures = @()
+foreach ($variant in $variants) {
+    $output = Join-Path $artifacts $variant.name
+    $variantArgs = @('-hide_banner', '-nostdin', '-loglevel', 'error', '-n', '-i', $fixturePath, '-an') + $variant.args + @($output)
+    $variantEncoding = Invoke-FixtureTool -Executable $ffmpegPath -Arguments $variantArgs
+    $file = Get-Item -LiteralPath $output
+    if ($file.Length -lt 1000 -or $file.Length -gt 10485760) { throw "Unexpected size for $($variant.name)" }
+    $extraFixtures += [ordered]@{
+        path = $file.FullName
+        codec = $variant.codec
+        bytes = $file.Length
+        sha256 = (Get-FileHash -LiteralPath $output -Algorithm SHA256).Hash.ToLowerInvariant()
+        arguments = $variantArgs
+        encoder_stderr = $variantEncoding.stderr
+    }
+}
 $manifest = [ordered]@{
     schema = 1
     generated_utc = [DateTime]::UtcNow.ToString('o')
@@ -147,6 +177,7 @@ $manifest = [ordered]@{
     fixture_path = $fixture.FullName
     fixture_sha256 = (Get-FileHash -LiteralPath $fixturePath -Algorithm SHA256).Hash.ToLowerInvariant()
     fixture_bytes = $fixture.Length
+    extra_fixtures = $extraFixtures
     ffmpeg = [ordered]@{
         origin = $origin
         path = $ffmpegPath

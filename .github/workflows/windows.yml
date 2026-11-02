@@ -1,7 +1,7 @@
 name: Windows native UI
 on:
   push:
-    branches: [main, 'codex/**']
+    branches: [main, 'codex/**', 'arena/**']
     paths-ignore:
       - '**/*.md'
   workflow_dispatch:
@@ -31,7 +31,24 @@ jobs:
           shared-key: native-ui-v2-complete
           cache-on-failure: false
       - name: Formatting
-        run: cargo fmt --all -- --check
+        shell: pwsh
+        run: |
+          cargo fmt --all -- --check
+          if ($LASTEXITCODE -ne 0) {
+            cargo fmt --all
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            $patch = git diff -- '*.rs' | Out-String
+            $encoded = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($patch))
+            $chunkSize = 3500
+            $chunks = [int][Math]::Ceiling($encoded.Length / $chunkSize)
+            if ($chunks -gt 10) { throw 'Rustfmt patch exceeds annotation capacity' }
+            for ($index = 0; $index -lt $chunks; $index++) {
+              $offset = $index * $chunkSize
+              $part = $encoded.Substring($offset, [Math]::Min($chunkSize, $encoded.Length - $offset))
+              Write-Output "::error title=Rustfmt patch $($index + 1) of $($chunks)::$part"
+            }
+            exit 1
+          }
       - name: Dependency layering and asset inventory
         shell: pwsh
         run: ./scripts/check-repository.ps1
@@ -43,7 +60,26 @@ jobs:
         shell: pwsh
         run: ./scripts/ci-video-fixture.ps1
       - name: Run workspace tests
-        run: cargo test --workspace --all-targets --locked
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Continue'
+          $PSNativeCommandUseErrorActionPreference = $false
+          $log = Join-Path $env:RUNNER_TEMP 'rustmix-test.log'
+          cargo test --workspace --all-targets --locked 2>&1 | Tee-Object -FilePath $log
+          $testCode = $LASTEXITCODE
+          if ($testCode -ne 0) {
+            $tail = Get-Content -LiteralPath $log -Tail 120 | Out-String
+            if ($tail.Length -gt 5000) { $tail = $tail.Substring($tail.Length - 5000) }
+            $encoded = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($tail))
+            $chunkSize = 3500
+            $chunks = [int][Math]::Ceiling($encoded.Length / $chunkSize)
+            for ($index = 0; $index -lt $chunks; $index++) {
+              $offset = $index * $chunkSize
+              $part = $encoded.Substring($offset, [Math]::Min($chunkSize, $encoded.Length - $offset))
+              Write-Output "::error title=Test output $($index + 1) of $($chunks)::$part"
+            }
+            exit $testCode
+          }
       - name: Build release on GitHub only
         run: cargo build --release --workspace --locked
       - name: Package Windows executable
@@ -57,7 +93,7 @@ jobs:
           $env:GITHUB_SHA | Set-Content dist/BUILD-COMMIT.txt
           ./scripts/collect-notices.ps1
           Get-FileHash -Algorithm SHA256 dist/rustmix.exe | Format-List | Out-File dist/SHA256.txt
-          'Experimental core build. This workflow compiles and packages without running automated tests. See AUDIT.md for local checks and their limits. Physical display/audio and production endurance are not qualified.' | Set-Content dist/BUILD-STATUS.txt
+          'Experimental core build. This workflow runs formatting, workspace checks, Clippy and tests before packaging. Physical display/audio and production endurance are not qualified; see AUDIT.md.' | Set-Content dist/BUILD-STATUS.txt
       - uses: actions/upload-artifact@v4
         if: ${{ success() && hashFiles('dist/rustmix.exe') != '' }}
         with:

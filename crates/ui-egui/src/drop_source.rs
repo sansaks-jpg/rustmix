@@ -1,7 +1,7 @@
 //! Drag-and-drop intake for media files. A dropped file runs the same bounded
-//! validation as the Add Input dialog (MP4 probe, WAV decode, PNG decode) on a
+//! validation as the Add Input dialog (video probe, WAV decode, image decode) on a
 //! worker thread; only a validated descriptor is committed as an input. The
-//! supported set matches the engine exactly — MP4 video, WAV audio, PNG images
+//! supported set matches the engine exactly — MP4/M4V/MOV/AVI/WMV video, WAV audio, PNG/JPEG/BMP images
 //! — so a drop can never produce the rejected half-configured source the
 //! extension match alone once implied. Failed validation leaves the project
 //! untouched and reports the operator-readable reason.
@@ -33,7 +33,7 @@ impl DropMedia {
 pub(crate) enum DropValidated {
     Video { path: String },
     Audio { path: String },
-    Image(media::DecodedPng),
+    Image(media::DecodedImage),
 }
 
 struct DropRequest {
@@ -101,7 +101,7 @@ impl DropIntake {
                             .map(|probe| DropValidated::Video { path: probe.path }),
                         DropMedia::Audio => audio_controls::validate_wav(path.clone())
                             .map(|info| DropValidated::Audio { path: info.path }),
-                        DropMedia::Image => media::decode_png(&path).map(DropValidated::Image),
+                        DropMedia::Image => media::decode_image(&path).map(DropValidated::Image),
                     };
                     let _ = sender.try_send(result);
                     repaint.request_repaint();
@@ -352,6 +352,51 @@ mod tests {
         assert!(!app.warning, "{}", app.notice);
     }
 
+    #[test]
+    fn dropped_jpeg_and_bmp_are_validated_before_commit() {
+        let directory = tempfile::tempdir().unwrap();
+        for (name, format) in [
+            ("still.JPG", image::ImageFormat::Jpeg),
+            ("still.bmp", image::ImageFormat::Bmp),
+        ] {
+            let path = directory.path().join(name);
+            image::save_buffer_with_format(
+                &path,
+                &[170, 30, 50].repeat(16 * 9),
+                16,
+                9,
+                image::ColorType::Rgb8,
+                format,
+            )
+            .unwrap();
+            let mut app = RustMixApp::headless();
+            let ctx = egui::Context::default();
+            let before = (app.engine.project().program, app.engine.project().preview);
+            app.handle_dropped_file(&path);
+            assert!(app.drop_intake.busy());
+            wait_drop(&mut app, &ctx);
+            let input = app.engine.project().inputs.last().unwrap();
+            assert_eq!(
+                input.config.media_path.as_deref(),
+                Some(path.canonicalize().unwrap().to_str().unwrap())
+            );
+            assert!(app.input_fx.get(&input.id).unwrap().custom_rgba.is_some());
+            assert_eq!(
+                (app.engine.project().program, app.engine.project().preview),
+                before
+            );
+            assert!(!app.warning, "{}", app.notice);
+
+            let invalid = directory.path().join(format!("invalid-{name}"));
+            std::fs::write(&invalid, b"broken image").unwrap();
+            let project = app.engine.project().clone();
+            app.handle_dropped_file(&invalid);
+            wait_drop(&mut app, &ctx);
+            assert!(app.warning);
+            assert_eq!(*app.engine.project(), project);
+        }
+    }
+
     #[cfg(windows)]
     #[test]
     fn dropped_mp4_probes_then_commits_a_video_only_input() {
@@ -389,6 +434,44 @@ mod tests {
         assert!(!app.warning, "{}", app.notice);
     }
 
+    #[cfg(windows)]
+    #[test]
+    fn dropped_additional_video_containers_probe_before_commit() {
+        let fixture = std::env::var_os("RUSTMIX_TEST_VIDEO")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| {
+                PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../artifacts/video-fixture.mp4")
+            });
+        let directory = fixture.parent().unwrap();
+        for name in [
+            "video-fixture.mov",
+            "video-fixture.m4v",
+            "video-fixture.avi",
+            "video-fixture.wmv",
+        ] {
+            let path = directory.join(name);
+            assert!(
+                path.is_file(),
+                "Missing generated fixture {}",
+                path.display()
+            );
+            let mut app = RustMixApp::headless();
+            let ctx = egui::Context::default();
+            let before = (app.engine.project().program, app.engine.project().preview);
+            app.handle_dropped_file(&path);
+            assert!(app.drop_intake.busy());
+            wait_drop(&mut app, &ctx);
+            assert!(!app.warning, "{name}: {}", app.notice);
+            assert!(app.engine.project().inputs.iter().any(|input| {
+                matches!(&input.config.video_source, Some(VideoSource::File { path: source }) if source == path.to_str().unwrap())
+            }));
+            assert_eq!(
+                (app.engine.project().program, app.engine.project().preview),
+                before
+            );
+        }
+    }
+
     #[test]
     fn dropped_media_with_unsupported_content_is_refused_not_half_added() {
         let directory = tempfile::tempdir().unwrap();
@@ -408,11 +491,11 @@ mod tests {
     #[test]
     fn unsupported_dropped_formats_are_refused_without_side_effects() {
         for (name, expected) in [
-            ("clip.MOV", "Only MP4 video files"),
-            ("clip.mkv", "Only MP4 video files"),
+            ("clip.webm", "Use MP4, M4V, MOV, AVI or WMV"),
+            ("clip.mkv", "Use MP4, M4V, MOV, AVI or WMV"),
             ("song.mp3", "Only WAV audio"),
-            ("photo.jpeg", "Only PNG images"),
-            ("sheet.bmp", "Only PNG images"),
+            ("photo.gif", "Only PNG, JPEG and BMP"),
+            ("sheet.tiff", "Only PNG, JPEG and BMP"),
             ("notes.txt", "Unsupported file format"),
             ("archive.tar", "Unsupported file format"),
             ("data.json", "Unsupported file format"),
@@ -477,7 +560,7 @@ mod tests {
         inject(
             &mut app,
             DropMedia::Image,
-            Ok(DropValidated::Image(media::DecodedPng {
+            Ok(DropValidated::Image(media::DecodedImage {
                 path: r"C:\media\still.png".into(),
                 original_size: [2, 2],
                 width: 2,

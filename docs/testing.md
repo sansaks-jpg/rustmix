@@ -1,5 +1,13 @@
 # Verification
 
+Input video container source candidate (2026-11-02): `scripts/ci-video-fixture.ps1`
+now generates MOV/M4V H.264, AVI MJPEG and WMV2 alongside the original MP4.
+Platform and drop tests require all five files in the same directory; use a
+fresh output directory and set `RUSTMIX_TEST_VIDEO` to its `video-fixture.mp4`.
+These new tests and the corresponding source changes have not been run in the
+current Linux sandbox (no Rust/Cargo, PowerShell or Windows Media Foundation).
+Previously recorded Windows runs apply only to their named revisions.
+
 UI-041 (2026-10-24) — reference-verification sweep of the UI-040 alignment
 work (commit `101c41f` plus its in-flight fixes); runs under the UI-036 owner
 instruction. Method: four reference areas were freshly re-derived from the

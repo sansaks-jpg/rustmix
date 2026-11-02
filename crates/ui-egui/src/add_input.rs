@@ -298,7 +298,7 @@ impl RustMixApp {
                     && image.custom_rgba.is_some()
             })
         {
-            return Some("Choose a PNG image and check it before adding.".into());
+            return Some("Choose a PNG, JPEG or BMP image and check it before adding.".into());
         }
         if generator_category(self.add_tab) {
             let name = self.add_name.trim();
@@ -317,12 +317,9 @@ impl RustMixApp {
         self.add_preview = None;
         self.add_error = None;
         let path = PathBuf::from(&self.add_png_path);
-        if !path
-            .extension()
-            .and_then(|x| x.to_str())
-            .is_some_and(|x| x.eq_ignore_ascii_case("png"))
-        {
-            self.add_error = Some("Choose a PNG file. Use Video for MP4 files.".into());
+        if media::image_format(&path).is_none() {
+            self.add_error =
+                Some("Choose a PNG, JPEG or BMP image. Use Video for video files.".into());
             return;
         }
         self.add_loading = self.media_loader.enqueue(
@@ -377,7 +374,7 @@ impl RustMixApp {
     }
 
     fn png_add_page(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
-        page_header(ui, "Select a PNG still image.");
+        page_header(ui, "Select a PNG, JPEG or BMP still image.");
         egui::Frame::new().inner_margin(8).show(ui, |ui| {
             ui.horizontal(|ui| {
                 let width = (ui.available_width() - 94.0).max(120.0);
@@ -387,7 +384,7 @@ impl RustMixApp {
                             [width, 26.0],
                             egui::TextEdit::singleline(&mut self.add_png_path)
                                 .char_limit(4096)
-                                .hint_text("PNG image file"),
+                                .hint_text("PNG, JPEG or BMP image file"),
                         )
                     })
                     .inner;
@@ -482,11 +479,12 @@ impl RustMixApp {
             let status = if self.add_loading {
                 "Checking image…".into()
             } else if let Some(image) = &self.add_image {
-                image
-                    .image_size
-                    .map_or("PNG ready".into(), |[w, h]| format!("{w}×{h} · PNG ready"))
+                image.image_size.map_or("Image ready".into(), |[w, h]| {
+                    format!("{w}×{h} · image ready")
+                })
             } else {
-                "PNG only · maximum 32 MiB / 4096 pixels. Clear selection keeps the file.".into()
+                "PNG / JPEG / BMP · maximum 32 MiB / 4096 pixels. Clear selection keeps the file."
+                    .into()
             };
             ui.add(egui::Label::new(RichText::new(&status).color(FORM_TEXT)).truncate())
                 .on_hover_text(status);
@@ -699,6 +697,48 @@ mod tests {
                 "bounded PNG worker did not complete"
             );
             std::thread::sleep(Duration::from_millis(5));
+        }
+    }
+
+    #[test]
+    fn image_page_checks_and_adds_jpeg_and_bmp_without_switching_program() {
+        let directory = tempfile::tempdir().unwrap();
+        for (name, format) in [
+            ("portrait.JPEG", image::ImageFormat::Jpeg),
+            ("still.BMP", image::ImageFormat::Bmp),
+        ] {
+            let path = directory.path().join(name);
+            image::save_buffer_with_format(
+                &path,
+                &[80, 120, 160].repeat(16 * 9),
+                16,
+                9,
+                image::ColorType::Rgb8,
+                format,
+            )
+            .unwrap();
+            let mut app = RustMixApp::headless();
+            let ctx = egui::Context::default();
+            app.theme(&ctx);
+            let before = (app.engine.project().program, app.engine.project().preview);
+            app.dispatch(Action::Add, &ctx);
+            app.select_add_category(1);
+            app.add_png_path = path.to_string_lossy().into_owned();
+            assert!(app.add_disabled_reason().is_some());
+            click(&mut app, &ctx, "dialog.add.png.validate");
+            wait_image(&mut app);
+            assert!(app.add_disabled_reason().is_none());
+            click(&mut app, &ctx, "dialog.add.confirm");
+            let input = app.engine.project().inputs.last().unwrap();
+            assert_eq!(
+                input.config.media_path.as_deref(),
+                Some(path.canonicalize().unwrap().to_str().unwrap())
+            );
+            assert!(app.input_fx.get(&input.id).unwrap().custom_rgba.is_some());
+            assert_eq!(
+                (app.engine.project().program, app.engine.project().preview),
+                before
+            );
         }
     }
 

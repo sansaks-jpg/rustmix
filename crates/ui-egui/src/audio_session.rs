@@ -676,22 +676,9 @@ fn resolve_companion_wav(video_path: &str) -> Option<String> {
     if wav.is_file() {
         return wav.to_str().map(String::from);
     }
-    if let Some(parent) = p.parent() {
-        let fixture = parent.join("audio-fixture.wav");
-        if fixture.is_file() {
-            return fixture.to_str().map(String::from);
-        }
-        let companion = parent.join("audio.wav");
-        if companion.is_file() {
-            return companion.to_str().map(String::from);
-        }
-    }
-    if video_path.contains("fixture") {
-        let root_fixture = std::path::Path::new("artifacts/audio-fixture.wav");
-        if root_fixture.is_file() {
-            return root_fixture.to_str().map(String::from);
-        }
-    }
+    // Never substitute a generic or test-fixture file: that could send an
+    // unrelated recording to Program. Without an exact sibling, try the video
+    // file's own audio path instead.
     None
 }
 
@@ -898,6 +885,23 @@ fn run(engine: Engine, output_device: Option<String>, shared: &Shared) -> Result
 mod tests {
     #![allow(clippy::indexing_slicing, clippy::unwrap_used)]
     use super::*;
+    #[test]
+    fn video_companion_never_selects_an_unrelated_audio_file() {
+        let directory = tempfile::tempdir().unwrap();
+        let video = directory.path().join("show-fixture.mp4");
+        std::fs::write(directory.path().join("audio.wav"), b"unrelated").unwrap();
+        std::fs::write(directory.path().join("audio-fixture.wav"), b"unrelated").unwrap();
+        let video_path = video.to_str().unwrap();
+        assert_eq!(resolve_companion_wav(video_path), None);
+
+        let sibling = video.with_extension("wav");
+        std::fs::write(&sibling, b"companion").unwrap();
+        assert_eq!(
+            resolve_companion_wav(video_path).as_deref(),
+            sibling.to_str()
+        );
+    }
+
     #[test]
     fn clip_end_loop_pause_and_restart_follow_actual_sample_duration() {
         let mut clip = ClipCursor {

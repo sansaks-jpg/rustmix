@@ -1633,7 +1633,7 @@ impl RustMixApp {
                                                     && (fx.media_path.is_some() || fx.video_source.is_some()) && fx.custom_rgba.is_none() {
                                                     let (label, color) = if fx.video_source.is_some() {
                                                         if fx.image_error.is_some() { ("VIDEO UNAVAILABLE", RED) } else { ("LOADING VIDEO…", self.preview_color()) }
-                                                    } else if fx.image_error.is_some() { ("PNG UNAVAILABLE", RED) } else { ("LOADING PNG…", self.preview_color()) };
+                                                    } else if fx.image_error.is_some() { ("IMAGE UNAVAILABLE", RED) } else { ("LOADING IMAGE…", self.preview_color()) };
                                                     ui.painter().text(response.rect.center(), egui::Align2::CENTER_CENTER,
                                                         label,
                                                         egui::FontId::proportional(11.0), color);
@@ -1874,7 +1874,11 @@ impl RustMixApp {
                                                     }
                                                     let audio_resp = ui
                                                         .add_enabled(input.has_audio(), audio_btn)
-                                                        .on_hover_text("Toggle Input Audio");
+                                                        .on_hover_text(if input.has_audio() {
+                                                            "Toggle Input Audio"
+                                                        } else {
+                                                            "Audio is not available for this source"
+                                                        });
                                                     self.automation.insert(
                                                         format!("input.{}.audio", input.id.0),
                                                         audio_resp.rect,
@@ -3312,6 +3316,63 @@ mod processing_tests {
         assert!(app.automation.contains_key("audio.input.1.strip"));
         assert!(!app.automation.contains_key("audio.input.2.strip"));
         assert_eq!(app.audio_ui.status_label(), "off");
+    }
+
+    #[test]
+    fn mixer_omits_sources_without_an_audio_backend() {
+        for (source, has_audio) in [
+            (
+                VideoSource::File {
+                    path: "clip.mp4".into(),
+                },
+                true,
+            ),
+            (
+                VideoSource::Photos {
+                    paths: vec!["still.png".into()],
+                    interval_ms: 1000,
+                },
+                false,
+            ),
+            (
+                VideoSource::Camera {
+                    device_id: "test-camera".into(),
+                    format: None,
+                },
+                false,
+            ),
+            (
+                VideoSource::Browser {
+                    url: "http://127.0.0.1/".into(),
+                    width: 640,
+                    height: 360,
+                },
+                false,
+            ),
+        ] {
+            let mut app = RustMixApp::headless();
+            app.engine = Engine::new_preset(VideoStandard::default(), 0).unwrap();
+            let mut input = app.engine.project().inputs.first().cloned().unwrap();
+            input.config.video_source = Some(source);
+            app.engine.execute(Command::UpdateInput(input), 0).unwrap();
+            let ctx = egui::Context::default();
+            for _ in 0..3 {
+                let _ = ctx.run_ui(
+                    egui::RawInput {
+                        screen_rect: Some(Rect::from_min_size(
+                            Pos2::ZERO,
+                            egui::vec2(1600.0, 400.0),
+                        )),
+                        ..Default::default()
+                    },
+                    |ui| app.audio(ui),
+                );
+            }
+            assert_eq!(
+                app.automation.contains_key("audio.input.1.strip"),
+                has_audio
+            );
+        }
     }
 
     #[test]

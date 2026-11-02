@@ -1,5 +1,11 @@
 # rustmix-platform
 
+2026-11-02 source candidate: the local video path also permits M4V, MOV, AVI and
+WMV containers through Windows Media Foundation, with codec availability subject
+to Windows. New real-container fixture tests are prepared but have not been run;
+prior MP4 acceptance does not qualify these formats. See
+[the input review](../../docs/input-parity-review.md).
+
 UI-034 candidate: Media Foundation enumerates at most 256 native formats for the
 selected camera without reading frames. Exact size/rate/scan/subtype are selected
 again for Check/runtime; mismatches fail without a fallback camera. Processing

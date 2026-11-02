@@ -1,4 +1,4 @@
-//! Experimental, synchronous Windows Media Foundation decoding of local MP4
+//! Experimental, synchronous Windows Media Foundation decoding of local video
 //! files. Create, read, seek and drop a `VideoFile` on one dedicated worker.
 //! `ReadSample`, opening and seeking can block that worker; this is not a
 //! bounded-cancellation camera/network implementation. No audio is decoded.
@@ -379,11 +379,11 @@ pub struct VideoFile {
 }
 
 impl VideoFile {
-    /// Open a local `.mp4` file and request RGB32 downscaled to at most 1920x1080 (Full HD).
+    /// Open a local video file and request RGB32 downscaled to at most 1920x1080 (Full HD).
     /// A processor may reject resizing; then a bounded native-size RGB32
     /// fallback is attempted and `format()` exposes the actual returned raster.
     pub fn open(path: &Path) -> Result<Self> {
-        let wide = local_mp4_path(path)?;
+        let wide = local_video_path(path)?;
         let runtime = Runtime::start()?;
         let mut attributes = None;
         // SAFETY: The initialized owner thread provides an exclusively borrowed
@@ -411,7 +411,7 @@ impl VideoFile {
         // SAFETY: `wide` is a validated, NUL-terminated local filename and lives
         // through this synchronous call. Attributes remain live; the returned
         // interface is exclusively managed on the COM/MF owner thread.
-        let reader = mf("open local MP4", unsafe {
+        let reader = mf("open local video", unsafe {
             MFCreateSourceReaderFromURL(PCWSTR(wide.as_ptr()), &attributes)
         })?;
         Self::from_reader(runtime, None, reader, None)
@@ -659,6 +659,9 @@ impl VideoFile {
         let duration = unsafe {
             match sample.GetSampleDuration() {
                 Ok(value) if value > 0 => Some(value),
+                // Some Windows decoders report zero when the duration is unknown.
+                // The player falls back to the negotiated frame rate in that case.
+                Ok(0) => None,
                 Ok(_) => return Err(VideoError::Invalid("Invalid video sample duration")),
                 Err(error) if error.code() == MF_E_NO_SAMPLE_DURATION => None,
                 Err(error) => return mf("read video sample duration", Err(error)),
@@ -729,7 +732,7 @@ impl VideoFile {
     }
 }
 
-fn local_mp4_path(path: &Path) -> Result<Vec<u16>> {
+fn local_video_path(path: &Path) -> Result<Vec<u16>> {
     let text = path
         .to_str()
         .ok_or(VideoError::Invalid("Video filename must be valid Unicode"))?;
@@ -742,10 +745,14 @@ fn local_mp4_path(path: &Path) -> Result<Vec<u16>> {
         || !path
             .extension()
             .and_then(|extension| extension.to_str())
-            .is_some_and(|extension| extension.eq_ignore_ascii_case("mp4"))
+            .is_some_and(|extension| {
+                ["mp4", "m4v", "mov", "avi", "wmv"]
+                    .iter()
+                    .any(|supported| extension.eq_ignore_ascii_case(supported))
+            })
     {
         return Err(VideoError::Invalid(
-            "Select a local MP4 file (maximum 4096-byte path)",
+            "Select a local MP4, M4V, MOV, AVI or WMV file (maximum 4096-byte path)",
         ));
     }
     let canonical = path.canonicalize().map_err(VideoError::File)?;

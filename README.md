@@ -8,8 +8,11 @@ build with original code, controls and branding; not affiliated with vMix.
 - Independent Preview and Program, Cut, T-bar, fade to black, twenty CPU transitions
   across four configurable slots (fresh sessions open with Fade 500 ms, Merge, Wipe,
   Merge at 1000 ms), caption overlays and per-input processing.
-- PNG, local MP4 video, colour/test generators, camera descriptors, local WAV and
-  microphone inputs. Files/devices are validated; camera hardware is unqualified.
+- PNG, JPEG and BMP still images; local MP4, M4V, MOV, AVI and WMV video;
+  colour/test generators, camera descriptors, local WAV and microphone inputs.
+  JPEG/BMP and the additional video containers are source candidates pending
+  Rust and Windows verification. Codec support depends on Windows; camera
+  hardware is unqualified.
 - Sample-based 48 kHz stereo routing across nine buses (Master, A–G, Headphones) with
   per-input sends, gain/mute/solo and explicitly started Windows local monitoring.
   Master peak levels are measured; per-input and per-bus metering is unavailable.
@@ -36,8 +39,9 @@ remain for compatibility; a menu or descriptor is not backend qualification.
 3. Use Cut/Space, Fade/Enter or the T-bar to take Preview to Program. B toggles
    fade to black. Editing text/dialogs suppresses production shortcuts.
 4. Timed generators/media have transport controls; blank/static/live inputs do
-   not acquire a fabricated sixty-second progress bar. Audio strips appear only
-   for sources that actually provide audio. MP4 currently provides video only.
+   not acquire a fabricated sixty-second progress bar. The audio monitor can
+   attempt video-file audio or a same-stem WAV, but that path is experimental and
+   is not synchronized with video.
 5. Configure WAV/microphone sources and use Settings -> Audio I/O to explicitly
    start/stop local monitoring. Adding an audio descriptor never starts a device.
 6. Use the Fullscreen arrow for the separate Program window/display selection.
@@ -48,8 +52,8 @@ remain for compatibility; a menu or descriptor is not backend qualification.
 ## Windows build and verification
 
 The current owner request authorizes local deterministic checks and manual laptop
-acceptance before push. GitHub Actions compiles and packages the `.exe` **without
-running automated tests**. Packaging requires a successful build and includes
+acceptance before push. GitHub Actions runs workspace checks and tests, then
+compiles and packages the `.exe`. Packaging requires a successful build and includes
 `BUILD-COMMIT.txt`, `SHA256.txt` and `AUDIT.md` so the artifact can be traced to its
 source. It is an unsigned portable executable, not an installer.
 

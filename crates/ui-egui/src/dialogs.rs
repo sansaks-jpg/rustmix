@@ -173,9 +173,9 @@ pub(super) const ADD_CATEGORIES: [(&str, InputKind, &str); 26] = [
         "Choose an original procedural generator.",
     ),
     (
-        "PNG Image",
+        "Image",
         InputKind::Color,
-        "Choose a PNG still image (up to 32 MiB / 4096px).",
+        "Choose a PNG, JPEG or BMP still image (up to 32 MiB / 4096px).",
     ),
     (
         "List",
@@ -270,7 +270,7 @@ pub(super) const ADD_CATEGORIES: [(&str, InputKind, &str); 26] = [
     (
         VIDEO_TAB_LABEL,
         InputKind::Color,
-        "Select a local MP4 video file (video only, Windows Media Foundation).",
+        "Select a local MP4, M4V, MOV, AVI or WMV video file (Windows Media Foundation).",
     ),
     ("DVD", InputKind::Color, "DVD input is unavailable."),
     (
@@ -620,7 +620,7 @@ impl RustMixApp {
                     });
                     ui.label(RichText::new("Number").size(12.0).color(Color32::WHITE));
                     if self.add_loading {
-                        ui.label("Loading PNG…");
+                        ui.label("Loading image…");
                     }
                 });
             });
@@ -750,14 +750,14 @@ impl RustMixApp {
                                 });
                             });
                         });
-                    if app.properties_loading { ui.colored_label(PREVIEW, "Loading PNG… current source stays active"); }
+                    if app.properties_loading { ui.colored_label(PREVIEW, "Loading image… current source stays active"); }
                     if let Some(fx) = &app.properties_fx {
                         if let Some(error) = &fx.image_error { ui.colored_label(RED, error); }
                         if let Some([w, h]) = fx.image_size {
                             if fx.video_source.is_some() {
-                                ui.label(format!("Local MP4 video: {w} × {h} · owner decoder / CPU preview / Program"));
+                                ui.label(format!("Local video: {w} × {h} · owner decoder / CPU preview / Program"));
                             } else {
-                                ui.label(format!("PNG source: {w} × {h} · CPU preview / Program"));
+                                ui.label(format!("Image source: {w} × {h} · CPU preview / Program"));
                             }
                         }
                     }
@@ -1124,7 +1124,7 @@ impl RustMixApp {
                                 if let Some(error)=app.input_fx.get(&id).and_then(|fx|fx.image_error.as_ref()) { ui.colored_label(RED,error); }
                             }
                             if let Some(VideoSource::File { path }) = &draft.config.video_source {
-                                ui.label("Source type: MP4 video, decoded on its own owner worker. Video audio is linked to the Audio Mixer.");
+                                ui.label("Local video uses an owner decoder. Audio is experimental and not synchronized.");
                                 ui.label(format!("Path: {path}"));
                                 if let Some(fx) = app.input_fx.get(&id) {
                                     match (&fx.image_error, fx.custom_rgba.is_some()) {
