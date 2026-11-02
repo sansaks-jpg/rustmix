@@ -60,7 +60,26 @@ jobs:
         shell: pwsh
         run: ./scripts/ci-video-fixture.ps1
       - name: Run workspace tests
-        run: cargo test --workspace --all-targets --locked
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Continue'
+          $PSNativeCommandUseErrorActionPreference = $false
+          $log = Join-Path $env:RUNNER_TEMP 'rustmix-test.log'
+          cargo test --workspace --all-targets --locked 2>&1 | Tee-Object -FilePath $log
+          $testCode = $LASTEXITCODE
+          if ($testCode -ne 0) {
+            $tail = Get-Content -LiteralPath $log -Tail 120 | Out-String
+            if ($tail.Length -gt 5000) { $tail = $tail.Substring($tail.Length - 5000) }
+            $encoded = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($tail))
+            $chunkSize = 3500
+            $chunks = [int][Math]::Ceiling($encoded.Length / $chunkSize)
+            for ($index = 0; $index -lt $chunks; $index++) {
+              $offset = $index * $chunkSize
+              $part = $encoded.Substring($offset, [Math]::Min($chunkSize, $encoded.Length - $offset))
+              Write-Output "::error title=Test output $($index + 1) of $($chunks)::$part"
+            }
+            exit $testCode
+          }
       - name: Build release on GitHub only
         run: cargo build --release --workspace --locked
       - name: Package Windows executable
