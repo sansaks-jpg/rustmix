@@ -114,6 +114,31 @@ impl RustMixApp {
             if !self.input_filter.is_empty() {
                 ui.label(format!("Search: {}", self.input_filter));
             }
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                let audio_open = self.dock.find_tab(&Panel::Audio).is_some();
+                let mixer_btn = ui
+                    .add(
+                        egui::Button::new(
+                            RichText::new("🔊 Audio Mixer")
+                                .size(11.0)
+                                .strong()
+                                .color(Color32::WHITE),
+                        )
+                        .fill(if audio_open {
+                            Color32::from_rgb(0, 132, 28)
+                        } else {
+                            Color32::from_rgb(32, 40, 52)
+                        })
+                        .stroke(Stroke::new(1.0, Color32::from_rgb(50, 62, 78)))
+                        .min_size(Vec2::new(96.0, 20.0)),
+                    )
+                    .on_hover_text("Show / hide Audio Mixer");
+                self.automation
+                    .insert("inputs.audioMixerToggle".into(), mixer_btn.rect);
+                if mixer_btn.clicked() {
+                    self.actions.push(Action::ToggleAudioPane);
+                }
+            });
         });
     }
     pub(crate) fn search_dialog(&mut self, ctx: &egui::Context) {

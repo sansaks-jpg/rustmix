@@ -1359,9 +1359,28 @@ impl RustMixApp {
                     );
                     ui.painter()
                         .rect_filled(knob, 3.0, Color32::from_rgb(20, 130, 240));
+                    let readout = if progress > 0.01 && progress < 0.99 {
+                        format!("T-BAR {:.0}%", progress * 100.0)
+                    } else if progress >= 0.99 {
+                        "TAKE 100%".to_string()
+                    } else {
+                        "READY".to_string()
+                    };
+                    ui.painter().text(
+                        egui::pos2(tbar_rect.center().x, tbar_rect.top() + 5.0),
+                        Align2::CENTER_CENTER,
+                        &readout,
+                        FontId::monospace(8.5),
+                        DIM,
+                    );
                     self.automation.insert("switcher.tbar".into(), tbar_rect);
-                    let tbar =
-                        tbar.on_hover_text("Manual T-Bar · drag left to right to blend PVW → PGM");
+                    let tbar = if can_tbar {
+                        tbar.on_hover_text(format!(
+                            "Manual T-Bar ({readout}) · drag left to right to blend PVW → PGM"
+                        ))
+                    } else {
+                        tbar.on_hover_text("Manual T-Bar (select different inputs on PVW and PGM)")
+                    };
                     if can_tbar
                         && (tbar.is_pointer_button_down_on() || tbar.dragged() || tbar.clicked())
                     {
@@ -1465,25 +1484,20 @@ impl RustMixApp {
                     });
                     ui.add_space(4.0);
                 }
-                let is_blank_tmpl = self.engine.project().is_blank_template();
                 for row in filtered.chunks(columns) {
                     ui.horizontal_top(|ui| {
                         ui.spacing_mut().item_spacing.x = 6.0;
                         for input in row {
-                            let is_pgm = !is_blank_tmpl && p.program == input.id;
-                            let is_pvw = !is_blank_tmpl && p.preview == input.id;
-                            let border = if is_blank_tmpl {
-                                Color32::from_rgb(45, 52, 62)
-                            } else if is_pgm {
+                            let is_pgm = p.program == input.id;
+                            let is_pvw = p.preview == input.id;
+                            let border = if is_pgm {
                                 self.program_color()
                             } else if is_pvw {
                                 self.preview_color()
                             } else {
                                 Color32::from_rgb(56, 66, 78)
                             };
-                            let header_fill = if is_blank_tmpl {
-                                Color32::from_rgb(28, 33, 40)
-                            } else if is_pgm {
+                            let header_fill = if is_pgm {
                                 self.program_color()
                             } else if is_pvw {
                                 self.preview_color()
@@ -1513,14 +1527,10 @@ impl RustMixApp {
                                                         ui.set_width((inner_w - 12.0).max(40.0));
                                                         ui.horizontal(|ui| {
                                                             ui.set_min_height(source_header_h - 4.0);
-                                                            let header_name = if is_blank_tmpl {
-                                                                "1   Blank".to_string()
-                                                            } else {
-                                                                format!(
-                                                                    "{}   {}",
-                                                                    self.engine.project().input_number(input.id), input.name
-                                                                )
-                                                            };
+                                                            let header_name = format!(
+                                                                "{}   {}",
+                                                                self.engine.project().input_number(input.id), input.name
+                                                            );
                                                             let name = ui.allocate_ui_with_layout(
                                                                 egui::vec2((inner_w - 38.0).max(30.0), 16.0),
                                                                 egui::Layout::left_to_right(egui::Align::Center),
@@ -1535,42 +1545,49 @@ impl RustMixApp {
                                                                     egui::Align::Center,
                                                                 ),
                                                                 |ui| {
-                                                                    if !is_blank_tmpl {
-                                                                        let remove = ui.add(
-                                                                            egui::Button::new("")
-                                                                                .fill(
-                                                                                    Color32::TRANSPARENT,
-                                                                                )
-                                                                                .stroke(Stroke::NONE)
-                                                                                .min_size(egui::vec2(
-                                                                                    18.0, 16.0,
-                                                                                )),
-                                                                        );
-                                                                        paint_vector_icon(
-                                                                            ui.painter(),
-                                                                            remove.rect,
-                                                                            VectorIcon::Close,
-                                                                            Color32::WHITE,
-                                                                        );
-                                                                        self.automation.insert(
-                                                                            format!(
-                                                                                "input.{}.remove",
-                                                                                input.id.0
+                                                                    let remove_ok = self
+                                                                        .engine
+                                                                        .enabled(
+                                                                            &Command::RemoveInput(
+                                                                                input.id,
                                                                             ),
-                                                                            remove.rect,
-                                                                        );
-                                                                        if remove
-                                                                            .on_hover_text(
-                                                                                "Close input",
+                                                                        )
+                                                                        .is_ok();
+                                                                    let remove = ui.add_enabled(
+                                                                        remove_ok,
+                                                                        egui::Button::new("")
+                                                                            .fill(
+                                                                                Color32::TRANSPARENT,
                                                                             )
-                                                                            .clicked()
-                                                                        {
-                                                                            self.actions.push(
-                                                                                Action::RequestRemove(
-                                                                                    input.id,
-                                                                                ),
-                                                                            );
-                                                                        }
+                                                                            .stroke(Stroke::NONE)
+                                                                            .min_size(egui::vec2(
+                                                                                18.0, 16.0,
+                                                                            )),
+                                                                    );
+                                                                    paint_vector_icon(
+                                                                        ui.painter(),
+                                                                        remove.rect,
+                                                                        VectorIcon::Close,
+                                                                        Color32::WHITE,
+                                                                    );
+                                                                    self.automation.insert(
+                                                                        format!(
+                                                                            "input.{}.remove",
+                                                                            input.id.0
+                                                                        ),
+                                                                        remove.rect,
+                                                                    );
+                                                                    if remove
+                                                                        .on_hover_text(
+                                                                            "Close input",
+                                                                        )
+                                                                        .clicked()
+                                                                    {
+                                                                        self.actions.push(
+                                                                            Action::RequestRemove(
+                                                                                input.id,
+                                                                            ),
+                                                                        );
                                                                     }
                                                                 },
                                                             );
@@ -1583,35 +1600,39 @@ impl RustMixApp {
                                                 // 16:9 thumbnail
                                                 let size =
                                                     egui::vec2(inner_w, inner_w * 9.0 / 16.0);
-                                                let response = if is_blank_tmpl {
-                                                    let (rect, response) = ui.allocate_exact_size(size, Sense::hover());
-                                                    ui.painter().rect_filled(rect, 0.0, Color32::BLACK);
-                                                    ui.painter().text(
-                                                        rect.center(),
-                                                        Align2::CENTER_CENTER,
-                                                        "BLANK TEMPLATE\nDrop media file here",
-                                                        FontId::proportional(11.0),
-                                                        Color32::from_rgb(110, 120, 135),
-                                                    );
-                                                    response
-                                                } else if let Some(texture) =
+                                                let response = if let Some(texture) =
                                                     self.textures.get(&input.id)
                                                 {
-                                                    let (rect,response)=ui.allocate_exact_size(size,Sense::click());
-                                                    ui.painter().rect_filled(rect,0.0,Color32::BLACK);
-                                                    let aspect=texture.aspect_ratio();
-                                                    let w=rect.width().min(rect.height()*aspect);
-                                                    let image=Rect::from_center_size(rect.center(),Vec2::new(w,w/aspect));
-                                                    ui.painter().image(texture.id(),image,Rect::from_min_max(Pos2::ZERO,Pos2::new(1.0,1.0)),Color32::WHITE);
+                                                    let (rect, response) =
+                                                        ui.allocate_exact_size(size, Sense::click());
+                                                    ui.painter().rect_filled(rect, 0.0, Color32::BLACK);
+                                                    let aspect = texture.aspect_ratio();
+                                                    let w = rect.width().min(rect.height() * aspect);
+                                                    let image = Rect::from_center_size(
+                                                        rect.center(),
+                                                        Vec2::new(w, w / aspect),
+                                                    );
+                                                    ui.painter().image(
+                                                        texture.id(),
+                                                        image,
+                                                        Rect::from_min_max(
+                                                            Pos2::ZERO,
+                                                            Pos2::new(1.0, 1.0),
+                                                        ),
+                                                        Color32::WHITE,
+                                                    );
                                                     response
                                                 } else {
-                                                    ui.allocate_response(size, Sense::click())
+                                                    let (rect, response) =
+                                                        ui.allocate_exact_size(size, Sense::click());
+                                                    ui.painter().rect_filled(rect, 0.0, Color32::BLACK);
+                                                    response
                                                 };
                                                 self.automation.insert(
                                                     format!("preview.input.{}", input.id.0),
                                                     response.rect,
                                                 );
-                                                if !is_blank_tmpl && !input.online {
+                                                if !input.online {
                                                     ui.painter().rect_filled(
                                                         response.rect,
                                                         0.0,
@@ -1629,7 +1650,7 @@ impl RustMixApp {
                                                         response.rect,
                                                     );
                                                 }
-                                                if !is_blank_tmpl && let Some(fx) = self.input_fx.get(&input.id)
+                                                if let Some(fx) = self.input_fx.get(&input.id)
                                                     && (fx.media_path.is_some() || fx.video_source.is_some()) && fx.custom_rgba.is_none() {
                                                     let (label, color) = if fx.video_source.is_some() {
                                                         if fx.image_error.is_some() { ("VIDEO UNAVAILABLE", RED) } else { ("LOADING VIDEO…", self.preview_color()) }
@@ -1639,7 +1660,7 @@ impl RustMixApp {
                                                         egui::FontId::proportional(11.0), color);
                                                     self.automation.insert(format!("input.{}.media-status", input.id.0), response.rect);
                                                 }
-                                                if !is_blank_tmpl && let Some(fx)=self.input_fx.get(&input.id)
+                                                if let Some(fx)=self.input_fx.get(&input.id)
                                                     && fx.custom_rgba.is_some()
                                                     && let Some(error)=&fx.image_error {
                                                     let warning=egui::Rect::from_min_size(response.rect.left_bottom()-egui::vec2(0.0,19.0),egui::vec2(response.rect.width(),19.0));
@@ -1648,13 +1669,12 @@ impl RustMixApp {
                                                     response.clone().on_hover_text(error);
                                                     self.automation.insert(format!("input.{}.frozen",input.id.0),warning);
                                                 }
-                                                if !is_blank_tmpl && response.clicked() {
+                                                if response.clicked() {
                                                     self.actions.push(Action::Engine(
                                                         Command::SelectPreview(input.id),
                                                     ));
                                                 }
-                                                if !is_blank_tmpl {
-                                                    response.context_menu(|ui| {
+                                                response.context_menu(|ui| {
                                                     ui.menu_button("Category", |ui| {
                                                         let clear=ui.button("Uncategorized");
                                                         if clear.clicked(){ self.actions.push(Action::Engine(Command::SetInputCategory(input.id,None))); ui.close(); }
@@ -1688,8 +1708,6 @@ impl RustMixApp {
                                                         ui.close();
                                                     }
                                                 });
-                                                }
-                                                if !is_blank_tmpl {
                                                 // Modern 2-row control strip:
                                                 // Row 1: [1][2][3][4][GO][Cut][Loop]
                                                 // Row 2: [5][6][7][8][Audio][Display][Gear]
@@ -1773,6 +1791,12 @@ impl RustMixApp {
                                                                 .strong(),
                                                         )
                                                         .min_size(egui::vec2(cell_w, controls_h)),
+                                                    )
+                                                    .on_disabled_hover_text(
+                                                        check
+                                                            .err()
+                                                            .map(|e| e.to_string())
+                                                            .unwrap_or_default(),
                                                     );
                                                     self.automation.insert(
                                                         format!("input.{}.cut", input.id.0),
@@ -1875,7 +1899,11 @@ impl RustMixApp {
                                                     let audio_resp = ui
                                                         .add_enabled(input.has_audio(), audio_btn)
                                                         .on_hover_text(if input.has_audio() {
-                                                            "Toggle Input Audio"
+                                                            if input.audio.muted {
+                                                                "Audio is Muted · Click to Unmute"
+                                                            } else {
+                                                                "Audio is Live · Click to Mute"
+                                                            }
                                                         } else {
                                                             "Audio is not available for this source"
                                                         });
@@ -1920,7 +1948,6 @@ impl RustMixApp {
                                                             .push(Action::Properties(input.id));
                                                     }
                                                 });
-                                                }
                                             });
                                     },
                                 );

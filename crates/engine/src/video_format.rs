@@ -226,8 +226,8 @@ impl Engine {
         let mut project = ProjectState::demo();
         project.name = "Untitled production".into();
         project.inputs.truncate(2);
-        for (index, input) in project.inputs.iter_mut().enumerate() {
-            input.name = format!("Black {}", index + 1);
+        for input in project.inputs.iter_mut() {
+            input.name = "Blank".into();
             input.kind = InputKind::Color;
             input.color = [0; 3];
             input.audio.muted = true;

@@ -801,9 +801,9 @@ impl RustMixApp {
             app.initialize_blank_startup(&cc.egui_ctx);
         } else if app.smoke.is_none()
             && !std::env::args().any(|s| s.ends_with(".rustmix.json"))
-            && let Ok(blank_engine) = Engine::from_project(ProjectState::blank_template())
+            && let Ok(preset_engine) = Engine::new_preset(VideoStandard::default(), 0)
         {
-            app.engine = blank_engine;
+            app.engine = preset_engine;
             app.input_fx.clear();
             app.sync_input_cache();
             app.theme(&cc.egui_ctx);
