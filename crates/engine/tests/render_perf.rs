@@ -98,6 +98,13 @@ fn measure_full_hd_compositor_and_downscale() {
         30,
     );
     summary("downscale", &downscale);
+    let portrait_downscale = measure(
+        || {
+            let _ = render::downscale(&from, 1080, 1920, 360, 640).unwrap();
+        },
+        30,
+    );
+    summary("portrait downscale", &portrait_downscale);
 
     project.overlays.standard[0].enabled = false;
     for kind in [

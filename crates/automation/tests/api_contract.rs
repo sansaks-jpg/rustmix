@@ -199,6 +199,34 @@ fn the_loopback_endpoint_serves_the_document_and_dispatches_over_a_real_socket()
 }
 
 #[test]
+fn incomplete_or_malformed_http_never_changes_program() {
+    for request in [
+        "GET /api/?Function=Cut HTTP/1.1\r\nHost: 127.0.0.1\r\n",
+        "GET /api/?Function=Cut\r\n\r\n",
+        "GET /api/?Function=Cut HTTP/1.1 extra\r\n\r\n",
+    ] {
+        let server = server::Server::bind_loopback(0).unwrap();
+        let addr = server.local_addr().unwrap();
+        let request = request.to_owned();
+        let client = std::thread::spawn(move || {
+            use std::io::{Read, Write};
+            use std::net::Shutdown;
+            let mut stream = std::net::TcpStream::connect(addr).unwrap();
+            stream.write_all(request.as_bytes()).unwrap();
+            stream.shutdown(Shutdown::Write).unwrap();
+            let mut response = String::new();
+            stream.read_to_string(&mut response).unwrap();
+            response
+        });
+        let mut engine = Engine::from_project(ProjectState::demo()).unwrap();
+        assert!(server.accept_once(&mut engine, &Telemetry::default(), 0));
+        assert_eq!(engine.project().program, InputId(1));
+        assert_eq!(engine.project().preview, InputId(2));
+        assert!(client.join().unwrap().is_empty());
+    }
+}
+
+#[test]
 fn overlay_input_functions_bind_clear_and_reject_the_stinger_range() {
     let mut engine = Engine::from_project(ProjectState::demo()).unwrap();
 

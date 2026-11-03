@@ -1,12 +1,109 @@
 # Verification
 
+## Realtime and continuity follow-up (2026-11-03)
+
+Program snapshots and frame/error handoffs now use bounded latest-value slots:
+the Program worker does not wait for a held mailbox mutex, a contended frame
+handoff retains the previous published image, and a separate pending error is
+retried and delivered before a frame. The worker's successful CPU-render elapsed
+samples are kept in a fixed 128-entry window and summarized once per second.
+The Program status hover and cadence JSON expose p50/p95/p99, skipped deadlines
+and contended frame handoffs; the cadence sample target now counts both kinds of
+miss. These describe local CPU render/handoff behavior, not end-to-end latency;
+other work (including Engine clones and moving-overlay rendering) can still
+allocate or wait, so this is not a hard-realtime guarantee.
+
+The Windows audio selector validates the rate, channel count and callback sample
+type for both enumerated ranges and default configurations. It prefers 48 kHz
+stereo f32 playback, permits stereo i16, and requires 48 kHz mono/stereo f32
+capture; an incompatible stream reports an error. There is no application-side
+live resampling, although the OS can expose a converted hardware mix format.
+Physical device compatibility, A/V sync and latency are unqualified.
+
+The opt-in automation server now rejects incomplete or malformed request lines,
+uses a two-second total request deadline and sets a write timeout. Socket tests
+cover incomplete commands and trickled input. Loopback is **not authentication**:
+local processes or potentially browser-originated requests can issue commands.
+The application still does not start the server automatically.
+
+Local exact-checkout formatting and `git diff --check` passed. The isolated
+Linux scratch described below passed **200 tests**, with two benchmarks ignored,
+and strict all-target Clippy; it includes the actual Program module with an
+egui stub and has no Windows device dependencies. A full locked workspace
+build remains unavailable locally because the crates.io index is inaccessible.
+A new hosted Windows run is required for the complete UI, Windows-specific audio
+selection tests, media fixtures and release executable. Neither these tests nor
+a build are a security audit, physical-hardware test or endurance qualification.
+
+## Optimization follow-up (2026-11-02)
+
+The initial `bcc90a0` prototype generated synthetic pictures at a monitor-sized
+raster. The current default renders a full-HD Program on the CPU and separately
+reduces it for the monitor; [ADR 0036](adr/0036-core-cpu-gpu-audit.md) explicitly
+leaves GPU compositing and hardware qualification open. This follow-up targets
+that CPU path, not a GPU rewrite or a claim of broadcast readiness.
+
+The 3:1 monitor downscale now avoids range/accumulator allocations and preserves
+RGBA and the previous rounding. Tests compare an independent box filter in both
+orientations and exhaust every possible nine-sample channel sum. Program cache
+regressions cover paused overlay edits, hidden/media-placeholder clocks, decoded
+frame identity, bounded 32-layer traversal, and a transition through the deepest
+valid chain. The f32 and i16 playback callback tests check samples, underruns,
+invalid data and partial frames. Fixed-capacity traversal storage removes the
+previous small heap allocations on the cache-hit path; moving output still
+allocates and is not a hard-real-time guarantee.
+
+**Measurements** — Linux x86-64 sandbox, two virtual CPUs reported as Intel Xeon
+2.60 GHz. For a standalone extraction of the real downscale function, Rust 1.95
+`-O`, three interleaved before/after runs with 15 warmups and 100 measurements
+per orientation gave these medians of the runs' p50 values:
+
+| Raster to monitor | Before | After | Reduction |
+| --- | ---: | ---: | ---: |
+| 1920×1080 to 640×360 | 3.115 ms | 2.504 ms | 19.6% |
+| 1080×1920 to 360×640 | 3.070 ms | 2.486 ms | 19.0% |
+
+A separate release-mode Program-module harness (Rust 1.99), using the same
+optimized engine for both versions, measured a static full-HD Program with one
+visible overlay and one hidden moving overlay. The original Program module took
+4.265 ms p50;
+the new cache-hit path took 0.000135 ms p50 (100 samples after warmup). A
+scratch counting allocator observed 2,200 allocations across 100 original
+`render_full` calls and zero across the corresponding cache-hit calls; a single
+visible moving-overlay render still allocated seven times. These are narrow
+synthetic measurements, excluding UI paint, worker handoff and hardware. They
+are not end-to-end latency, cadence, soak or crash-freedom evidence. Optional
+benchmarks on a fully provisioned checkout:
+
+```text
+cargo test --release -p rustmix-engine --test render_perf -- --ignored --nocapture
+cargo test --release -p rustmix-ui --lib measure_hidden_overlay_cache_hit -- --ignored --nocapture
+```
+
+**Verification limits:** `cargo fmt --all -- --check` and `git diff --check`
+passed on the actual checkout. The full locked workspace build, test and Clippy
+commands were attempted offline but could not resolve `serde_json`; an online
+build also failed to connect to the crates.io index. Available vendor sources do
+not cover the full GUI dependency set. Instead, an isolated scratch workspace
+using the same package versions, local upstream path patches and vendors built
+and passed 192 tests (engine 152, automation 17, Linux platform 7, and 16 actual
+Program-module tests), with two opt-in benchmarks ignored; strict Clippy passed
+for those targets. The
+Program harness stubs egui and extracts the real source-processing functions;
+the scratch platform manifest omits Windows-only dependencies. This does not
+verify the original lockfile checksums, the complete UI build, Windows Media
+Foundation fixtures, physical devices, GPU behavior or long-run stability. The
+actual executable package is `rustmix`; there is no `rustmix-app` or
+`rustmix-cli` package.
+
 Input video container source candidate (2026-11-02): `scripts/ci-video-fixture.ps1`
 now generates MOV/M4V H.264, AVI MJPEG and WMV2 alongside the original MP4.
 Platform and drop tests require all five files in the same directory; use a
 fresh output directory and set `RUSTMIX_TEST_VIDEO` to its `video-fixture.mp4`.
-These new tests and the corresponding source changes have not been run in the
-current Linux sandbox (no Rust/Cargo, PowerShell or Windows Media Foundation).
-Previously recorded Windows runs apply only to their named revisions.
+These new tests and the corresponding source changes were not run in the
+Linux sandbox used for that review (no Rust/Cargo, PowerShell or Windows Media
+Foundation). Previously recorded Windows runs apply only to their named
+revisions.
 
 UI-041 (2026-10-24) — reference-verification sweep of the UI-040 alignment
 work (commit `101c41f` plus its in-flight fixes); runs under the UI-036 owner

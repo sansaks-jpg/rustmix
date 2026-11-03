@@ -27,9 +27,12 @@ components. The `unsafe` code allowance is scoped to this reviewed platform modu
 ## Audio
 
 `audio` uses CPAL's default Windows WASAPI host and bounded lock-free PCM rings. Devices are enumerated/opened on control threads, never automatically at
-startup. The initial contract is 48 kHz f32 stereo output and mono/stereo capture; unsupported
-devices return explicit errors. Device faults/underruns are counted, without callback logging,
-allocation or locks. Actual device support requires physical hardware tests.
+startup. The mixer exchanges 48 kHz stereo frames; playback selects a 48 kHz stereo f32 or i16
+stream (preferring f32), while capture requires 48 kHz mono/stereo f32. Device defaults are
+validated against the same contract; unsupported configurations return explicit errors rather
+than playing at the wrong rate or using the wrong callback type. The OS may convert its hardware
+mix format. Device faults/underruns are counted, without callback logging, allocation or locks.
+Actual device support, latency and A/V synchronization require physical hardware tests.
 
 CPAL 0.18.2 is Apache-2.0; rtrb 0.4.0 is MIT OR Apache-2.0. ASIO is not enabled. No SDK/runtime
 is bundled beyond the existing platform dependencies. Non-Windows calls report unsupported.

@@ -24,13 +24,15 @@ minimal HTTP server. The crate contains no switcher logic of its own —
   operator-readable reason "overlay channels 9-16 are Stingers 1-8; trigger
   them with Stinger1-Stinger8". An absent or unresolvable `Input` is the
   observed accepted no-op.
-- `server` binds `127.0.0.1` only (default port 8088, `HTTP/1.1` GET, one
-  request per connection, 8 KiB request bound) and answers 200 for the state
-  document and dispatched functions, 500 for unknown functions. It is
-  deliberately not started by the application; an embedder opts in. There is no
-  TCP text protocol, WebSocket or authentication beyond the loopback binding —
-  the reference TCP protocol was never characterised and is recorded as a
-  deferred family in `docs/gaps.md`.
+- `server` binds `127.0.0.1` only (default port 8088, HTTP/1.0 or HTTP/1.1 GET,
+  one request per connection, 8 KiB request bound). A complete request must
+  arrive within two seconds; writes also have a two-second timeout. It answers
+  200 for the state document and dispatched functions, 500 for unknown
+  functions. It is deliberately not started by the application; an embedder
+  opts in. There is no TCP text protocol, WebSocket or authentication beyond
+  the loopback binding. Other local processes and potentially browser-originated
+  requests can issue commands; do not treat loopback as an authorization
+  boundary. The reference TCP protocol remains deferred in `docs/gaps.md`.
 
 Verification: `cargo test -p rustmix-automation --locked` runs the api_contract
 suite — 15 tests as of UI-040 (2026-10-24), re-run green in the workspace gate
