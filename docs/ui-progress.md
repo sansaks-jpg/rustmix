@@ -1,9 +1,10 @@
 # UI milestone progress
 
-UI-043: UI/UX alignment with reference switcher objectives — 9-bus external output
-routing and Settings summary reconciliation, dynamic resolution metadata in Input
-Properties, T-Bar visual status/percentage readout, and operator feedback for
-disabled action states (RemoveInput, NewPreset, Cut) and channel audio tooltips.
+UI-043: UI/UX alignment with reference switcher objectives — initial startup preset
+with dual blank inputs on Program/Preview and 2-row controls, green category rail
+Audio Mixer button, 9-bus external output routing and Settings summary reconciliation,
+dynamic resolution metadata in Input Properties, T-Bar visual status/percentage
+readout, and operator feedback for disabled action states and channel audio tooltips.
 
 UI-035: existing-panel review, Streaming/MultiCorder navigation, topic-specific
 Settings and isolated Input Settings resets. Actual-egui headless captures and

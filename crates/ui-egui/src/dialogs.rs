@@ -1408,19 +1408,33 @@ impl RustMixApp {
                     ui.add_space(remaining.max(4.0));
                     let footer_width = ui.available_width();
                     let footer = ui.horizontal(|ui| {
-                        ui.spacing_mut().item_spacing.x = 3.0;
+                        ui.spacing_mut().item_spacing.x = 2.0;
                         ui.spacing_mut().button_padding = Vec2::new(2.0, 3.0);
-                        let button_width = footer_width.max(30.0);
-                        {
-                            let action = ui.add(
-                                egui::Button::new(RichText::new("Default").size(10.0))
-                                    .fill(CHIP_BG)
-                                    .min_size(Vec2::new(button_width, 27.0)),
-                            );
-                            app.automation.insert("dialog.settings.navigation.Default".into(), action.rect);
-                            if action.clicked() {
-                                reset_default = true;
-                            }
+                        let button_width = ((footer_width - 4.0) / 3.0).floor().max(20.0);
+                        let import_btn = ui.add_enabled(
+                            false,
+                            egui::Button::new(RichText::new("Import").size(10.0))
+                                .fill(CHIP_BG)
+                                .min_size(Vec2::new(button_width, 27.0)),
+                        )
+                        .on_disabled_hover_text("Import settings from file is not available");
+                        app.automation.insert("dialog.settings.navigation.Import".into(), import_btn.rect);
+                        let export_btn = ui.add_enabled(
+                            false,
+                            egui::Button::new(RichText::new("Export").size(10.0))
+                                .fill(CHIP_BG)
+                                .min_size(Vec2::new(button_width, 27.0)),
+                        )
+                        .on_disabled_hover_text("Export settings to file is not available");
+                        app.automation.insert("dialog.settings.navigation.Export".into(), export_btn.rect);
+                        let action = ui.add(
+                            egui::Button::new(RichText::new("Default").size(10.0))
+                                .fill(CHIP_BG)
+                                .min_size(Vec2::new(button_width, 27.0)),
+                        );
+                        app.automation.insert("dialog.settings.navigation.Default".into(), action.rect);
+                        if action.clicked() {
+                            reset_default = true;
                         }
                     });
                     app.automation.insert("dialog.settings.navigation.footer".into(), footer.response.rect);

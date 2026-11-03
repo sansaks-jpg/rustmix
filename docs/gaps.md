@@ -1,6 +1,13 @@
 # Known gaps
 
 UI-043 (2026-11-02): UI/UX reference alignment and discrepancy corrections:
+- **Initial startup UI alignment with reference (00-main.jpg):** Configures default initial
+  preset with two Blank inputs (`1 Blank` active on Program with green header and border;
+  `2 Blank` cued on Preview with orange header and border), each with full 2-row control
+  strips (`1-4 GO Cut` / `5-8 Audio Display Gear`), clean 16:9 thumbnails, and corresponding
+  monitor status headers and controls.
+- **Category bar Audio Mixer docked trigger:** Adds the green `[🔊 Audio Mixer]` category
+  rail button aligned directly above the docked mixer, matching the reference switcher layout.
 - **Audio bus routing alignment in External Output and Settings:** Exposes all 9 buses
   (`Master`, `A`–`G`, `Headphones` via `BUS_LABELS`) in the External Output audio bus
   combo box (`dialog.external.bus.*`) and Settings summary, resolving the discrepancy
